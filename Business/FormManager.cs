@@ -1,6 +1,7 @@
 ﻿using Business.FormMethod;
 using Business.Interface;
 using DataAccess;
+using Microsoft.Extensions.Caching.Memory;
 using Models;
 using Models.Form;
 using Models.Interface;
@@ -18,17 +19,19 @@ namespace Business
     {
         private readonly AppConfig _appConfig;
         private readonly Options _options;
+        private readonly IMemoryCache _cache;
 
-        public FormManager(AppConfig appConfig, Options options)
+        public FormManager(AppConfig appConfig, Options options, IMemoryCache cache)
         {
             _appConfig = appConfig;
             _options = options;
+            _cache = cache;
         }
 
         public IResponse ExecuteFrom(string name, RequestQuery request)
         {
             //Check form enable
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options);
+            ResponseManager responseManager = new ResponseManager(_appConfig, _options, _cache);
             FormRepository formRepository = new FormRepository(_appConfig);
 
             Form form = formRepository.GetForm(name, request.userName);
@@ -36,7 +39,7 @@ namespace Business
             IFormMethod formType = null;
             if (request.cacheID != "")
             {
-                formType = new FormMethodCache(_appConfig, _options);
+                formType = new FormMethodCache(_appConfig, _options, _cache);
             }
             else
             {

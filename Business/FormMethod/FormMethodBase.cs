@@ -1,9 +1,13 @@
 ﻿using Business.Interface;
-using Microsoft.VisualBasic.FileIO;
+using DataAccess;
+using Microsoft.Extensions.Caching.Memory;
 using Models;
+using Models.Form;
 using Models.Interface;
+using Models.Options;
 using Models.Request;
 using System.Data;
+using Utilities;
 
 namespace Business.FormMethod
 {
@@ -61,7 +65,7 @@ namespace Business.FormMethod
             }
             catch (Exception ex)
             {
-                responseManager.GetResponse("INVALID_JSON", ex.Message);
+                return responseManager.GetResponse("INVALID_JSON", ex.Message);
             }
 
             if (!string.IsNullOrEmpty(customJsonConverter.fieldName))

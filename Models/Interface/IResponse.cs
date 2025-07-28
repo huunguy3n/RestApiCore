@@ -5,5 +5,6 @@
         string code { get; set; }
         bool success { get; set; }
         string message { get; set; }
+        int statusCode { get; set; }
     }
 }

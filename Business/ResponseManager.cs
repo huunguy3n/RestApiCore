@@ -1,10 +1,12 @@
-﻿using Models;
+﻿using Microsoft.Extensions.Caching.Memory;
+using Models;
 using Models.Interface;
 using Models.Options;
 using Models.Response;
 using Newtonsoft.Json;
 using System.Data;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 
 namespace Business
@@ -13,9 +15,14 @@ namespace Business
     {
         private readonly AppConfig _appConfig;
         private readonly Options _options;
+        private readonly IMemoryCache _cache;
 
-        public delegate void ResponseEventHandler(IRequest request, IResponse response);
-        public event ResponseEventHandler OnResponseGenerated;
+        public ResponseManager(AppConfig appConfig, Options options, IMemoryCache cache)
+        {
+            _appConfig = appConfig;
+            _options = options;
+            _cache = cache;
+        }
 
         public ResponseManager(AppConfig appConfig, Options options)
         {
@@ -35,14 +42,14 @@ namespace Business
                 response.code = message.code;
                 response.success = message.success;
                 response.message = message.message;
-                response.httpStatusCode = message.httpStatusCode;
+                response.statusCode = message.httpStatusCode;
             }
             else
             {
                 response.code = "EXCEPTION";
                 response.success = false;
                 response.message = "Exception";
-                response.httpStatusCode = 400;
+                response.statusCode = 400;
             }
 
             return response;
@@ -96,11 +103,11 @@ namespace Business
 
                             if (dr.Table.Columns.Contains("code"))
                             {
-                                code = dr["code"].ToString();
+                                code = dr["code"].ToString() ?? code;
                             }
                             if (dr.Table.Columns.Contains("message"))
                             {
-                                message = dr["message"].ToString();
+                                message = dr["message"].ToString() ?? "";
                             }
                         }
 
@@ -114,10 +121,11 @@ namespace Business
 
                                 if (dataSet.Tables[i].Columns.Contains("tableName"))
                                 {
-                                    tableName = dataSet.Tables[i].Rows[0]["tableName"].ToString();
+                                    tableName = dataSet.Tables[i].Rows[0]["tableName"].ToString() ?? tableName;
                                     dt.Columns.Remove(tableName);
                                     dt.TableName = tableName;
                                 }
+
                                 data.Tables.Add(dt);
                             }
                         }
@@ -175,8 +183,7 @@ namespace Business
                 //      * Name: {Form}_{cacheID}_{tableName}_{pageIndex}
 
 
-                ObjectCache cache = MemoryCache.Default;
-                string cacheKey = $"{formName}_{cacheID}_{{0}}_{dt.TableName}"; // {0} will be replaced by pageIndex
+                string cacheKeyPattern = $"{formName}_{cacheID}_{{0}}_{dt.TableName}"; // {0} will be replaced by pageIndex
 
                 for (int i = 0; i < dataPagination.Tables.Count; i++)
                 {
@@ -195,8 +202,25 @@ namespace Business
                     Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
                     File.WriteAllText(cacheFilePath, JsonConvert.SerializeObject(responseDataPagination));
 
+                    string fullCacheKey = string.Format(cacheKeyPattern, i);
+
                     // Lưu metadata vào MemoryCache
-                    cache.Add(string.Format(cacheKey, i), responseDataPagination, DateTimeOffset.Now.AddMinutes(_appConfig.cacheDurationInMinutes));
+                    _cache.Set(string.Format(fullCacheKey, i), responseDataPagination, new MemoryCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_appConfig.cacheDurationInMinutes)
+                    });
+
+                    // Cập nhật danh sách cacheIndex
+                    if (!_cache.TryGetValue<List<string>>("cacheIndex", out var cacheIndex))
+                        cacheIndex = new List<string>();
+
+                    if (!cacheIndex.Contains(fullCacheKey))
+                        cacheIndex.Add(fullCacheKey);
+
+                    _cache.Set("cacheIndex", cacheIndex, new MemoryCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_appConfig.cacheDurationInMinutes)
+                    });
                 }
             }
 
@@ -220,19 +244,24 @@ namespace Business
             };
 
             //Kiểm tra cacheID có tồn tại trong MemoryCache không
-            ObjectCache cache = MemoryCache.Default;
-            string cacheKey = $"{formName}_{cacheID}_{pageIndex}_*"; // Sử dụng wildcard để tìm tất cả các cache liên quan đến cacheID
+            string cacheKeyPrefix = $"{formName}_{cacheID}_{pageIndex}_"; // Sử dụng wildcard để tìm tất cả các cache liên quan đến cacheID
 
-            var cacheItems = cache.Where(item => item.Key.StartsWith(cacheKey)).ToList();
-            if (cacheItems.Count > 0)
+            //Duyệt qua tất cả key lưu trong cacheIndex
+            if (_cache.TryGetValue<List<string>>("cacheIndex", out var allKeys))
             {
-                foreach (var item in cacheItems)
+                var matchedKeys = allKeys.Where(k => k.StartsWith(cacheKeyPrefix)).ToList();
+
+                foreach (var key in matchedKeys)
                 {
-                    string[] parts = item.Key.Split('_');
-                    string tableName = parts[3]; // Lấy tên bảng từ cache key
-                    response.data.Add(tableName, (ResponseData)item.Value);
+                    if (_cache.TryGetValue<ResponseData>(key, out var data))
+                    {
+                        string tableName = key.Substring(cacheKeyPrefix.Length); // lấy phần sau cùng
+                        response.data.Add(tableName, data);
+                    }
                 }
-                return response;
+
+                if (response.data.Any())
+                    return response;
             }
 
             //Nếu không tìm thấy cache, tìm trong file
@@ -303,23 +332,6 @@ namespace Business
             return Guid.NewGuid().ToString();
         }
         #endregion
-        #endregion
-
-        #region HTTP RESPONSE
-        public HttpResponseMessage GetResponseMessage(IRequest request, IResponse response)
-        {
-            OnResponseGenerated?.Invoke(request, response);
-
-            return new HttpResponseMessage((HttpStatusCode)response.httpStatusCode)
-            {
-                Content = new StringContent(JsonConvert.SerializeObject(response), Encoding.UTF8, "application/json")
-            };
-        }
-
-        public HttpResponseMessage GetResponseMessage(IRequest request, string code)
-        {
-            return GetResponseMessage(request, GetResponse(code));
-        }
         #endregion
     }
 }

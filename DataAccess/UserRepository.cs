@@ -1,4 +1,5 @@
-﻿using Models;
+﻿using Microsoft.Data.SqlClient;
+using Models;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -23,7 +24,8 @@ namespace DataAccess
         /// <returns></returns>
         public User GetUser(int id)
         {
-            var ds = Provider.Provider.Retrieve(_appConfig.appConnectionString, "select * from restApiUser where id = @id and status = '1'", new System.Data.SqlClient.SqlParameter { ParameterName = "@id", Value = id });
+            var ds = Provider.Provider.Retrieve(_appConfig.appConnectionString, "select * from restApiUser where id = @id and status = '1'", 
+                new SqlParameter { ParameterName = "@id", Value = id });
 
             return SetUser(ds);
         }
@@ -35,7 +37,8 @@ namespace DataAccess
         /// <returns></returns>
         public User GetUser(string name)
         {
-            var ds = Provider.Provider.Retrieve(_appConfig.appConnectionString, "select * from restApiUser where [name] = @name and status = '1'", new System.Data.SqlClient.SqlParameter { ParameterName = "@name", Value = name });
+            var ds = Provider.Provider.Retrieve(_appConfig.appConnectionString, "select * from restApiUser where [name] = @name and status = '1'", 
+                new SqlParameter { ParameterName = "@name", Value = name });
 
             return SetUser(ds);
         }

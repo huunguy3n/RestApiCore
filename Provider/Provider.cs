@@ -1,4 +1,5 @@
-﻿using System.Data;
+﻿using Microsoft.Data.SqlClient;
+using System.Data;
 
 namespace Provider
 {
@@ -49,7 +50,7 @@ namespace Provider
             }
             catch (SqlException ex)
             {
-                throw ex;
+                throw new Exception("Database execution failed", ex);
             }
         }
 
@@ -74,7 +75,7 @@ namespace Provider
             }
             catch (SqlException ex)
             {
-                throw ex;
+                throw new Exception("Database bulk failed", ex);
             }
         }
         public static void Bulk(SqlConnection connection, DataTable dataTable, string tableName)
@@ -95,7 +96,7 @@ namespace Provider
             }
             catch (SqlException ex)
             {
-                throw ex;
+                throw new Exception("Database bulk failed", ex);
             }
         }
 
@@ -129,7 +130,7 @@ namespace Provider
             }
             catch (SqlException ex)
             {
-                throw ex;
+                throw new Exception("Database retrieve failed", ex);
             }
         }
     }

@@ -17,7 +17,7 @@
             get; set;
         }
 
-        public int maxRequestInMinutes
+        public int maxRequestsPerMinute
         {
             get; set;
         }
@@ -77,12 +77,13 @@
             secretKey = string.Empty;
             expiryToken = 0;
             issuerToken = string.Empty;
-            maxRequestInMinutes = 0;
+            maxRequestsPerMinute = 0;
             maxRowInResponse = 0;
             checkTypeResponse = 1;
             commandTimeout = 360;
             cacheDurationInMinutes = 10;
             isDevState = false;
+            positions = string.Empty;
             appDatabaseName = string.Empty;
             sysDatabaseName = string.Empty;
             appConnectionString = string.Empty;

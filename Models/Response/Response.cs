@@ -1,9 +1,4 @@
 ﻿using Models.Interface;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Models.Response
 {
@@ -12,6 +7,14 @@ namespace Models.Response
         public string code { get; set; }
         public bool success { get; set; }
         public string message { get; set; }
-        public int httpStatusCode { get; set; }
+        public int statusCode { get; set; }
+
+        public Response()
+        {
+            code = "NONE";
+            success = false;
+            message = string.Empty;
+            statusCode = 200;
+        }
     }
 }

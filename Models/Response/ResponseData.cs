@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Data;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Data;
 
 namespace Models.Response
 {
@@ -13,7 +8,7 @@ namespace Models.Response
         public int pageIndex { get; set; }
         public int pageSize { get; set; }
         public int pageCount { get; set; }
-        public DataTable data { get; set; }
+        public DataTable? data { get; set; }
 
         public ResponseData()
         {

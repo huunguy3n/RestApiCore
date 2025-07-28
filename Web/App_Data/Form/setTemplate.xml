@@ -54,7 +54,7 @@
 	</struct>
 
 	<queries>
-		<query action="Before">
+		<query action="Checking">
 			<text>
 				<![CDATA[
 --@@form = 'setTemplate'
@@ -77,18 +77,15 @@
 			]]>
 			</text>
 		</query>
-		<query action="Process">
+		<query action="Processing">
 			<text>
 				<![CDATA[
 exec api_processDataFor_m81 @@id, @@unit, @@userERP, '@@appDatabaseName', '@@sysDatabaseName'
-        ]]>
-			</text>
-		</query>
-		<query action="After">
-			<![CDATA[
+
 select 'SUCCESS' as code, '' as message
 select 'master' as name, '' as id, 'HDA' as type, 'Hóa đơn bán hàng' as title, 'Hóa đơn bán hàng' as description, 'HDA' as template
-      ]]>
+        ]]>
+			</text>
 		</query>
 	</queries>
 

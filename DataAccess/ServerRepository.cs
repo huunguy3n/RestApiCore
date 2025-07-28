@@ -1,9 +1,5 @@
-﻿using Models;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using Microsoft.Data.SqlClient;
+using Models;
 
 namespace DataAccess
 {
@@ -20,8 +16,8 @@ namespace DataAccess
         public bool CheckIPAddress(string clientIP, string userName)
         {
             var ds = Provider.Provider.Retrieve(_appConfig.appConnectionString, "exec restApi_CheckIPAddress @ip, @userName",
-                new System.Data.SqlClient.SqlParameter { ParameterName = "@ip", Value = clientIP },
-                new System.Data.SqlClient.SqlParameter { ParameterName = "@userName", Value = userName }
+                new SqlParameter { ParameterName = "@ip", Value = clientIP },
+                new SqlParameter { ParameterName = "@userName", Value = userName }
                 );
 
             if (ds != null)
@@ -39,8 +35,8 @@ namespace DataAccess
         {
             //Kiểm tra quyền truy cập
             var ds = Provider.Provider.Retrieve(_appConfig.appConnectionString, "exec restApi_CheckFormRights @form, @userName",
-            new System.Data.SqlClient.SqlParameter { ParameterName = "@form", Value = form },
-            new System.Data.SqlClient.SqlParameter { ParameterName = "@userName", Value = userName }
+            new SqlParameter { ParameterName = "@form", Value = form },
+            new SqlParameter { ParameterName = "@userName", Value = userName }
             );
 
             if (ds != null)

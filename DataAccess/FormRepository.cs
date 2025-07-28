@@ -24,7 +24,7 @@ namespace DataAccess
         public Form GetForm(string name, string userName)
         {
             //So sánh LastModified
-            string pathFile = Path.Combine(_appConfig.pathDirectory, "App_Data/Form", name + ".xml");
+            string pathFile = Path.Combine(_appConfig.pathDirectory, @$"App_Data\Form\{name}.xml");
 
             if (File.Exists(pathFile))
             {
@@ -68,7 +68,7 @@ namespace DataAccess
         /// <returns></returns>
         private Form GetForm(string name)
         {
-            string pathXML = Path.Combine(_appConfig.pathDirectory, $"App_Data/Form{name}.xml");
+            string pathXML = Path.Combine(_appConfig.pathDirectory, $"App_Data\\Form\\{name}.xml");
 
             if (!File.Exists(pathXML))
             {
@@ -178,9 +178,20 @@ namespace DataAccess
                     form.Structs.Add(@struct);
                 }
 
-                //Get Query
-                var nodeQuery = doc.SelectSingleNode("ns:form/ns:query/ns:text", xmlNamespace);
-                form.Query = nodeQuery.InnerText;
+                //Get Queries
+                //Cấu trúc query[action=""]/text
+                var nodeQueries = doc.SelectNodes("ns:form/ns:queries/ns:query", xmlNamespace);
+                if (nodeQueries != null)
+                {
+                    foreach (XmlNode nodeQuery in nodeQueries)
+                    {
+                        string actionString = XMLReader.GetAttributes(nodeQuery, "action");
+                        QueryAction action = string.IsNullOrEmpty(actionString) ? QueryAction.Checking : (QueryAction)Enum.Parse(typeof(QueryAction), actionString);
+
+                        var text = nodeQuery.SelectSingleNode("ns:text", xmlNamespace).InnerText;
+                        form.Queries.Add(action, text);
+                    }
+                }
             }
             catch (Exception ex)
             {
@@ -227,7 +238,10 @@ namespace DataAccess
                 Provider.Provider.Execute(connnection, scriptUpdate);
 
                 //Thực thi query
-                return Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Query, form, request));
+                DataSet dsChecking = Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Checking], form, request));
+
+                if(dsChecking == null) return Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Processing], form, request));
+                else return dsChecking;
             }
         }
 

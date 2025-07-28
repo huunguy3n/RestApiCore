@@ -1,1 +1,20 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<messages xmlns="urn:schemas-fast-com:data-message">
+	<message code="ACCESS_DENIED" success="0" httpStatusCode="403" httpMessage="You do not have permission to access on this server"/>
+	<message code="EXCEPTION" success="0" httpStatusCode="500" httpMessage="Exception"/>
+	<message code="FORBIDDEN" success="0" httpStatusCode="403" httpMessage="You do not have permission to access this resource"/>
+	<message code="INVALID_FIELD" success="0" httpStatusCode="400" httpMessage="Field @@field does not satisfy the conditions (@@condition)"/>
+	<message code="INVALID_FIELD_IRREGULAR" success="0" httpStatusCode="400" httpMessage="The @@field field contains special characters"/>
+	<message code="INVALID_FORM" success="0" httpStatusCode="400" httpMessage="Invalid 'form' parameter. The 'form' must be exists or enable"/>
+	<message code="INVALID_JSON" success="0" httpStatusCode="400" httpMessage="Can not convert json"/>
+	<message code="INVALID_TIME_GREATER" success="0" httpStatusCode="400" httpMessage="Invalid 'time' parameter. The 'time' must be greater than the previous request"/>
+	<message code="INVALID_TIME_NUMBER" success="0" httpStatusCode="400" httpMessage="Invalid 'time' parameter. The 'time' must be a number"/>
+	<message code="INVALID_CACHEID" success="0" httpStatusCode="400" httpMessage="Invalid 'cacheID' parameter. The 'cacheID' not found"/>
+	<message code="MISSING_PARAMETER" success="0" httpStatusCode="400" httpMessage="Missing parameters"/>
+	<message code="SUCCESS" success="1" httpStatusCode="200" httpMessage="Success"/>
+	<message code="TOO_MANY_REQUESTS" success="0" httpStatusCode="429" httpMessage="Too many requests"/>
+	<message code="UNAUTHORIZED" success="0" httpStatusCode="401" httpMessage="Invalid or missing token"/>
+	<message code="NONE" success="0" httpStatusCode="200" httpMessage=""/>
+	<message code="ERROR" success="0" httpStatusCode="500" httpMessage="Exception"/>
+</messages>

@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Models.Form
+﻿namespace Models.Form
 {
     public class Form
     {
@@ -14,7 +8,7 @@ namespace Models.Form
         private string _id;
         private bool _enable;
         private List<Struct> _structs;
-        private string _query;
+        private Dictionary<QueryAction, string> _queries;
         private DateTime _lastModified;
 
         public string Name { get => _name; private set => _name = value; }
@@ -23,7 +17,7 @@ namespace Models.Form
         public string Id { get => _id; set => _id = value; }
         public bool Enable { get => _enable; set => _enable = value; }
         public List<Struct> Structs { get => _structs; set => _structs = value; }
-        public string Query { get => _query; set => _query = value; }
+        public Dictionary<QueryAction, string> Queries { get => _queries; set => _queries = value; }
         public DateTime LastModified { get => _lastModified; set => _lastModified = value; }
 
         public Form(string name)
@@ -34,7 +28,7 @@ namespace Models.Form
             _id = string.Empty;
             _enable = true;
             _structs = new List<Struct>();
-            _query = string.Empty;
+            _queries = new Dictionary<QueryAction, string>();
             _lastModified = DateTime.Now;
         }
     }

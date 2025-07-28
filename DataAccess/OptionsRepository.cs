@@ -12,19 +12,10 @@ namespace DataAccess
         public OptionsRepository(AppConfig appConfig)
         {
             _appConfig = appConfig;
+
             Irregular = GetIrregular();
             Messages = GetMessageList();
             Updates = GetUpdateList();
-        }
-
-        public Options GetOptions()
-        {
-            return new Options
-            {
-                Irregular = GetIrregular(),
-                Messages = GetMessageList(),
-                Updates = GetUpdateList()
-            };
         }
 
         #region Irregular

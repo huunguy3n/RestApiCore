@@ -2,11 +2,13 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
 using Models;
 using Models.Interface;
 using Models.Options;
 using Models.Request;
+using Web.Custom;
 
 namespace Web.Controllers
 {
@@ -17,24 +19,25 @@ namespace Web.Controllers
     {
         private readonly AppConfig _appConfig;
         private readonly Options _options;
+        private readonly IMemoryCache _cache;
 
-        public QueryController(AppConfig appConfig, Options options)
+        public QueryController(AppConfig appConfig, Options options, IMemoryCache cache)
         {
             _appConfig = appConfig;
             _options = options;
+            _cache = cache;
         }
 
         //POST api/query/controllerName?cacheID=123&pageIndex=1
         //header: unit, debug
         //body: raw json
         [HttpPost("{controllerName}")]
-        public HttpResponseMessage Query(string controllerName)
+        public IActionResult Query(string controllerName)
         {
             ResponseManager responseManager = new ResponseManager(_appConfig, _options);
-            responseManager.OnResponseGenerated += LogManager.WriteLog;
 
             string ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
-            RequestQuery requestQuery = new RequestQuery(controllerName, ipAddress, User.Identity.Name);
+            RequestQuery requestQuery = new RequestQuery(controllerName, ipAddress, User.Identity?.Name ?? "anonymous");
 
             // Get values from the headers (unit, debug)
             Request.Headers.TryGetValue("unit", out var oUnit);
@@ -74,18 +77,18 @@ namespace Web.Controllers
 
             if (string.IsNullOrEmpty(requestQuery.unit))
             {
-                return responseManager.GetResponseMessage(requestQuery, "MISSING_PARAMETER");
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("MISSING_PARAMETER"));
             }
 
             if (requestQuery.cacheID != "" && requestQuery.pageIndex < 0)
             {
-                return responseManager.GetResponseMessage(requestQuery, "MISSING_PARAMETER");
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("MISSING_PARAMETER"));
             }
 
-            FormManager formManager = new FormManager(_appConfig, _options);
+            FormManager formManager = new FormManager(_appConfig, _options, _cache);
             IResponse response = formManager.ExecuteFrom(controllerName, requestQuery);
 
-            return responseManager.GetResponseMessage(requestQuery, response);
+            return ResponseHelper.ToActionResult(this, response);
         }
     }
 }

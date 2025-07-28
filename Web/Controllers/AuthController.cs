@@ -1,11 +1,11 @@
 ﻿using Business;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using Models;
 using Models.Options;
 using Models.Request;
 using System.Collections.Concurrent;
+using Web.Custom;
 
 namespace Web.Controllers
 {
@@ -26,10 +26,9 @@ namespace Web.Controllers
 
         //POST api/auth/login
         [HttpPost("{userName}")]
-        public HttpResponseMessage Login(string userName)
+        public IActionResult Login(string userName)
         {
             ResponseManager responseManager = new ResponseManager(_appConfig, _options);
-            responseManager.OnResponseGenerated += LogManager.WriteLog;
 
             string ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
             RequestAuth requestAuth = new RequestAuth(ipAddress, userName);
@@ -47,7 +46,7 @@ namespace Web.Controllers
                 else
                 {
                     // Nếu không thể phân tích chuỗi thành long, trả về lỗi
-                    return responseManager.GetResponseMessage(requestAuth, "INVALID_TIME_NUMBER");
+                    return ResponseHelper.ToActionResult(this, responseManager.GetResponse("INVALID_TIME_NUMBER"));
                 }
             }
             if (!StringValues.IsNullOrEmpty(oKey))
@@ -58,7 +57,7 @@ namespace Web.Controllers
             // Validate required headers
             if (requestAuth.time == 0 || string.IsNullOrEmpty(requestAuth.key))
             {
-                return responseManager.GetResponseMessage(requestAuth, "MISSING_PARAMETER");
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("MISSING_PARAMETER"));
             }
 
             // Check time
@@ -70,7 +69,7 @@ namespace Web.Controllers
                     if (requestAuth.time <= lastTime)
                     {
                         // Không cập nhật, trả về lastTime cũ để giữ nguyên giá trị
-                        responseManager.GetResponseMessage(requestAuth, "INVALID_TIME_GREATER");
+                        ResponseHelper.ToActionResult(this, responseManager.GetResponse("INVALID_TIME_GREATER"));
                         return lastTime;
                     }
                     // Cập nhật giá trị mới
@@ -81,7 +80,7 @@ namespace Web.Controllers
             // Kiểm tra lại nếu giá trị không được cập nhật do time <= lastTime
             if (_lastReceivedTimes[requestAuth.userName] != requestAuth.time)
             {
-                return responseManager.GetResponseMessage(requestAuth, "INVALID_TIME_GREATER");
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("INVALID_TIME_GREATER"));
             }
 
             AuthManager authManager = new AuthManager(_appConfig);
@@ -89,11 +88,11 @@ namespace Web.Controllers
 
             if (string.IsNullOrEmpty(token))
             {
-                return responseManager.GetResponseMessage(requestAuth, "UNAUTHORIZED");
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("UNAUTHORIZED"));
             }
             else
             {
-                return responseManager.GetResponseMessage(requestAuth, responseManager.GetResponse("SUCCESS", "Bearer", _appConfig.expiryToken, token));
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("SUCCESS", "Bearer", _appConfig.expiryToken, token));
             }
         }
     }

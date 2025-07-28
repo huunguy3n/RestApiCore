@@ -12,7 +12,7 @@ namespace Models.Response
         public string code { get; set; }
         public bool success { get; set; }
         public string message { get; set; }
-        public int httpStatusCode { get; set; }
+        public int statusCode { get; set; }
         public string cacheID { get; set; }
         public Dictionary<string, ResponseData> data { get; set; }
 
@@ -22,7 +22,7 @@ namespace Models.Response
             code = "NONE";
             success = false;
             message = string.Empty;
-            httpStatusCode = 200;
+            statusCode = 200;
             cacheID = string.Empty;
             data = new Dictionary<string, ResponseData>();
         }
@@ -32,7 +32,7 @@ namespace Models.Response
             code = response.code;
             success = response.success;
             message = response.message;
-            httpStatusCode = response.httpStatusCode;
+            statusCode = response.statusCode;
             cacheID = string.Empty;
             data = new Dictionary<string, ResponseData>();
         }

@@ -1,26 +1,22 @@
 ﻿using DataAccess;
+using Microsoft.Extensions.Caching.Memory;
 using Models;
 using Models.Interface;
 using Models.Options;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Business
 {
     public class RateLimitManager
     {
-        private ObjectCache cache = MemoryCache.Default;
-
         private readonly AppConfig _appConfig;
         private readonly Options _options;
+        private IMemoryCache _cache;
 
-        public RateLimitManager(AppConfig appConfig, Options options)
+        public RateLimitManager(AppConfig appConfig, Options options, IMemoryCache cache)
         {
             _appConfig = appConfig;
             _options = options;
+            _cache = cache;
         }
 
 
@@ -32,7 +28,7 @@ namespace Business
         /// <returns>1 - Cho phép, 2 - Vượt giới hạn, 3 - Khóa ip</returns>
         public IResponse IsRequestAllowed(string clientIp, string userName)
         {
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options);
+            ResponseManager responseManager = new ResponseManager(_appConfig, _options, _cache);
 
             if (CheckLimitRequest(clientIp))
             {
@@ -62,23 +58,30 @@ namespace Business
         {
             var cacheKey = $"RequestCount_{clientIp}";
 
-            if (cache.Contains(cacheKey))
+            if (_cache.TryGetValue(cacheKey, out int requestCount))
             {
-                var requestCount = (int)cache.Get(cacheKey);
-
-                if (requestCount >= _appConfig.maxRequestInMinutes)
+                if (requestCount >= _appConfig.maxRequestsPerMinute)
                 {
                     return true;
                 }
                 else
                 {
-                    cache.Set(cacheKey, requestCount + 1, DateTimeOffset.Now.AddSeconds(60));
+                    _cache.Set(cacheKey, requestCount + 1, new MemoryCacheEntryOptions
+                    {
+                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+                    });
+
                     return false;
                 }
             }
             else
             {
-                cache.Add(cacheKey, 1, DateTimeOffset.Now.AddSeconds(60));
+                // Chưa có bản ghi, nghĩa là lần đầu tiên truy cập trong phút này
+                _cache.Set(cacheKey, 1, new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+                });
+                
                 return false;
             }
         }

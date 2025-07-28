@@ -1,1 +1,25 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<update xmlns="urn:schemas-fast-com:data-update">
+	<controller name="Customer">
+		<text>
+			<![CDATA[
+--update @@table set @@field = b.ma_kh from @@table a join dmkh b with(nolock) on a.@@reference = b.id_doitac			
+			]]>
+		</text>
+	</controller>
+	<controller name="Item">
+		<text>
+			<![CDATA[
+--update @@table set @@field = b.ma_vt from @@table a join dmvt b with(nolock) on a.@@reference = b.id_doitac			
+			]]>
+		</text>
+	</controller>
+	<controller name="Lot">
+		<text>
+			<![CDATA[
+update @@table set @@field = b.ma_lo from @@table a join dmlo b with(nolock) on a.@@reference = b.id_doitac			
+			]]>
+		</text>
+	</controller>
+</update>

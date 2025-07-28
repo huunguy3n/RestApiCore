@@ -2,8 +2,6 @@
 using Microsoft.AspNetCore.Authentication;
 using Models;
 using Models.Interface;
-using Models.Request;
-using System.Reflection;
 using System.Text.Encodings.Web;
 
 namespace Web.Custom
@@ -23,9 +21,6 @@ namespace Web.Custom
         {
             ResponseManager responseManager = new ResponseManager(_appConfig, _options);
 
-            string ipAddress = Context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
-            Request request = new Request(ipAddress);
-
             // Extract token from the Authorization header
             if (!Request.Headers.ContainsKey("Authorization"))
             {
@@ -33,6 +28,7 @@ namespace Web.Custom
             }
 
             string token = Request.Headers["Authorization"].ToString().Split(" ").Last();
+            string ipAddress = Context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
 
             AuthManager authManager = new AuthManager(_appConfig);
 
@@ -42,9 +38,9 @@ namespace Web.Custom
                 var principal = authManager.AuthenticateToken(token, ipAddress);
                 if (principal == null)
                 {
-                    var response = responseManager.GetResponseMessage(request, "UNAUTHORIZED");
+                    IResponse response = responseManager.GetResponse("UNAUTHORIZED");
 
-                    await Context.Response.WriteAsync(response.Content.ReadAsStringAsync().Result);
+                    //await ResponseHelper.WriteJsonAsync(Context, response);
                     return AuthenticateResult.NoResult();
                 }
 
@@ -55,7 +51,7 @@ namespace Web.Custom
             {
                 IResponse response = responseManager.GetResponse("EXCEPTION", _appConfig.isDevState ? ex.Message : "");
 
-                await Context.Response.WriteAsync(responseManager.GetResponseMessage(request, response).Content.ReadAsStringAsync().Result);
+                await ResponseHelper.WriteJsonAsync(Context, response);
                 return AuthenticateResult.NoResult();
             }
         }
@@ -64,22 +60,18 @@ namespace Web.Custom
         {
             ResponseManager responseManager = new ResponseManager(_appConfig, _options);
 
-            string ipAddress = Context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
-            Request request = new Request(ipAddress);
+            IResponse response = responseManager.GetResponse("UNAUTHORIZED");
 
-            var response = responseManager.GetResponseMessage(request, "UNAUTHORIZED");
-            await Context.Response.WriteAsync(response.Content.ReadAsStringAsync().Result);
+            await ResponseHelper.WriteJsonAsync(Context, response);
         }
 
         protected override async Task HandleForbiddenAsync(AuthenticationProperties properties)
         {
             ResponseManager responseManager = new ResponseManager(_appConfig, _options);
 
-            string ipAddress = Context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
-            Request request = new Request(ipAddress);
+            IResponse response = responseManager.GetResponse("FORBIDDEN");
 
-            var response = responseManager.GetResponseMessage(request, "FORBIDDEN");
-            await Context.Response.WriteAsync(response.Content.ReadAsStringAsync().Result);
+            await ResponseHelper.WriteJsonAsync(Context, response);
         }
     }
 }
