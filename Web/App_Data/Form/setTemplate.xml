@@ -1,0 +1,95 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<!DOCTYPE form [
+
+]>
+
+<form type="Voucher" id="HDA" xmlns="urn:schemas-fast-com:rest-api">
+	<struct name="master" baseTable="m81$000000">
+		<field name="YourID" mapping="id_doitac" maxLength="36" isPrimaryKey="true" allowNulls="false"/>
+		<field name="VoucherDate" mapping="ngay_ct" type="DateTime" dataFormatString="dd/MM/yyyy" allowNulls="false"/>
+		<field name="VoucherCode" mapping="so_ct" maxLength="36" allowNulls="false"/>
+		<field name="CustomerID" mapping="customer_id" maxLength="36" allowNulls="false">
+			<reference name="ma_kh" controller="Customer" index="0"/>
+		</field>
+		<field name="Buyer" mapping="ong_ba"/>
+		<field name="Account" mapping="tk" allowNulls="false"/>
+		<field name="TaxAccount" mapping="tk_thue_co"/>
+		<field name="TotalQuantity" mapping="t_so_luong"/>
+		<field name="TotalAmount" mapping="t_tt_nt"/>
+		<field name="TotalTax" mapping="t_thue_nt"/>
+		<field name="SaleEmployee" mapping="ma_nvbh" checkIrregular="true"/>
+
+		<field name="ma_kh" mapping="" hidden="true">
+			<check condition="ma_kh = ''" errorCode="INVALID_FIELD" index="0"/>
+		</field>
+	</struct>
+	<struct name="detail" baseTable="d81$000000">
+		<field name="YourID" mapping="id_doitac" isPrimaryKey="true" maxLength="36" allowNulls="false"/>
+		<field name="ItemID" mapping="item_id" isPrimaryKey="true" maxLength="36" allowNulls="false">
+			<reference name="ma_vt" controller="Item" index="1"/>
+		</field>
+		<field name="ItemName" mapping="ten_vt_in" maxLength="512" allowNulls="false"/>
+		<field name="Uom" mapping="dvt"/>
+		<field name="Promotion" mapping="km_yn" type="Int" defaultValue="0">
+			<check condition="not in (0, 1, 2, 3)" errorCode="INVALID_FIELD" index="0"/>
+		</field>
+		<field name="Quantity" mapping="so_luong" type="Decimal"/>
+		<field name="Price" mapping="gia_nt2" type="Decimal"/>
+		<field name="Amount" mapping="tien_nt2" type="Decimal"/>
+		<field name="TaxCode" mapping="ma_thue" maxLength="8"/>
+		<field name="TaxRate" mapping="thue_suat" type="Decimal"/>
+		<field name="DiscountRate" mapping="tl_ck"/>
+		<field name="DiscountAmount" mapping="ck_nt"/>
+
+		<field name="ma_vt" mapping="" hidden="true">
+			<check condtion="ma_vt = ''" errorCode="INVALID_FIELD" index="1"/>
+		</field>
+	</struct>
+	<struct name="tax" baseTable="r30$000000">
+		<field name="YourID" mapping="id_doitac" isPrimaryKey="true" maxLength="36" allowNulls="false"/>
+		<field name="CustomerTaxCode" mapping="ma_so_thue" isPrimaryKey="true" allowNulls="false"/>
+		<field name="CustomerName" mapping="ten_kh"/>
+		<field name="Address" mapping="dia_chi"/>
+	</struct>
+
+	<queries>
+		<query action="Before">
+			<text>
+				<![CDATA[
+--@@form = 'setTemplate'
+--@@userName = 'NGUYENTDH'
+--@@userERP = 'NGUYENTDH'
+--@@sysDatabaseName = FSD_DEV_A
+--@@appDatabaseName = FSD_DEV_S
+--@@id = 'HDA'
+--@@unit = 'CTY', 
+--@@0.primaryKeyList = 'id_doitac'
+--@@1.primaryKeyList = 'id_doitac, item_id'
+--@@2.primaryKeyList = 'id_doitac'
+--@@type = 'Voucher'
+
+@@reference(0)
+@@checking(0)
+@@reference(1)
+@@checking(1)
+
+			]]>
+			</text>
+		</query>
+		<query action="Process">
+			<text>
+				<![CDATA[
+exec api_processDataFor_m81 @@id, @@unit, @@userERP, '@@appDatabaseName', '@@sysDatabaseName'
+        ]]>
+			</text>
+		</query>
+		<query action="After">
+			<![CDATA[
+select 'SUCCESS' as code, '' as message
+select 'master' as name, '' as id, 'HDA' as type, 'Hóa đơn bán hàng' as title, 'Hóa đơn bán hàng' as description, 'HDA' as template
+      ]]>
+		</query>
+	</queries>
+
+</form>
