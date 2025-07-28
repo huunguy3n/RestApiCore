@@ -11,22 +11,15 @@ using Utilities;
 
 namespace Business.FormMethod
 {
-    public class FormMethodBase : IFormMethod
+    public class FormMethodBase(AppConfig appConfig, Options options, IMemoryCache cache) : IFormMethod
     {
-        private readonly AppConfig _appConfig;
-        private readonly Options _options;
-        public FormMethodBase(AppConfig appConfig, Options options)
-        {
-            _appConfig = appConfig;
-            _options = options;
-        }
 
         //Lấy struct lưu vào cache
         //Làm file struct ký hiệu
         public IResponse ExecuteForm(RequestQuery request, Form form)
         {
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options);
-            FormRepository formRepository = new FormRepository(_appConfig);
+            ResponseManager responseManager = new(appConfig, options, cache);
+            FormRepository formRepository = new(appConfig, options);
 
             //Lấy cấu trúc sqlType
             foreach (Struct @struct in form.Structs)
@@ -41,7 +34,7 @@ namespace Business.FormMethod
                     //@@table, @@field, @@reference
                     if (field.Reference.Controller != null)
                     {
-                        var update = _options.Updates.Get(field.Reference.Controller);
+                        var update = options.Updates.Get(field.Reference.Controller);
 
                         if (update != null)
                         {
@@ -56,26 +49,24 @@ namespace Business.FormMethod
 
             //Phân rã json
             //Check đơn giản
-            CustomJsonConverter customJsonConverter = new CustomJsonConverter(form, _options.Irregular);
-            DataSet dsJson = new DataSet();
-
+            DataSet dsJson;
+            
             try
             {
-                customJsonConverter.DeserializeObject(request.jsonBody);
+                dsJson = request.jsonBody.DeserializeObject(form, options.Irregular, out DataSet dsError);
+
+                if (dsError.Tables.Count > 0)
+                {
+                    DataRow rowError = dsError.Tables[0].Rows[0];
+                    string code = rowError["code"].ToString();
+                    string field = rowError["field"].ToString();
+
+                    return responseManager.GetResponse(code, dsError.Tables[1], field);
+                }
             }
             catch (Exception ex)
             {
                 return responseManager.GetResponse("INVALID_JSON", ex.Message);
-            }
-
-            if (!string.IsNullOrEmpty(customJsonConverter.fieldName))
-            {
-                IResponse response = responseManager.GetResponse(customJsonConverter.errorCode);
-                string message = response.message
-                    .Replace("@@field", customJsonConverter.fieldName)
-                    .Replace("@@condition", customJsonConverter.condition);
-
-                return responseManager.GetResponse(request.formName, customJsonConverter.errorCode, message, customJsonConverter.dsError);
             }
 
             //Trả về kết quả
@@ -84,7 +75,7 @@ namespace Business.FormMethod
             return responseManager.GetResponse(request.formName, dsExecute);
         }
 
-        private void GetTypeByName(DataTable table, Field field)
+        private static void GetTypeByName(DataTable table, Field field)
         {
             switch (field.Type)
             {
@@ -98,8 +89,15 @@ namespace Business.FormMethod
                             if (foundRows.Length > 0)
                             {
                                 string sqlType = foundRows[0]["type"].ToString();
-                                int.TryParse(foundRows[0]["maxLength"].ToString(), out int maxLength);
-
+                                if (int.TryParse(foundRows[0]["maxLength"].ToString(), out int maxLength))
+                                {
+                                    field.MaxLength = maxLength;
+                                }
+                                else
+                                {
+                                    field.MaxLength = -1; // Default to -1 if maxLength is not a valid integer
+                                }
+                                    
                                 if (sqlType.Contains("char"))
                                 {
                                     field.Type = FieldType.String;
@@ -121,7 +119,6 @@ namespace Business.FormMethod
                                     field.Type = FieldType.Decimal;
                                 }
 
-                                field.MaxLength = maxLength;
                                 field.SqlType = sqlType;
                             }
                         }

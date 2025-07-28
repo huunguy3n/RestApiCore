@@ -4,8 +4,8 @@
 	<message code="ACCESS_DENIED" success="0" httpStatusCode="403" httpMessage="You do not have permission to access on this server"/>
 	<message code="EXCEPTION" success="0" httpStatusCode="500" httpMessage="Exception"/>
 	<message code="FORBIDDEN" success="0" httpStatusCode="403" httpMessage="You do not have permission to access this resource"/>
-	<message code="INVALID_FIELD" success="0" httpStatusCode="400" httpMessage="Field @@field does not satisfy the conditions (@@condition)"/>
-	<message code="INVALID_FIELD_IRREGULAR" success="0" httpStatusCode="400" httpMessage="The @@field field contains special characters"/>
+	<message code="INVALID_FIELD" success="0" httpStatusCode="400" httpMessage="Field {0} does not satisfy the conditions ({1})"/>
+	<message code="INVALID_FIELD_IRREGULAR" success="0" httpStatusCode="400" httpMessage="The {0} field contains special characters"/>
 	<message code="INVALID_FORM" success="0" httpStatusCode="400" httpMessage="Invalid 'form' parameter. The 'form' must be exists or enable"/>
 	<message code="INVALID_JSON" success="0" httpStatusCode="400" httpMessage="Can not convert json"/>
 	<message code="INVALID_TIME_GREATER" success="0" httpStatusCode="400" httpMessage="Invalid 'time' parameter. The 'time' must be greater than the previous request"/>

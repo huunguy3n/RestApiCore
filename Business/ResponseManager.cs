@@ -5,9 +5,6 @@ using Models.Options;
 using Models.Response;
 using Newtonsoft.Json;
 using System.Data;
-using System.Net;
-using System.Net.Http;
-using System.Text;
 
 namespace Business
 {
@@ -35,7 +32,7 @@ namespace Business
         public IResponse GetResponse(string code)
         {
             Message message = _options.Messages.Get(code);
-            IResponse response = new Response();
+            Response response = new();
 
             if (message != null)
             {
@@ -67,7 +64,7 @@ namespace Business
         #region AUTH
         public IResponse GetResponse(string code, string tokenType, int expiryToken, string accessToken)
         {
-            ResponseAuth response = new ResponseAuth(GetResponse(code))
+            ResponseAuth response = new(GetResponse(code))
             {
                 token_type = tokenType,
                 expires_in = expiryToken,
@@ -88,7 +85,7 @@ namespace Business
         public IResponse GetResponse(string formName, DataSet dataSet)
         {
             string code = "SUCCESS", message = "";
-            DataSet data = null;
+            DataSet data = new DataSet();
 
             //Mặc định là SUCCESS
             try
@@ -122,7 +119,7 @@ namespace Business
                                 if (dataSet.Tables[i].Columns.Contains("tableName"))
                                 {
                                     tableName = dataSet.Tables[i].Rows[0]["tableName"].ToString() ?? tableName;
-                                    dt.Columns.Remove(tableName);
+                                    dt.Columns.Remove("tableName");
                                     dt.TableName = tableName;
                                 }
 
@@ -156,7 +153,7 @@ namespace Business
         {
             string cacheID = GenerateCacheID();
 
-            ResponseQuery response = new ResponseQuery(GetResponse(code, message))
+            ResponseQuery response = new(GetResponse(code, message))
             {
                 cacheID = cacheID,
             };
@@ -187,7 +184,7 @@ namespace Business
 
                 for (int i = 0; i < dataPagination.Tables.Count; i++)
                 {
-                    ResponseData responseDataPagination = new ResponseData
+                    ResponseData responseDataPagination = new()
                     {
                         totalRowCount = totalRowCount,
                         pageIndex = i,
@@ -212,7 +209,7 @@ namespace Business
 
                     // Cập nhật danh sách cacheIndex
                     if (!_cache.TryGetValue<List<string>>("cacheIndex", out var cacheIndex))
-                        cacheIndex = new List<string>();
+                        cacheIndex = [];
 
                     if (!cacheIndex.Contains(fullCacheKey))
                         cacheIndex.Add(fullCacheKey);
@@ -238,7 +235,7 @@ namespace Business
         public IResponse GetResponse(string formName, string cacheID, int pageIndex)
         {
             // Nếu tìm thấy cache, trả về dữ liệu từ cache
-            ResponseQuery response = new ResponseQuery(GetResponse("SUCCESS"))
+            ResponseQuery response = new(GetResponse("SUCCESS"))
             {
                 cacheID = cacheID
             };
@@ -255,12 +252,15 @@ namespace Business
                 {
                     if (_cache.TryGetValue<ResponseData>(key, out var data))
                     {
-                        string tableName = key.Substring(cacheKeyPrefix.Length); // lấy phần sau cùng
-                        response.data.Add(tableName, data);
+                        if (data != null)
+                        {
+                            string tableName = key[cacheKeyPrefix.Length..]; // lấy phần sau cùng
+                            response.data.Add(tableName, data);
+                        }
                     }
                 }
 
-                if (response.data.Any())
+                if (response.data.Count != 0)
                     return response;
             }
 
@@ -279,10 +279,13 @@ namespace Business
 
                     // Đọc dữ liệu từ file
                     string jsonData = File.ReadAllText(file);
-                    ResponseData responseData = JsonConvert.DeserializeObject<ResponseData>(jsonData);
 
-                    // Thêm dữ liệu vào response
-                    response.data.Add(tableName, responseData);
+                    var responseData = JsonConvert.DeserializeObject<ResponseData>(jsonData);
+                    if (responseData != null)
+                    {
+                        // Thêm dữ liệu vào response
+                        response.data.Add(tableName, responseData);
+                    }
                 }
 
                 // Nếu có dữ liệu, trả về response
@@ -292,6 +295,23 @@ namespace Business
             return GetResponse("INVALID_CACHEID");
         }
 
+        public IResponse GetResponse(string code, DataTable data, params string[] args)
+        {
+            ResponseQuery response = new(GetResponse(code));
+
+            response.message = string.Format(response.message, args);
+            response.data.Add("data", new ResponseData
+            {
+                totalRowCount = data.Rows.Count,
+                pageIndex = 0, // Mặc định là 0, có thể thay đổi nếu cần
+                pageSize = data.Rows.Count,
+                pageCount = 1,
+                data = data
+            });
+
+            return response;
+        }
+
         /// <summary>
         /// Tách nhỏ data trả về
         /// </summary>
@@ -299,7 +319,7 @@ namespace Business
         /// <returns></returns>
         private DataSet PaginationDataResponse(DataTable dataTable)
         {
-            DataSet dataPagination = new DataSet();
+            DataSet dataPagination = new();
 
             if (dataTable.Rows.Count > _appConfig.maxRowInResponse)
             {
@@ -326,7 +346,7 @@ namespace Business
 
             return dataPagination;
         }
-        private string GenerateCacheID()
+        private static string GenerateCacheID()
         {
             // Generate a random GUID and convert it to a string
             return Guid.NewGuid().ToString();

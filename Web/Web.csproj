@@ -10,6 +10,7 @@
     <Folder Include="App_Data\Form\Include\" />
     <Folder Include="App_Data\Structure\Data\" />
     <Folder Include="App_Data\Structure\System\" />
+    <Folder Include="Log\" />
   </ItemGroup>
 
   <ItemGroup>

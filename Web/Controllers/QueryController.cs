@@ -15,29 +15,18 @@ namespace Web.Controllers
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
-    public class QueryController : ControllerBase
+    public class QueryController(AppConfig appConfig, Options options, IMemoryCache cache) : ControllerBase
     {
-        private readonly AppConfig _appConfig;
-        private readonly Options _options;
-        private readonly IMemoryCache _cache;
-
-        public QueryController(AppConfig appConfig, Options options, IMemoryCache cache)
-        {
-            _appConfig = appConfig;
-            _options = options;
-            _cache = cache;
-        }
-
         //POST api/query/controllerName?cacheID=123&pageIndex=1
         //header: unit, debug
         //body: raw json
         [HttpPost("{controllerName}")]
         public IActionResult Query(string controllerName)
         {
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options);
+            ResponseManager responseManager = new(appConfig, options);
 
             string ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
-            RequestQuery requestQuery = new RequestQuery(controllerName, ipAddress, User.Identity?.Name ?? "anonymous");
+            RequestQuery requestQuery = new(controllerName, ipAddress, User.Identity?.Name ?? "anonymous");
 
             // Get values from the headers (unit, debug)
             Request.Headers.TryGetValue("unit", out var oUnit);
@@ -85,7 +74,7 @@ namespace Web.Controllers
                 return ResponseHelper.ToActionResult(this, responseManager.GetResponse("MISSING_PARAMETER"));
             }
 
-            FormManager formManager = new FormManager(_appConfig, _options, _cache);
+            FormManager formManager = new(appConfig, options, cache);
             IResponse response = formManager.ExecuteFrom(controllerName, requestQuery);
 
             return ResponseHelper.ToActionResult(this, response);

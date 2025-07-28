@@ -3,46 +3,37 @@ using Newtonsoft.Json.Linq;
 using System.Data;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace Utilities
 {
-    public class CustomJsonConverter
+    public static class CustomJsonConverter
     {
-        private readonly Form _form;
-        private readonly string _irregular;
-
-        public string fieldName { get; private set; }
-        public string errorCode { get; private set; }
-        public string condition { get; private set; }
-        public DataSet dsError { get; private set; }
-        public CustomJsonConverter(Form form, string irregular)
+        public static DataSet? DeserializeObject(this string jsonString, Form form, string irregular, out DataSet dsError)
         {
-            _form = form;
-            _irregular = irregular;
-        }
+            dsError = new();
+            Regex regex = new(irregular);
 
-        public DataSet DeserializeObject(string jsonString)
-        {
-            DataSet dataSet = CreateDataSetFromForm(_form);
+            DataSet dataSet = TransformFormToDataSet(form);
 
             JObject jsonObject = JObject.Parse(jsonString);
 
-
-            foreach (Struct @struct in _form.Structs)
+            foreach (Struct @struct in form.Structs)
             {
                 DataTable table = dataSet.Tables[@struct.Name];
 
                 if (jsonObject[@struct.Name] != null)
                 {
                     JArray rows = (JArray)jsonObject[@struct.Name];
-                    foreach (JObject row in rows)
+
+                    foreach (JObject row in rows.Cast<JObject>())
                     {
                         DataRow dataRow = table.NewRow();
-                        List<Field> fields = @struct.Fields.Where(o => o.Hidden == false).ToList();
+                        List<Field> fields = [.. @struct.Fields.Where(o => o.Hidden == false)];
 
                         foreach (Field field in fields)
                         {
-                            dataRow[field.Name] = SetValue(row[field.Name], field.Type, field.DataFormatString);
+                            dataRow[field.Name] = ConvertJValueToDValue(row[field.Name], field.Type, field.DataFormatString);
                         }
 
                         try
@@ -56,35 +47,28 @@ namespace Utilities
                     }
                 }
 
-                foreach (Field fieldCondition in @struct.Fields.Where(o => o.Check.Condition != "" || o.CheckIrregular))
+                foreach (Field fieldCondition in @struct.Fields.Where(o => o.CheckIrregular))
                 {
-                    DataRow[] drError;
-
                     if (fieldCondition.CheckIrregular)
                     {
-                        Regex regex = new Regex(_irregular);
+                        DataRow[] drError = [.. table.AsEnumerable().Where(row => regex.IsMatch(row.Field<string>(fieldCondition.Name)))];
 
-                        drError = table.AsEnumerable()
-                             .Where(row => regex.IsMatch(row.Field<string>(fieldCondition.Name))).ToArray();
+                        if (drError.Length > 0)
+                        {
+                            DataTable dtResponse = new("Response");
+                            dtResponse.Columns.Add("code", typeof(string));
+                            dtResponse.Columns.Add("field", typeof(string));
 
-                        this.errorCode = "INVALID_FIELD_IRREGULAR";
-                    }
-                    else
-                    {
-                        drError = table.Select(fieldCondition.Check.Condition);
-                        this.errorCode = fieldCondition.Check.ErrorCode;
-                        this.condition = fieldCondition.Check.Condition;
-                    }
+                            dtResponse.Rows.Add(["INVALID_FIELD_IRREGULAR", fieldCondition.Name]);
 
-                    if (drError.Length > 0)
-                    {
-                        this.fieldName = fieldCondition.Name;
-                        this.dsError.Tables.Add(drError.CopyToDataTable());
-                        return null;
+                            dsError.Tables.Add(dtResponse);
+                            dsError.Tables.Add(drError.CopyToDataTable());
+
+                            return null;
+                        }
                     }
                 }
             }
-
 
 
             //Chuyển name ==> mapping
@@ -99,19 +83,30 @@ namespace Utilities
             return dataSet;
         }
 
-        private DataSet CreateDataSetFromForm(Form form)
+        /// <summary>
+        /// Chuyển đổi Form thành DataSet
+        /// </summary>
+        /// <param name="form"></param>
+        /// <returns></returns>
+        private static DataSet TransformFormToDataSet(Form form)
         {
-            DataSet dataSet = new DataSet();
+            DataSet dataSet = new();
             foreach (Struct @struct in form.Structs)
             {
-                dataSet.Tables.Add(CreateDataTableFromStruct(@struct));
+                dataSet.Tables.Add(TransformStructToDataTable(@struct));
             }
 
             return dataSet;
         }
-        private DataTable CreateDataTableFromStruct(Struct @struct)
+
+        /// <summary>
+        /// Chuyển đổi Struct thành DataTable
+        /// </summary>
+        /// <param name="struct"></param>
+        /// <returns></returns>
+        private static DataTable TransformStructToDataTable(Struct @struct)
         {
-            DataTable dt = new DataTable
+            DataTable dt = new()
             {
                 TableName = @struct.Name
             };
@@ -120,11 +115,11 @@ namespace Utilities
             DataColumn[] primaryKeyList = new DataColumn[n == 0 ? 1 : n];
             foreach (Field field in @struct.Fields)
             {
-                DataColumn column = new DataColumn
+                DataColumn column = new()
                 {
                     ColumnName = field.Name,
                     Caption = field.Mapping,
-                    DataType = GetType(field.Type),
+                    DataType = MapFieldTypeToColumnType(field.Type),
                     AllowDBNull = field.AllowNulls,
 
                 };
@@ -135,7 +130,7 @@ namespace Utilities
                 }
                 if (!string.IsNullOrEmpty(field.DefaultValue) || field.Type == FieldType.Boolean)
                 {
-                    column.DefaultValue = SetValue(field.DefaultValue, field.Type, field.DataFormatString);
+                    column.DefaultValue = ConvertJValueToDValue(field.DefaultValue, field.Type, field.DataFormatString);
                 }
 
                 if (field.Type == FieldType.String) column.MaxLength = field.MaxLength;
@@ -144,40 +139,50 @@ namespace Utilities
             }
 
             dt.PrimaryKey = primaryKeyList;
+
             return dt;
         }
-        private Type GetType(FieldType type)
+
+        /// <summary>
+        /// Chuyển đổi giá trị từ kiểu dữ liệu định nghĩa sang Column Type
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
+        private static Type MapFieldTypeToColumnType(FieldType type)
         {
-            switch (type)
+            return type switch
             {
-                case FieldType.Boolean:
-                    return typeof(bool);
-                case FieldType.String:
-                    return typeof(string);
-                case FieldType.DateTime:
-                    return typeof(DateTime);
-                case FieldType.Decimal:
-                    return typeof(decimal);
-                case FieldType.Int:
-                    return typeof(int);
-                default:
-                    return typeof(string);
-            }
+                FieldType.Boolean => typeof(bool),
+                FieldType.String => typeof(string),
+                FieldType.DateTime => typeof(DateTime),
+                FieldType.Decimal => typeof(decimal),
+                FieldType.Int => typeof(int),
+                _ => typeof(string),
+            };
         }
-        private object SetValue(object value, FieldType type, string format)
+
+        /// <summary>
+        /// Chuyển đổi giá trị từ JValue sang giá trị tương ứng với kiểu dữ liệu trong định nghĩa
+        /// </summary>
+        /// <param name="value"></param>
+        /// <param name="type"></param>
+        /// <param name="format"></param>
+        /// <returns></returns>
+        /// <exception cref="FormatException"></exception>
+        private static object ConvertJValueToDValue(object value, FieldType type, string format)
         {
             switch (type)
             {
                 case FieldType.String:
                     return value;
                 case FieldType.Boolean:
-                    return (value.ToString() == "1" ? true : value.ToString() == "true" ? true : false);
+                    return (value.ToString() == "1" || (value.ToString() == "true"));
                 case FieldType.Decimal:
                     return Convert.ToDecimal(value);
                 case FieldType.Int:
                     return Convert.ToInt16(value);
                 case FieldType.DateTime:
-                    if (value.ToString().ToUpper() == "GETDATE()")
+                    if (value.ToString()?.ToUpper() == "GETDATE()")
                     {
                         return DateTime.Now;
                     }
@@ -194,7 +199,7 @@ namespace Utilities
                     {
                         return DateTimeOffset.FromUnixTimeSeconds(unixTime).UtcDateTime;
                     }
-                    else return null;
+                    else return DBNull.Value;
                 default:
                     return value;
             }

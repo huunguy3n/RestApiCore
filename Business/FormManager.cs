@@ -15,35 +15,24 @@ using System.Threading.Tasks;
 
 namespace Business
 {
-    public class FormManager
+    public class FormManager(AppConfig appConfig, Options options, IMemoryCache cache)
     {
-        private readonly AppConfig _appConfig;
-        private readonly Options _options;
-        private readonly IMemoryCache _cache;
-
-        public FormManager(AppConfig appConfig, Options options, IMemoryCache cache)
-        {
-            _appConfig = appConfig;
-            _options = options;
-            _cache = cache;
-        }
-
         public IResponse ExecuteFrom(string name, RequestQuery request)
         {
             //Check form enable
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options, _cache);
-            FormRepository formRepository = new FormRepository(_appConfig);
+            ResponseManager responseManager = new ResponseManager(appConfig, options, cache);
+            FormRepository formRepository = new FormRepository(appConfig, options );
 
             Form form = formRepository.GetForm(name, request.userName);
 
             IFormMethod formType = null;
             if (request.cacheID != "")
             {
-                formType = new FormMethodCache(_appConfig, _options, _cache);
+                formType = new FormMethodCache(appConfig, options, cache);
             }
             else
             {
-                formType = new FormMethodBase(_appConfig, _options);
+                formType = new FormMethodBase(appConfig, options, cache);
             }
 
             return formType.ExecuteForm(request, form);

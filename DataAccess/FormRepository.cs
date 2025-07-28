@@ -1,34 +1,29 @@
 ﻿using Models;
 using Models.Form;
+using Models.Options;
 using Models.Request;
 using Provider;
 using System.Collections.Concurrent;
 using System.Data;
+using System.Linq;
 using System.Xml;
 using Utilities;
 
 namespace DataAccess
 {
-    public class FormRepository
+    public class FormRepository(AppConfig appConfig, Options options)
     {
-        private readonly AppConfig _appConfig;
-        private static ConcurrentDictionary<string, Form> _forms = new ConcurrentDictionary<string, Form>();
-
-        public FormRepository(AppConfig appConfig)
-        {
-            _appConfig = appConfig;
-            Provider.Provider.CommandTimeout = _appConfig.commandTimeout;
-        }
+        private static readonly ConcurrentDictionary<string, Form> _forms = new();
 
         #region Get Form
         public Form GetForm(string name, string userName)
         {
             //So sánh LastModified
-            string pathFile = Path.Combine(_appConfig.pathDirectory, @$"App_Data\Form\{name}.xml");
+            string pathFile = Path.Combine(appConfig.pathDirectory, @$"App_Data\Form\{name}.xml");
 
             if (File.Exists(pathFile))
             {
-                ServerRepository serverRepository = new ServerRepository(_appConfig);
+                ServerRepository serverRepository = new(appConfig);
 
                 if (!serverRepository.CheckFormRights(name, userName))
                 {
@@ -68,14 +63,14 @@ namespace DataAccess
         /// <returns></returns>
         private Form GetForm(string name)
         {
-            string pathXML = Path.Combine(_appConfig.pathDirectory, $"App_Data\\Form\\{name}.xml");
+            string pathXML = Path.Combine(appConfig.pathDirectory, $"App_Data\\Form\\{name}.xml");
 
             if (!File.Exists(pathXML))
             {
                 return null;
             }
 
-            Form form = new Form(name)
+            Form form = new(name)
             {
                 LastModified = File.GetLastWriteTime(pathXML)
             };
@@ -90,42 +85,41 @@ namespace DataAccess
                 //type (Voucher, List, Report), id, enable
                 var nodeFormProperties = doc.SelectSingleNode("ns:form", xmlNamespace);
                 form.Type = (FormType)XMLReader.GetAttributes(nodeFormProperties, "type", typeof(FormType));
-                switch (form.Type)
+                form.Method = form.Type switch
                 {
-                    case FormType.List:
-                    case FormType.Voucher:
-                        form.Method = FormMethod.Set;
-                        break;
-                    default:
-                        form.Method = FormMethod.Get;
-                        break;
-                }
+                    FormType.List or FormType.Voucher => FormMethod.Set,
+                    _ => FormMethod.Get,
+                };
                 form.Id = XMLReader.GetAttributes(nodeFormProperties, "id");
 
                 string enable = XMLReader.GetAttributes(nodeFormProperties, "enable");
-                form.Enable = (enable == "0" ? false : enable == "false" ? false : true);//Không có mặc định true
+                form.Enable = (enable != "0" && (enable != "false"));//Không có mặc định true
 
                 //Get Struct
                 //name, baseTable
                 var nodeStructs = doc.SelectNodes("ns:form/ns:struct", xmlNamespace);
                 foreach (XmlNode structNode in nodeStructs)
                 {
-                    Struct @struct = new Struct();
-                    @struct.Name = XMLReader.GetAttributes(structNode, "name");
-                    @struct.BaseTable = XMLReader.GetAttributes(structNode, "baseTable");
+                    Struct @struct = new()
+                    {
+                        Name = XMLReader.GetAttributes(structNode, "name"),
+                        BaseTable = XMLReader.GetAttributes(structNode, "baseTable")
+                    };
 
                     //Get Fields
                     var nodeFields = doc.SelectNodes($"ns:form/ns:struct[@name=\"{@struct.Name}\"]/ns:field", xmlNamespace);
 
                     foreach (XmlNode nodeField in nodeFields)
                     {
-                        Field field = new Field();
                         //name, mapping, type (Decimal, DateTime, String, Boolean, Int, UnixTimestamp), dataFormatString (dd/MM/yyyy, dd/MM/yyyy HH:mm)
                         //maxLength, upperCase, allowNulls, isPrimaryKey, defaultValue, hidden
                         //check, update
+                        Field field = new()
+                        {
 
-                        field.Name = XMLReader.GetAttributes(nodeField, "name");
-                        field.Mapping = XMLReader.GetAttributes(nodeField, "mapping");
+                            Name = XMLReader.GetAttributes(nodeField, "name"),
+                            Mapping = XMLReader.GetAttributes(nodeField, "mapping")
+                        };
 
                         //Nếu mapping rỗng, lấy giá trị name
                         field.Mapping = string.IsNullOrEmpty(field.Mapping) ? field.Name : field.Mapping;
@@ -139,38 +133,62 @@ namespace DataAccess
 
                         //Mặc định fasle
                         string upperCase = XMLReader.GetAttributes(nodeField, "upperCase");
-                        field.UpperCase = upperCase == "1" ? true : upperCase == "true" ? true : false;
+                        field.UpperCase = upperCase == "1" || (upperCase == "true");
 
                         //Mặc định true
                         string allowNulls = XMLReader.GetAttributes(nodeField, "allowNulls");
-                        field.AllowNulls = allowNulls == "0" ? false : allowNulls == "false" ? false : true;
+                        field.AllowNulls = allowNulls != "0" && (allowNulls != "false");
 
                         //Mặc định fasle
                         string isPrimaryKey = XMLReader.GetAttributes(nodeField, "isPrimaryKey");
-                        field.IsPrimaryKey = isPrimaryKey == "1" ? true : isPrimaryKey == "true" ? true : false;
+                        field.IsPrimaryKey = isPrimaryKey == "1" || (isPrimaryKey == "true");
 
                         //Mặc định fasle
                         string checkIrregular = XMLReader.GetAttributes(nodeField, "checkIrregular");
-                        field.CheckIrregular = checkIrregular == "1" ? true : checkIrregular == "true" ? true : false;
+                        field.CheckIrregular = checkIrregular == "1" || (checkIrregular == "true");
 
                         field.DefaultValue = XMLReader.GetAttributes(nodeField, "defaultValue");
 
                         //Mặc định fasle
                         string hidden = XMLReader.GetAttributes(nodeField, "hidden");
-                        field.Hidden = hidden == "1" ? true : hidden == "true" ? true : false;
+                        field.Hidden = hidden == "1" || (hidden == "true");
 
                         if (field.Type == FieldType.String)
                         {
                             field.SqlType = $"nvarchar({maxLength})";
                         }
 
-                        var nodeCheckProperties = nodeField.SelectSingleNode("ns:check", xmlNamespace);
-                        field.Check.Condition = XMLReader.GetAttributes(nodeCheckProperties, "condition");
-                        field.Check.ErrorCode = XMLReader.GetAttributes(nodeCheckProperties, "errorCode");
+                        var nodeChecks = nodeField.SelectNodes("ns:check", xmlNamespace);
 
-                        var nodeReferenceProperties = nodeField.SelectSingleNode("ns:reference", xmlNamespace);
-                        field.Reference.Controller = XMLReader.GetAttributes(nodeReferenceProperties, "controller");
-                        field.Reference.Name = XMLReader.GetAttributes(nodeReferenceProperties, "name");
+                        foreach(XmlNode nodeCheck in nodeChecks)
+                        {
+                            FieldCheck check = new()
+                            {
+                                Condition = XMLReader.GetAttributes(nodeCheck, "condition"),
+                                ErrorCode = XMLReader.GetAttributes(nodeCheck, "errorCode"),
+                                Index = Convert.ToInt16(XMLReader.GetAttributes(nodeCheck, "index"))
+                            };
+
+                            check.Script = $"if exists (select 1 from #{@struct.Name} where {check.Condition}) begin\n" +
+                                $"select '{check.ErrorCode}' as [code]\n" +
+                                $"select '{@struct.Name}' as tableName, @@primaryKeyListAlias from #{@struct.Name} where {check.Condition} group by @@primaryKeyList\n" +
+                                "return\nend";
+
+                            field.Checks.Add(check);
+                        }
+
+
+                        var nodeReference = nodeField.SelectSingleNode("ns:reference", xmlNamespace);
+                        field.Reference.Controller = XMLReader.GetAttributes(nodeReference, "controller");
+                        field.Reference.Name = XMLReader.GetAttributes(nodeReference, "name");
+
+                        string index = XMLReader.GetAttributes(nodeReference, "index");
+                        field.Reference.Index = string.IsNullOrEmpty(index) ? 0 : Convert.ToInt16(index);
+
+                        field.Reference.Script = options.Updates.Get(field.Reference.Controller)?.query
+                            .Replace("@@table", $"#{@struct.Name}")
+                            .Replace("@@field", field.Mapping)
+                            .Replace("@@reference", field.Reference.Name) ?? string.Empty;
 
                         @struct.Fields.Add(field);
                     }
@@ -193,9 +211,9 @@ namespace DataAccess
                     }
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                throw ex;
+                throw;
             }
 
             //Lưu form vào cache
@@ -209,40 +227,35 @@ namespace DataAccess
         {
             if (string.IsNullOrEmpty(table)) return null;
             string sql = $"select COLUMN_NAME as [name], DATA_TYPE + case when DATA_TYPE like '%char%' then '(' + cast(CHARACTER_MAXIMUM_LENGTH as varchar) + ')' when DATA_TYPE in ('numeric', 'decimal') then '(' + cast(NUMERIC_PRECISION AS varchar) + ',' + cast(NUMERIC_SCALE AS varchar) + ')' else '' end as [type], CHARACTER_MAXIMUM_LENGTH as maxLength from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = '{table}' order by ORDINAL_POSITION";
-            return Provider.Provider.Retrieve(_appConfig.appConnectionString, sql).Tables[0];
+            return Provider.Provider.Retrieve(appConfig.appConnectionString, sql).Tables[0];
         }
 
         public DataSet ExecuteForm(DataSet dsJson, Form form, RequestQuery request)
         {
-            using (var connnection = Provider.Provider.OpenConn(_appConfig.appConnectionString))
+            using var connnection = Provider.Provider.OpenConn(appConfig.appConnectionString);
+
+            foreach (Struct @struct in form.Structs)
             {
-                string scriptUpdate = "";
+                //Tạo bảng cấu trúc sql
+                Provider.Provider.Execute(connnection, $"create table #{@struct.Name}(" + string.Join(",", @struct.Fields.Select(o => o.Mapping + " " + o.SqlType)) + ", stt int identity(1, 1))");
 
-                foreach (Struct @struct in form.Structs)
+                //Bulk insert
+                Provider.Provider.Bulk(connnection, dsJson.Tables[@struct.Name], $"#{@struct.Name}");
+
+                if (request.debug)
                 {
-                    //Tạo bảng cấu trúc sql
-                    Provider.Provider.Execute(connnection, $"create table #{@struct.Name}(" + string.Join(",", @struct.Fields.Select(o => o.Mapping + " " + o.SqlType)) + ", stt int identity(1, 1))");
-
-                    //Bulk insert
-                    Provider.Provider.Bulk(connnection, dsJson.Tables[@struct.Name], $"#{@struct.Name}");
-
-                    if (request.debug)
-                    {
-                        Provider.Provider.Execute(connnection, $"exec restApi_TableDebug '{@struct.Name}', '{form.Name}';");
-                    }
-
-                    scriptUpdate += string.Join(";", @struct.Fields.Where(o => o.Reference.Script != "").Select(o => o.Reference.Script));
+                    Provider.Provider.Execute(connnection, $"exec restApi_TableDebug '{@struct.Name}', '{form.Name}';");
                 }
-
-                //Render update
-                Provider.Provider.Execute(connnection, scriptUpdate);
-
-                //Thực thi query
-                DataSet dsChecking = Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Checking], form, request));
-
-                if(dsChecking == null) return Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Processing], form, request));
-                else return dsChecking;
             }
+
+            GetScriptUpdate(form);
+            GetScriptCheck(form);
+
+            //Thực thi query
+            DataSet dsChecking = Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Checking], form, request));
+
+            if (dsChecking.Tables.Count == 0) return Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Processing], form, request));
+            else return dsChecking;
         }
 
         private string ReplaceDefaultVaraible(string sql, Form form, RequestQuery request)
@@ -255,29 +268,67 @@ namespace DataAccess
             sql = sql.Replace("@@id", $"'{form.Id}'");
             sql = sql.Replace("@@unit", $"'{request.unit}'");
 
-            sql = sql.Replace("@@appDatabaseName", _appConfig.appDatabaseName);
-            sql = sql.Replace("@@sysDatabaseName", _appConfig.sysDatabaseName);
+            sql = sql.Replace("@@appDatabaseName", appConfig.appDatabaseName);
+            sql = sql.Replace("@@sysDatabaseName", appConfig.sysDatabaseName);
 
-            sql = sql.Replace("@@type", $"'{form.Type.ToString()}'");
+            sql = sql.Replace("@@type", $"'{form.Type}'");
 
-            int n = form.Structs.Count;
-
-            for (int i = 0; i < n; i++)
-            {
-                sql = sql.Replace($"@@{i}.primaryKeyList", $"'{string.Join(",", form.Structs[i].Fields.Where(o => o.IsPrimaryKey).Select(o => o.Mapping))}'");
-            }
-
+            sql = sql.Replace($"@@primaryKeyListAlias", $"{string.Join(",", form.Structs[0].Fields.Where(o => o.IsPrimaryKey).Select(o => o.Mapping + " as " + o.Name))}");
+            sql = sql.Replace($"@@primaryKeyList", $"{string.Join(",", form.Structs[0].Fields.Where(o => o.IsPrimaryKey).Select(o => o.Mapping))}");
+            
             return sql;
         }
 
-        public string GetScriptUpdate(string controller, Form form)
+        public void GetScriptUpdate(Form form)
         {
-            throw new NotImplementedException();
+            //Trong checking sẽ khai báo script update dạng @@update(index)
+            //updateList được join với nhau bằng \n
+            var updateList = form.Structs.SelectMany(s => s.Fields)
+                .Where(f => !string.IsNullOrEmpty(f.Reference.Script))
+                .GroupBy(f => f.Reference.Index)
+                .Select(g => new
+                {
+                    Index = g.Key,
+                    Script = string.Join("\n", g.Select(f => f.Reference.Script))
+                })
+                .OrderBy(i => i.Index)
+                .ToList();
+
+            if (updateList.Count > 0)
+            {
+                for (int i = 0; i < updateList.Count; i++)
+                {
+                    string updateScript = form.Queries[QueryAction.Checking].Replace($"@@update({i})", updateList[i].Script);
+                    form.Queries[QueryAction.Checking] = updateScript;
+                }
+            }
         }
 
-        public string GetScriptCheck(string id, Form form)
+        public void GetScriptCheck(Form form)
         {
-            throw new NotImplementedException();
+            //Trong checking sẽ khai báo script check dạng @@checking(index)
+            //checkingList dược join với nhau bằng \n
+
+            var checkingList = form.Structs.SelectMany(s => s.Fields)
+                .SelectMany(f => f.Checks)
+                .GroupBy(c => c.Index)
+                .Select(g => new
+                {
+                    Index = g.Key,
+                    Script = string.Join("\n", g.Select(c => c.Script))
+                })
+                .OrderBy(i => i.Index)
+                .ToList();
+
+            if (checkingList.Count > 0)
+            {
+                for (int i = 0; i < checkingList.Count; i++)
+                {
+                    string checkScript = form.Queries[QueryAction.Checking].Replace($"@@checking({i})", checkingList[i].Script);
+                    form.Queries[QueryAction.Checking] = checkScript;
+                }
+            }
+
         }
     }
 }

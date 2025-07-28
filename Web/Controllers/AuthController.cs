@@ -11,27 +11,19 @@ namespace Web.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController : ControllerBase
+    public class AuthController(AppConfig appConfig, Options options) : ControllerBase
     {
-        private readonly AppConfig _appConfig;
-        private readonly Options _options;
         // Thay Dictionary bằng ConcurrentDictionary
-        private static ConcurrentDictionary<string, long> _lastReceivedTimes = new();
-
-        public AuthController(AppConfig appConfig, Options options)
-        {
-            _appConfig = appConfig;
-            _options = options;
-        }
+        private static readonly ConcurrentDictionary<string, long> _lastReceivedTimes = new();
 
         //POST api/auth/login
         [HttpPost("{userName}")]
         public IActionResult Login(string userName)
         {
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options);
+            ResponseManager responseManager = new(appConfig, options);
 
             string ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
-            RequestAuth requestAuth = new RequestAuth(ipAddress, userName);
+            RequestAuth requestAuth = new(ipAddress, userName);
 
             // Get values from the headers
             Request.Headers.TryGetValue("time", out var oTime);
@@ -83,7 +75,7 @@ namespace Web.Controllers
                 return ResponseHelper.ToActionResult(this, responseManager.GetResponse("INVALID_TIME_GREATER"));
             }
 
-            AuthManager authManager = new AuthManager(_appConfig);
+            AuthManager authManager = new(appConfig);
             string token = authManager.AuthenticateUser(requestAuth);
 
             if (string.IsNullOrEmpty(token))
@@ -92,7 +84,7 @@ namespace Web.Controllers
             }
             else
             {
-                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("SUCCESS", "Bearer", _appConfig.expiryToken, token));
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("SUCCESS", "Bearer", appConfig.expiryToken, token));
             }
         }
     }

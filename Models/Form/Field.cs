@@ -1,10 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace Models.Form
+﻿namespace Models.Form
 {
     public class Field
     {
@@ -17,7 +11,7 @@ namespace Models.Form
         private bool _hidden;
         private string _sqlType;
         private FieldReference _reference;
-        private FieldCheck _check;
+        private List<FieldCheck> _checks;
 
         public string Name { get => _name; set => _name = value; }
         public string Mapping { get => _mapping; set => _mapping = value; }
@@ -32,7 +26,7 @@ namespace Models.Form
         public bool Hidden { get => _hidden; set => _hidden = value; }
         public string SqlType { get => _sqlType; set => _sqlType = value; }
         public FieldReference Reference { get => _reference; set => _reference = value; }
-        public FieldCheck Check { get => _check; set => _check = value; }
+        public List<FieldCheck> Checks { get => _checks; set => _checks = value; }
 
         public Field()
         {
@@ -48,8 +42,8 @@ namespace Models.Form
             _defaultValue = string.Empty;
             _hidden = false;
             _sqlType = string.Empty;
-            _reference = new FieldReference();
-            _check = new FieldCheck();
+            _reference = new();
+            _checks = [];
         }
     }
 }
