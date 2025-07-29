@@ -260,7 +260,7 @@ namespace DataAccess
 
         private string ReplaceDefaultVaraible(string sql, Form form, RequestQuery request)
         {
-            //@@form, @@userName, @@sysDatabaseName, @@appDatabaseName, @@id, @@unit, @@1.primaryKeyList
+            //@@form, @@userName, @@userERP, @@id, @@unit, @@appDatabaseName, @@sysDatabaseName, @@type, @@primaryKeyList, @@primaryKeyListAlias
 
             sql = sql.Replace("@@form", $"'{form.Name}'");
             sql = sql.Replace("@@userName", $"'{request.userName}'");

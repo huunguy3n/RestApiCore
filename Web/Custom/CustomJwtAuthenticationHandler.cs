@@ -1,7 +1,6 @@
 ﻿using Business;
 using Microsoft.AspNetCore.Authentication;
 using Models;
-using Models.Interface;
 using System.Text.Encodings.Web;
 
 namespace Web.Custom
@@ -9,18 +8,16 @@ namespace Web.Custom
     public class CustomJwtAuthenticationHandler : AuthenticationHandler<AuthenticationSchemeOptions>
     {
         private readonly AppConfig _appConfig;
-        private readonly Models.Options.Options _options;
+        private readonly ResponseManager _responseManager;
 
-        public CustomJwtAuthenticationHandler(Microsoft.Extensions.Options.IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder, AppConfig appConfig, Models.Options.Options optionsApi) : base(options, logger, encoder)
+        public CustomJwtAuthenticationHandler(Microsoft.Extensions.Options.IOptionsMonitor<AuthenticationSchemeOptions> options, ILoggerFactory logger, UrlEncoder encoder, AppConfig appConfig, ResponseManager responseManager) : base(options, logger, encoder)
         {
             _appConfig = appConfig;
-            _options = optionsApi;
+            _responseManager = responseManager;
         }
 
         protected override async Task<AuthenticateResult> HandleAuthenticateAsync()
         {
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options);
-
             // Extract token from the Authorization header
             if (!Request.Headers.ContainsKey("Authorization"))
             {
@@ -38,9 +35,7 @@ namespace Web.Custom
                 var principal = authManager.AuthenticateToken(token, ipAddress);
                 if (principal == null)
                 {
-                    IResponse response = responseManager.GetResponse("UNAUTHORIZED");
-
-                    //await ResponseHelper.WriteJsonAsync(Context, response);
+                    await ResponseHelper.WriteJsonAsync(Context, _responseManager.GetResponse("UNAUTHORIZED"));
                     return AuthenticateResult.NoResult();
                 }
 
@@ -49,29 +44,19 @@ namespace Web.Custom
             }
             catch (Exception ex)
             {
-                IResponse response = responseManager.GetResponse("EXCEPTION", _appConfig.isDevState ? ex.Message : "");
-
-                await ResponseHelper.WriteJsonAsync(Context, response);
+                await ResponseHelper.WriteJsonAsync(Context, _responseManager.GetResponse("EXCEPTION", _appConfig.isDevState ? ex.Message : ""));
                 return AuthenticateResult.NoResult();
             }
         }
 
         protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
         {
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options);
-
-            IResponse response = responseManager.GetResponse("UNAUTHORIZED");
-
-            await ResponseHelper.WriteJsonAsync(Context, response);
+            await ResponseHelper.WriteJsonAsync(Context, _responseManager.GetResponse("UNAUTHORIZED"));
         }
 
         protected override async Task HandleForbiddenAsync(AuthenticationProperties properties)
         {
-            ResponseManager responseManager = new ResponseManager(_appConfig, _options);
-
-            IResponse response = responseManager.GetResponse("FORBIDDEN");
-
-            await ResponseHelper.WriteJsonAsync(Context, response);
+            await ResponseHelper.WriteJsonAsync(Context, _responseManager.GetResponse("FORBIDDEN"));
         }
     }
 }

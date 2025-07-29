@@ -13,7 +13,7 @@ namespace Web.Controllers
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
-    public class QueryController(AppConfig appConfig, Options options, IMemoryCache cache) : ControllerBase
+    public class QueryController(AppConfig appConfig, Options options, IMemoryCache cache, ResponseManager responseManager) : ControllerBase
     {
         //POST api/query/controllerName?cacheID=123&pageIndex=1
         //header: unit, debug
@@ -21,8 +21,6 @@ namespace Web.Controllers
         [HttpPost("{controllerName}")]
         public IActionResult Query(string controllerName)
         {
-            ResponseManager responseManager = new(appConfig, options);
-
             var request = RequestHelper.GetRequest(Request);
 
             Dictionary<string, string> info = request["info"];
@@ -54,7 +52,7 @@ namespace Web.Controllers
                 return ResponseHelper.ToActionResult(this, responseManager.GetResponse("MISSING_PARAMETER"));
             }
 
-            FormManager formManager = new(appConfig, options, cache);
+            FormManager formManager = new(appConfig, options, responseManager);
             IResponse response = formManager.ExecuteFrom(controllerName, requestQuery);
 
             return ResponseHelper.ToActionResult(this, response);

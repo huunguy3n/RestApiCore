@@ -5,7 +5,7 @@ namespace Provider
 {
     public static class Provider
     {
-        public static int CommandTimeout = 600;
+        public static int CommandTimeout { get; set; } = 600;
         public static SqlConnection OpenConn(string connectionString)
         {
             if (!string.IsNullOrEmpty(connectionString))

@@ -18,7 +18,8 @@ appConfig.pathDirectory = builder.Environment.ContentRootPath;
 // Register DI
 builder.Services.AddSingleton(appConfig);
 builder.Services.AddSingleton<Options, OptionsRepository>();
-builder.Services.AddScoped<LogManager>();
+builder.Services.AddSingleton<LogManager>();
+builder.Services.AddSingleton<ResponseManager>();
 
 builder.Services.AddControllers(options =>
 {

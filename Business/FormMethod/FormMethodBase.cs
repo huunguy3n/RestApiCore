@@ -11,14 +11,13 @@ using Utilities;
 
 namespace Business.FormMethod
 {
-    public class FormMethodBase(AppConfig appConfig, Options options, IMemoryCache cache) : IFormMethod
+    public class FormMethodBase(AppConfig appConfig, Options options, ResponseManager responseManager) : IFormMethod
     {
 
         //Lấy struct lưu vào cache
         //Làm file struct ký hiệu
         public IResponse ExecuteForm(RequestQuery request, Form form)
         {
-            ResponseManager responseManager = new(appConfig, options, cache);
             FormRepository formRepository = new(appConfig, options);
 
             //Lấy cấu trúc sqlType

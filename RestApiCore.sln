@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36301.6 d17.14
+VisualStudioVersion = 17.14.36301.6
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Web", "Web\Web.csproj", "{128BE412-10D1-40A2-AF2D-AB97C4CF29AA}"
 EndProject
@@ -15,7 +15,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Security", "Security\Securi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Utilities", "Utilities\Utilities.csproj", "{30289073-EC21-4F71-B73F-8457D6C7C69C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Schedule", "Schedule\Schedule.csproj", "{173D941F-3A80-4E4B-8B03-4E106E8FCC54}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CallbackWorker", "Schedule\CallbackWorker.csproj", "{173D941F-3A80-4E4B-8B03-4E106E8FCC54}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Provider", "Provider\Provider.csproj", "{ACE1FA84-866D-4333-9EDE-ADD1C9D4E6F8}"
 EndProject

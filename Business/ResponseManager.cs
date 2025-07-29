@@ -1,50 +1,27 @@
-﻿using Microsoft.Extensions.Caching.Memory;
+﻿using DataAccess;
+using Microsoft.Extensions.Caching.Memory;
 using Models;
 using Models.Interface;
 using Models.Options;
 using Models.Response;
-using Newtonsoft.Json;
 using System.Data;
 
 namespace Business
 {
-    public class ResponseManager
+    public class ResponseManager(AppConfig appConfig, Options options, IMemoryCache cache)
     {
-        private readonly AppConfig _appConfig;
-        private readonly Options _options;
-        private readonly IMemoryCache _cache;
-
         /// <summary>
         /// 0 - FormName, 1 - CacheID, 2 - PageIndex
         /// </summary>
         public const string MEMORYCACHE_PARTERN = $"{{0}}_{{1}}_{{2}}";
 
-        /// <summary>
-        /// 0 - FormName, 1 - CacheID, 2 - PageIndex
-        /// </summary>
-        public const string FILECACHE_PARTERN = $"Cache/{{0}}/{{1}}/{{2}}.json";
-
         public string memoryCachePartern { get => MEMORYCACHE_PARTERN; }
-        public string fileCachePartern { get => FILECACHE_PARTERN; }
-
-        public ResponseManager(AppConfig appConfig, Options options, IMemoryCache cache)
-        {
-            _appConfig = appConfig;
-            _options = options;
-            _cache = cache;
-        }
-
-        public ResponseManager(AppConfig appConfig, Options options)
-        {
-            _appConfig = appConfig;
-            _options = options;
-        }
 
         #region RESPONSE
         #region GENERAL
         public IResponse GetResponse(string code)
         {
-            Message message = _options.Messages.Get(code);
+            Message message = options.Messages.Get(code);
             Response response = new();
 
             if (message != null)
@@ -93,6 +70,7 @@ namespace Business
         /// Bảng 0 trả về code, message
         /// Bảng 1 trả về data
         /// </summary>
+        /// <param name="formName"></param>
         /// <param name="dataSet"></param>
         /// <returns></returns>
         public IResponse GetResponse(string formName, DataSet dataSet)
@@ -110,22 +88,29 @@ namespace Business
                         if (dataSet.Tables[0].Rows.Count > 0)
                         {
                             DataRow dr = dataSet.Tables[0].Rows[0];
+                            List<string> colResponse = new() { "code", "message", "field", "condition" };
 
-                            if (dr.Table.Columns.Contains("code"))
+                            //Lấy dữ liệu bảng đầu tiên
+                            foreach (string col in colResponse)
                             {
-                                code = dr["code"].ToString() ?? code;
-                            }
-                            if (dr.Table.Columns.Contains("message"))
-                            {
-                                message = dr["message"].ToString() ?? "";
-                            }
-                            if (dr.Table.Columns.Contains("field"))
-                            {
-                                field = dr["field"].ToString() ?? "";
-                            }
-                            if (dr.Table.Columns.Contains("condition"))
-                            {
-                                condition = dr["condition"].ToString() ?? "";
+                                if (dr.Table.Columns.Contains(col))
+                                {
+                                    switch (col)
+                                    {
+                                        case "code":
+                                            code = dr[col].ToString() ?? code;
+                                            break;
+                                        case "message":
+                                            message = dr[col].ToString() ?? "";
+                                            break;
+                                        case "field":
+                                            field = dr[col].ToString() ?? "";
+                                            break;
+                                        case "condition":
+                                            condition = dr[col].ToString() ?? "";
+                                            break;
+                                    }
+                                }
                             }
                         }
 
@@ -139,7 +124,7 @@ namespace Business
             }
             catch (Exception ex)
             {
-                return GetResponse("EXCEPTION", _appConfig.isDevState ? ex.Message : "");
+                return GetResponse("EXCEPTION", appConfig.isDevState ? ex.Message : "");
             }
 
             if(code != "SUCCESS")
@@ -157,15 +142,18 @@ namespace Business
         /// <summary>
         /// Phân trang dữ liệu và trả về response
         /// </summary>
+        /// <param name="formName"></param>
         /// <param name="code"></param>
         /// <param name="message"></param>
         /// <param name="data"></param>
         /// <returns></returns>
         public IResponse GetResponse(string formName, string code, string message, DataTable data)
         {
-            if (data.Rows.Count <= _appConfig.maxRowInResponse) {
+            if (data.Rows.Count <= appConfig.maxRowInResponse) {
                 return GetResponse(code, message, data);
             }
+
+            CacheRepository cacheRepository = new(appConfig);
 
             int totalRowCount = data.Rows.Count;
             string cacheID = GenerateCacheID();
@@ -196,7 +184,6 @@ namespace Business
             // + MemoryCache: Lưu metadata
             //      * Name: {Form}_{cacheID}_{pageIndex}
 
-
             for (int i = 0; i < dataPagination.Tables.Count; i++)
             {
                 pageSize = dataPagination.Tables[i].Rows.Count;
@@ -210,21 +197,15 @@ namespace Business
                     data = dataPagination.Tables[i]
                 };
 
-                string cacheFilePath = string.Format(FILECACHE_PARTERN, formName, cacheID, i);
-
                 // Lưu dữ liệu vào file
-                Directory.CreateDirectory(Path.Combine(_appConfig.pathDirectory, Path.GetDirectoryName(cacheFilePath)));
-                File.WriteAllText(cacheFilePath, JsonConvert.SerializeObject(responseDataPagination));
-
-                string fullCacheKey = string.Format(MEMORYCACHE_PARTERN, formName, cacheID, i);
-
-                // Lưu metadata vào MemoryCache
-                _cache.Set(fullCacheKey, responseDataPagination, new MemoryCacheEntryOptions
+                cacheRepository.WriteResponseCache(formName, cacheID, i, responseDataPagination);
+                
+                // Lưu dữ liệu vào MemoryCache
+                cache.Set(string.Format(MEMORYCACHE_PARTERN, formName, cacheID, i), responseDataPagination, new MemoryCacheEntryOptions
                 {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_appConfig.cacheDurationInMinutes)
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(appConfig.cacheDurationInMinutes)
                 });
             }
-
 
             return response;
         }
@@ -233,9 +214,8 @@ namespace Business
         /// Lấy response được lưu trong cache
         /// </summary>
         /// <param name="formName"></param>
-        /// <param name="code"></param>
-        /// <param name="message"></param>
         /// <param name="cacheID"></param>
+        /// <param name="pageIndex"></param>
         /// <returns></returns>
         public IResponse GetResponse(string formName, string cacheID, int pageIndex)
         {
@@ -248,7 +228,7 @@ namespace Business
             //Kiểm tra cacheID có tồn tại trong MemoryCache không
             string cacheKeyPrefix = string.Format(MEMORYCACHE_PARTERN, formName, cacheID, pageIndex);
 
-            _cache.TryGetValue<ResponseData>(cacheKeyPrefix, out var cachedData);
+            cache.TryGetValue<ResponseData>(cacheKeyPrefix, out var cachedData);
 
             if (cachedData != null)
             {
@@ -257,23 +237,10 @@ namespace Business
             }
 
             //Nếu không tìm thấy cache, tìm trong file
-            string cacheFilePath = Path.Combine(_appConfig.pathDirectory, string.Format(FILECACHE_PARTERN, formName, cacheID, pageIndex));
+            CacheRepository cacheRepository = new(appConfig);
 
-            if (File.Exists(cacheFilePath))
-            {
-                // Đọc dữ liệu từ file
-                string jsonData = File.ReadAllText(cacheFilePath);
-
-                var responseData = JsonConvert.DeserializeObject<ResponseData>(jsonData);
-                if (responseData != null)
-                {
-                    // Thêm dữ liệu vào response
-                    response.data = responseData;
-                }
-
-                // Nếu có dữ liệu, trả về response
-                return response;
-            }
+            response.data = cacheRepository.ReadResponseData(formName, cacheID, pageIndex);
+            if (response.data != null) return response;
 
             return GetResponse("INVALID_CACHEID");
         }
@@ -306,8 +273,8 @@ namespace Business
         /// Trả response không cần phân trang
         /// </summary>
         /// <param name="code"></param>
+        /// <param name="message"></param>
         /// <param name="data"></param>
-        /// <param name="args"></param>
         /// <returns></returns>
         public IResponse GetResponse(string code, string message, DataTable data)
         {
@@ -334,18 +301,18 @@ namespace Business
         {
             DataSet dataPagination = new();
 
-            if (dataTable.Rows.Count > _appConfig.maxRowInResponse)
+            if (dataTable.Rows.Count > appConfig.maxRowInResponse)
             {
-                int pageCount = dataTable.Rows.Count / _appConfig.maxRowInResponse;
+                int pageCount = dataTable.Rows.Count / appConfig.maxRowInResponse;
 
                 for (int i = 0; i <= pageCount; i++)
                 {
-                    DataTable dt = dataTable.AsEnumerable().Take(_appConfig.maxRowInResponse).CopyToDataTable();
+                    DataTable dt = dataTable.AsEnumerable().Take(appConfig.maxRowInResponse).CopyToDataTable();
 
                     dataPagination.Tables.Add(dt.Copy());
 
                     dataTable.AsEnumerable()
-                               .Take(_appConfig.maxRowInResponse)
+                               .Take(appConfig.maxRowInResponse)
                                .ToList()
                                .ForEach(r => r.Delete());
 

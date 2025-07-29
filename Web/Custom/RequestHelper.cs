@@ -30,15 +30,22 @@ namespace Web.Custom
 
             //headers
             Dictionary<string, string> headers = new();
-
-            foreach (var header in request.Headers)
+            List<string> headerKeys = new()
             {
-                if (header.Key == "Authorization" || header.Key == "unit" || header.Key == "debug" || header.Key == "User-Agent" || header.Key == "time" || header.Key == "key")
-                {
-                    string key = header.Key;
-                    string value = header.Value.ToString();
+                "Authorization",
+                "unit",
+                "debug",
+                "User-Agent",
+                "time",
+                "key"
+            };
 
-                    headers.Add(key, value);
+            // Lọc các header cần thiết
+            foreach (var headerKey in headerKeys)
+            {
+                if (request.Headers.TryGetValue(headerKey, out var headerValue))
+                {
+                    headers.Add(headerKey, headerValue.ToString());
                 }
             }
 

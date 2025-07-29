@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using Models;
-using Models.Options;
 using Models.Request;
 using System.Collections.Concurrent;
 using Web.Custom;
@@ -11,7 +10,7 @@ namespace Web.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController(AppConfig appConfig, Options options) : ControllerBase
+    public class AuthController(AppConfig appConfig, ResponseManager responseManager) : ControllerBase
     {
         // Thay Dictionary bằng ConcurrentDictionary
         private static readonly ConcurrentDictionary<string, long> _lastReceivedTimes = new();
@@ -20,8 +19,6 @@ namespace Web.Controllers
         [HttpPost("{userName}")]
         public IActionResult Login(string userName)
         {
-            ResponseManager responseManager = new(appConfig, options);
-            
             var request = RequestHelper.GetRequest(Request);
 
             Dictionary<string, string> info = request["info"];

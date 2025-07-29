@@ -1,10 +1,10 @@
 namespace Schedule
 {
-    public class Worker : BackgroundService
+    public class CallbackWorker : BackgroundService
     {
-        private readonly ILogger<Worker> _logger;
+        private readonly ILogger<CallbackWorker> _logger;
 
-        public Worker(ILogger<Worker> logger)
+        public CallbackWorker(ILogger<CallbackWorker> logger)
         {
             _logger = logger;
         }

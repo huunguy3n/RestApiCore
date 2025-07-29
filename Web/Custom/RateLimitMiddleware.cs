@@ -7,31 +7,18 @@ using Models.Options;
 namespace Web.Custom
 {
     // You may need to install the Microsoft.AspNetCore.Http.Abstractions package into your project
-    public class RateLimitMiddleware
+    public class RateLimitMiddleware(RequestDelegate next, AppConfig appConfig, IMemoryCache cache, ResponseManager responseManager)
     {
-        private readonly RequestDelegate _next;
-        private readonly AppConfig _appConfig;
-        private readonly Options _options;
-        private IMemoryCache _cache;
-
-        public RateLimitMiddleware(RequestDelegate next, AppConfig appConfig, Options options, IMemoryCache cache)
-        {
-            _next = next;
-            _appConfig = appConfig;
-            _options = options;
-            _cache = cache;
-        }
-
         public async Task Invoke(HttpContext httpContext)
         {
             string ipAddress = httpContext.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
             string userName = httpContext.User.Identity?.IsAuthenticated == true ? httpContext.User.Identity.Name ?? "anonymous" : "anonymous";
 
-            RateLimitManager rateLimitManager = new RateLimitManager(_appConfig, _options, _cache);
+            RateLimitManager rateLimitManager = new RateLimitManager(appConfig, cache, responseManager);
             IResponse response = rateLimitManager.IsRequestAllowed(ipAddress, userName);
 
-            string rateLimit = $"{{0}}/{_appConfig.maxRequestsPerMinute}";
-            if (_cache.TryGetValue(string.Format(rateLimitManager.memoryCacheRate, ipAddress), out int requestCount))
+            string rateLimit = $"{{0}}/{appConfig.maxRequestsPerMinute}";
+            if (cache.TryGetValue(string.Format(rateLimitManager.memoryCacheRate, ipAddress), out int requestCount))
             {
                 rateLimit = string.Format(rateLimit, requestCount);
             }
@@ -52,7 +39,7 @@ namespace Web.Custom
                 return;
             }
 
-            await _next(httpContext);
+            await next(httpContext);
         }
     }
 
