@@ -170,8 +170,8 @@ namespace DataAccess
                             };
 
                             check.Script = $"if exists (select 1 from #{@struct.Name} where {check.Condition}) begin\n" +
-                                $"select '{check.ErrorCode}' as [code]\n" +
-                                $"select '{@struct.Name}' as tableName, @@primaryKeyListAlias from #{@struct.Name} where {check.Condition} group by @@primaryKeyList\n" +
+                                $"select '{check.ErrorCode}' as [code], '{field.Name}' as [field], '{check.Condition.Replace("''", "''''")}' as [condition]\n" +
+                                $"select top {appConfig.maxRowInResponse} @@primaryKeyListAlias from #{@struct.Name} where {check.Condition} group by @@primaryKeyList\n" +
                                 "return\nend";
 
                             field.Checks.Add(check);

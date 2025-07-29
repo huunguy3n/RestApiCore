@@ -21,7 +21,7 @@
 		<field name="SaleEmployee" mapping="ma_nvbh" checkIrregular="true"/>
 
 		<field name="ma_kh" mapping="" hidden="true">
-			<check condition="ma_kh is null" errorCode="INVALID_FIELD" index="0"/>
+			<!--<check condition="ma_kh is null" errorCode="INVALID_FIELD" index="0"/>-->
 		</field>
 	</struct>
 	<struct name="detail" baseTable="d81$000000">
@@ -43,7 +43,7 @@
 		<field name="DiscountAmount" mapping="ck_nt"/>
 
 		<field name="ma_vt" mapping="" hidden="true">
-			<check condition="ma_vt is null" errorCode="INVALID_FIELD" index="1"/>
+			<!--<check condition="ma_vt is null" errorCode="INVALID_FIELD" index="1"/>-->
 		</field>
 	</struct>
 	<struct name="tax" baseTable="r30$000000">
@@ -71,7 +71,7 @@
 @@update(0)
 @@checking(0)
 @@update(1)
-@@checking(1)
+--@@checking(1)
 
 			]]>
 			</text>
@@ -82,7 +82,8 @@
 --exec api_processDataFor_m81 @@id, @@unit, @@userERP, '@@appDatabaseName', '@@sysDatabaseName'
 
 select 'SUCCESS' as code, '' as message
-select 'master' as name, '' as id, 'HDA' as type, 'Hóa đơn bán hàng' as title, 'Hóa đơn bán hàng' as description, 'HDA' as template
+select * from #master
+--select 'master' as name, '' as id, 'HDA' as type, 'Hóa đơn bán hàng' as title, 'Hóa đơn bán hàng' as description, 'HDA' as template
         ]]>
 			</text>
 		</query>

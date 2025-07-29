@@ -14,7 +14,7 @@ namespace Models.Response
         public string message { get; set; }
         public int statusCode { get; set; }
         public string cacheID { get; set; }
-        public Dictionary<string, ResponseData> data { get; set; }
+        public ResponseData data { get; set; }
 
 
         public ResponseQuery()
@@ -24,7 +24,7 @@ namespace Models.Response
             message = string.Empty;
             statusCode = 200;
             cacheID = string.Empty;
-            data = new Dictionary<string, ResponseData>();
+            data = new ResponseData();
         }
 
         public ResponseQuery(IResponse response)
@@ -34,7 +34,7 @@ namespace Models.Response
             message = response.message;
             statusCode = response.statusCode;
             cacheID = string.Empty;
-            data = new Dictionary<string, ResponseData>();
+            data = new ResponseData();
         }
     }
 }

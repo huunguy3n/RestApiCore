@@ -16,7 +16,7 @@ namespace Models.Response
             pageIndex = -1;
             pageSize = -1;
             pageCount = -1;
-            data = null;
+            data = new DataTable();
         }
     }
 }

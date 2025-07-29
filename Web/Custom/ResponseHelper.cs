@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Models.Interface;
+using Models.Response;
 using Newtonsoft.Json;
+using System.Text;
 
 namespace Web.Custom
 {
@@ -29,6 +31,17 @@ namespace Web.Custom
         /// <returns></returns>
         public static IActionResult ToActionResult(ControllerBase controller, IResponse response)
         {
+            if (response is ResponseQuery responseQuery)
+            {
+                var json = JsonConvert.SerializeObject(response);
+                
+                return new ContentResult
+                {
+                    StatusCode = response.statusCode,
+                    Content = json,
+                    ContentType = "application/json; charset=utf-8"
+                };
+            }
             return controller.StatusCode(response.statusCode, response);
         }
 

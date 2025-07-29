@@ -14,6 +14,19 @@ namespace Business
         private readonly Options _options;
         private readonly IMemoryCache _cache;
 
+        /// <summary>
+        /// 0 - FormName, 1 - CacheID, 2 - PageIndex
+        /// </summary>
+        public const string MEMORYCACHE_PARTERN = $"{{0}}_{{1}}_{{2}}";
+
+        /// <summary>
+        /// 0 - FormName, 1 - CacheID, 2 - PageIndex
+        /// </summary>
+        public const string FILECACHE_PARTERN = $"Cache/{{0}}/{{1}}/{{2}}.json";
+
+        public string memoryCachePartern { get => MEMORYCACHE_PARTERN; }
+        public string fileCachePartern { get => FILECACHE_PARTERN; }
+
         public ResponseManager(AppConfig appConfig, Options options, IMemoryCache cache)
         {
             _appConfig = appConfig;
@@ -84,8 +97,8 @@ namespace Business
         /// <returns></returns>
         public IResponse GetResponse(string formName, DataSet dataSet)
         {
-            string code = "SUCCESS", message = "";
-            DataSet data = new DataSet();
+            string code = "SUCCESS", message = "", field = "", condition = "";
+            DataTable data = new();
 
             //Mặc định là SUCCESS
             try
@@ -106,25 +119,20 @@ namespace Business
                             {
                                 message = dr["message"].ToString() ?? "";
                             }
+                            if (dr.Table.Columns.Contains("field"))
+                            {
+                                field = dr["field"].ToString() ?? "";
+                            }
+                            if (dr.Table.Columns.Contains("condition"))
+                            {
+                                condition = dr["condition"].ToString() ?? "";
+                            }
                         }
 
-                        //Lấy dữ liệu từ bảng thứ 2 trở đi, cột tableName được gán làm tên bảng
+                        //Lấy dữ liệu bảng thứ 2
                         if (dataSet.Tables.Count > 1)
                         {
-                            for (int i = 1; i < dataSet.Tables.Count; i++)
-                            {
-                                string tableName = $"d{i}";
-                                DataTable dt = dataSet.Tables[i].Copy();
-
-                                if (dataSet.Tables[i].Columns.Contains("tableName"))
-                                {
-                                    tableName = dataSet.Tables[i].Rows[0]["tableName"].ToString() ?? tableName;
-                                    dt.Columns.Remove("tableName");
-                                    dt.TableName = tableName;
-                                }
-
-                                data.Tables.Add(dt);
-                            }
+                            data = dataSet.Tables[1].Copy();
                         }
                     }
                 }
@@ -134,7 +142,11 @@ namespace Business
                 return GetResponse("EXCEPTION", _appConfig.isDevState ? ex.Message : "");
             }
 
-            if (data != null)
+            if(code != "SUCCESS")
+            {
+                return GetResponse(code, data, field, condition);
+            }
+            else if (data != null)
             {
                 return GetResponse(formName, code, message, data);
             }
@@ -143,14 +155,18 @@ namespace Business
         }
 
         /// <summary>
-        /// Phan trang dữ liệu và trả về response
+        /// Phân trang dữ liệu và trả về response
         /// </summary>
         /// <param name="code"></param>
         /// <param name="message"></param>
         /// <param name="data"></param>
         /// <returns></returns>
-        public IResponse GetResponse(string formName, string code, string message, DataSet data)
+        public IResponse GetResponse(string formName, string code, string message, DataTable data)
         {
+            if (data.Rows.Count <= _appConfig.maxRowInResponse) {
+                return GetResponse(code, message, data);
+            }
+
             string cacheID = GenerateCacheID();
 
             ResponseQuery response = new(GetResponse(code, message))
@@ -158,68 +174,55 @@ namespace Business
                 cacheID = cacheID,
             };
 
+            //Tách data thành các trang nhỏ
+            DataSet dataPagination = PaginationDataResponse(data);
+            DataTable dataFirst = dataPagination.Tables[0];
+            int totalRowCount = dataFirst.Rows.Count, 
+                pageSize = (_appConfig.maxRowInResponse > dataFirst.Rows.Count ? dataFirst.Rows.Count : _appConfig.maxRowInResponse), 
+                pageCount = dataPagination.Tables.Count;
 
-            foreach (DataTable dt in data.Tables)
+            response.data = new ResponseData
             {
-                DataSet dataPagination = PaginationDataResponse(dt);
-                int totalRowCount = dt.Rows.Count, pageSize = (_appConfig.maxRowInResponse > dt.Rows.Count ? dt.Rows.Count : _appConfig.maxRowInResponse), pageCount = dataPagination.Tables.Count;
+                totalRowCount = totalRowCount,
+                pageIndex = 0, // Mặc định là 0, có thể thay đổi nếu cần
+                pageSize = pageSize,
+                pageCount = pageCount,
+                data = dataFirst // Chỉ lấy trang đầu tiên
+            };
 
-                response.data.Add(dt.TableName, new ResponseData
+            //Cache sẽ lưu dưới 2 dạng
+            // + File json: Dữ liệu cắt sẽ lưu xuống file và tự động xóa sau khi hết hạn
+            //      * Path: Cache/{Form}/{cacheID}/{pageIndex}.json
+            // + MemoryCache: Lưu metadata
+            //      * Name: {Form}_{cacheID}_{pageIndex}
+
+
+            for (int i = 0; i < dataPagination.Tables.Count; i++)
+            {
+                ResponseData responseDataPagination = new()
                 {
                     totalRowCount = totalRowCount,
-                    pageIndex = 0, // Mặc định là 0, có thể thay đổi nếu cần
+                    pageIndex = i,
                     pageSize = pageSize,
                     pageCount = pageCount,
-                    data = dataPagination.Tables[0] // Chỉ lấy trang đầu tiên
-                });
+                    data = dataPagination.Tables[i]
+                };
 
-                //Cache sẽ lưu dưới 2 dạng
-                // + File json: Dữ liệu cắt sẽ lưu xuống file và tự động xóa sau khi hết hạn
-                //      * Path: Cache/{Form}/{yyyyMMdd}/{cacheID}/{tableName}/{pageIndex}.json
-                // + MemoryCache: Lưu metadata
-                //      * Name: {Form}_{cacheID}_{tableName}_{pageIndex}
+                string cacheFilePath = string.Format(FILECACHE_PARTERN, formName, cacheID, i);
 
+                // Lưu dữ liệu vào file
+                Directory.CreateDirectory(Path.Combine(_appConfig.pathDirectory, Path.GetDirectoryName(cacheFilePath)));
+                File.WriteAllText(cacheFilePath, JsonConvert.SerializeObject(responseDataPagination));
 
-                string cacheKeyPattern = $"{formName}_{cacheID}_{{0}}_{dt.TableName}"; // {0} will be replaced by pageIndex
+                string fullCacheKey = string.Format(MEMORYCACHE_PARTERN, formName, cacheID, i);
 
-                for (int i = 0; i < dataPagination.Tables.Count; i++)
+                // Lưu metadata vào MemoryCache
+                _cache.Set(fullCacheKey, responseDataPagination, new MemoryCacheEntryOptions
                 {
-                    ResponseData responseDataPagination = new()
-                    {
-                        totalRowCount = totalRowCount,
-                        pageIndex = i,
-                        pageSize = pageSize,
-                        pageCount = pageCount,
-                        data = dataPagination.Tables[i]
-                    };
-
-                    string cacheFilePath = $"Cache/{formName}/{DateTime.Now:yyyyMMdd}/{cacheID}/{i}/{dt.TableName}.json";
-
-                    // Lưu dữ liệu vào file
-                    Directory.CreateDirectory(Path.GetDirectoryName(cacheFilePath));
-                    File.WriteAllText(cacheFilePath, JsonConvert.SerializeObject(responseDataPagination));
-
-                    string fullCacheKey = string.Format(cacheKeyPattern, i);
-
-                    // Lưu metadata vào MemoryCache
-                    _cache.Set(string.Format(fullCacheKey, i), responseDataPagination, new MemoryCacheEntryOptions
-                    {
-                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_appConfig.cacheDurationInMinutes)
-                    });
-
-                    // Cập nhật danh sách cacheIndex
-                    if (!_cache.TryGetValue<List<string>>("cacheIndex", out var cacheIndex))
-                        cacheIndex = [];
-
-                    if (!cacheIndex.Contains(fullCacheKey))
-                        cacheIndex.Add(fullCacheKey);
-
-                    _cache.Set("cacheIndex", cacheIndex, new MemoryCacheEntryOptions
-                    {
-                        AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_appConfig.cacheDurationInMinutes)
-                    });
-                }
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_appConfig.cacheDurationInMinutes)
+                });
             }
+
 
             return response;
         }
@@ -241,51 +244,29 @@ namespace Business
             };
 
             //Kiểm tra cacheID có tồn tại trong MemoryCache không
-            string cacheKeyPrefix = $"{formName}_{cacheID}_{pageIndex}_"; // Sử dụng wildcard để tìm tất cả các cache liên quan đến cacheID
+            string cacheKeyPrefix = string.Format(MEMORYCACHE_PARTERN, formName, cacheID, pageIndex);
 
-            //Duyệt qua tất cả key lưu trong cacheIndex
-            if (_cache.TryGetValue<List<string>>("cacheIndex", out var allKeys))
+            _cache.TryGetValue<ResponseData>(cacheKeyPrefix, out var cachedData);
+
+            if (cachedData != null)
             {
-                var matchedKeys = allKeys.Where(k => k.StartsWith(cacheKeyPrefix)).ToList();
-
-                foreach (var key in matchedKeys)
-                {
-                    if (_cache.TryGetValue<ResponseData>(key, out var data))
-                    {
-                        if (data != null)
-                        {
-                            string tableName = key[cacheKeyPrefix.Length..]; // lấy phần sau cùng
-                            response.data.Add(tableName, data);
-                        }
-                    }
-                }
-
-                if (response.data.Count != 0)
-                    return response;
+                response.data = cachedData;
+                return response;
             }
 
             //Nếu không tìm thấy cache, tìm trong file
-            string cacheFilePath = $"Cache/{formName}/{DateTime.Now:yyyyMMdd}/{cacheID}/{pageIndex}";
+            string cacheFilePath = Path.Combine(_appConfig.pathDirectory, string.Format(FILECACHE_PARTERN, formName, cacheID, pageIndex));
 
-            if (Directory.Exists(cacheFilePath))
+            if (File.Exists(cacheFilePath))
             {
-                //Lấy tất cả file có trong folder
-                var files = Directory.GetFiles(cacheFilePath, "*.json");
+                // Đọc dữ liệu từ file
+                string jsonData = File.ReadAllText(cacheFilePath);
 
-                //Mỗi file tương ứng với một bảng dữ liệu
-                foreach (var file in files)
+                var responseData = JsonConvert.DeserializeObject<ResponseData>(jsonData);
+                if (responseData != null)
                 {
-                    string tableName = Path.GetFileNameWithoutExtension(file);
-
-                    // Đọc dữ liệu từ file
-                    string jsonData = File.ReadAllText(file);
-
-                    var responseData = JsonConvert.DeserializeObject<ResponseData>(jsonData);
-                    if (responseData != null)
-                    {
-                        // Thêm dữ liệu vào response
-                        response.data.Add(tableName, responseData);
-                    }
+                    // Thêm dữ liệu vào response
+                    response.data = responseData;
                 }
 
                 // Nếu có dữ liệu, trả về response
@@ -295,19 +276,49 @@ namespace Business
             return GetResponse("INVALID_CACHEID");
         }
 
+        /// <summary>
+        /// Trả response không cần phân trang
+        /// </summary>
+        /// <param name="code"></param>
+        /// <param name="data"></param>
+        /// <param name="args"></param>
+        /// <returns></returns>
         public IResponse GetResponse(string code, DataTable data, params string[] args)
         {
             ResponseQuery response = new(GetResponse(code));
 
             response.message = string.Format(response.message, args);
-            response.data.Add("data", new ResponseData
+            response.data = new ResponseData
             {
                 totalRowCount = data.Rows.Count,
                 pageIndex = 0, // Mặc định là 0, có thể thay đổi nếu cần
                 pageSize = data.Rows.Count,
                 pageCount = 1,
                 data = data
-            });
+            };
+
+            return response;
+        }
+
+        /// <summary>
+        /// Trả response không cần phân trang
+        /// </summary>
+        /// <param name="code"></param>
+        /// <param name="data"></param>
+        /// <param name="args"></param>
+        /// <returns></returns>
+        public IResponse GetResponse(string code, string message, DataTable data)
+        {
+            ResponseQuery response = new(GetResponse(code, message));
+
+            response.data = new ResponseData
+            {
+                totalRowCount = data.Rows.Count,
+                pageIndex = 0, // Mặc định là 0, có thể thay đổi nếu cần
+                pageSize = data.Rows.Count,
+                pageCount = 1,
+                data = data
+            };
 
             return response;
         }
