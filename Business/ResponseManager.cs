@@ -167,6 +167,7 @@ namespace Business
                 return GetResponse(code, message, data);
             }
 
+            int totalRowCount = data.Rows.Count;
             string cacheID = GenerateCacheID();
 
             ResponseQuery response = new(GetResponse(code, message))
@@ -177,8 +178,7 @@ namespace Business
             //Tách data thành các trang nhỏ
             DataSet dataPagination = PaginationDataResponse(data);
             DataTable dataFirst = dataPagination.Tables[0];
-            int totalRowCount = dataFirst.Rows.Count, 
-                pageSize = (_appConfig.maxRowInResponse > dataFirst.Rows.Count ? dataFirst.Rows.Count : _appConfig.maxRowInResponse), 
+            int pageSize = dataFirst.Rows.Count, 
                 pageCount = dataPagination.Tables.Count;
 
             response.data = new ResponseData
@@ -199,6 +199,8 @@ namespace Business
 
             for (int i = 0; i < dataPagination.Tables.Count; i++)
             {
+                pageSize = dataPagination.Tables[i].Rows.Count;
+
                 ResponseData responseDataPagination = new()
                 {
                     totalRowCount = totalRowCount,

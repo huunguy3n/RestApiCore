@@ -1,4 +1,5 @@
 ﻿using Business;
+using System.Diagnostics;
 
 namespace Web.Custom
 {
@@ -13,35 +14,46 @@ namespace Web.Custom
 
         public async Task Invoke(HttpContext httpContext, LogManager logManager)
         {
-            var request = httpContext.Request;
-            request.EnableBuffering();
+            var stopwatch = Stopwatch.StartNew();
 
-            // Đọc body request
-            string requestBody;
-            using (var reader = new StreamReader(request.Body, leaveOpen: true))
-            {
-                requestBody = await reader.ReadToEndAsync();
-                request.Body.Position = 0;
-            }
+            Guid requestID = Guid.NewGuid();
+            httpContext.Items["requestID"] = requestID;
 
-            // Log request
-            // logManager.Log($"[REQUEST] {request.Method} {request.Path} | Body: {requestBody}");
-
+            var request = RequestHelper.GetRequest(httpContext.Request);
+            
             // Capture response
             var originalBody = httpContext.Response.Body;
             using var memStream = new MemoryStream();
             httpContext.Response.Body = memStream;
 
+            httpContext.Response.OnStarting(() =>
+            {
+                httpContext.Response.Headers["X-Request-ID"] = requestID.ToString();
+                return Task.CompletedTask;
+            });
+
             // Thực thi middleware tiếp theo
-            await _next(httpContext); // ✅ gọi đúng 1 lần, có await
+            await _next(httpContext); //gọi đúng 1 lần, có await
+
+            stopwatch.Stop();
+            var elapsed = stopwatch.ElapsedMilliseconds;
 
             // Đọc response
             memStream.Seek(0, SeekOrigin.Begin);
             var responseBody = await new StreamReader(memStream).ReadToEndAsync();
             memStream.Seek(0, SeekOrigin.Begin);
 
-            // Log response
-            // logManager.Log($"[RESPONSE] {context.Response.StatusCode} | Body: {responseBody}");
+            logManager.WriteLogData(
+                requestID.ToString(),
+                elapsed,
+                request["info"],
+                request["params"],
+                request["headers"],
+                request["body"]["raw"],
+                httpContext.Response.Headers.ToDictionary(h => h.Key, h => h.Value.ToString()),
+                httpContext.Response.StatusCode,
+                responseBody
+            );
 
             await memStream.CopyToAsync(originalBody); // ghi lại response ra ngoài
             httpContext.Response.Body = originalBody;

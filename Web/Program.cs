@@ -44,14 +44,15 @@ app.UseExceptionHandler(builder =>
     {
         LogManager logManager = context.RequestServices.GetRequiredService<LogManager>();
         var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
-        //logger.Log($"[ERROR] {exception}");
+        
+        logManager.WriteLogError(context.Request.Path, exception?.Message ?? "An error occurred during execution", exception?.StackTrace ?? "");
 
         await ResponseHelper.WriteJsonAsync(context,
             new Models.Response.Response
             {
                 code = "ERROR",
                 success = false,
-                message = (appConfig.isDevState ? exception?.ToString() ?? "Internal Server Error" : "Internal Server Error"),
+                message = (appConfig.isDevState ? exception?.ToString() ?? "An error occurred during execution" : "An error occurred during execution"),
                 statusCode = 500
             });
     });

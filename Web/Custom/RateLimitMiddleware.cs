@@ -30,7 +30,23 @@ namespace Web.Custom
             RateLimitManager rateLimitManager = new RateLimitManager(_appConfig, _options, _cache);
             IResponse response = rateLimitManager.IsRequestAllowed(ipAddress, userName);
 
-            if(response.code != "SUCCESS")
+            string rateLimit = $"{{0}}/{_appConfig.maxRequestsPerMinute}";
+            if (_cache.TryGetValue(string.Format(rateLimitManager.memoryCacheRate, ipAddress), out int requestCount))
+            {
+                rateLimit = string.Format(rateLimit, requestCount);
+            }
+            else
+            {
+                rateLimit = string.Format(rateLimit, 1);
+            }
+
+            httpContext.Response.OnStarting(() =>
+            {
+                httpContext.Response.Headers["X-RateLimit"] = rateLimit;
+                return Task.CompletedTask;
+            });
+
+            if (response.code != "SUCCESS")
             {
                 await ResponseHelper.WriteJsonAsync(httpContext, response);
                 return;

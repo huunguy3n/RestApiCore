@@ -12,6 +12,9 @@ namespace Business
         private readonly Options _options;
         private IMemoryCache _cache;
 
+        private const string MEMORYCACHE_RATE = "RequestCount_{0}";
+        public string memoryCacheRate {get => MEMORYCACHE_RATE; }
+
         public RateLimitManager(AppConfig appConfig, Options options, IMemoryCache cache)
         {
             _appConfig = appConfig;
@@ -56,11 +59,11 @@ namespace Business
         /// <returns>true - đã quá giới hạn truy cập, false - thỏa điều kiện</returns>
         private bool CheckLimitRequest(string clientIp)
         {
-            var cacheKey = $"RequestCount_{clientIp}";
+            var cacheKey = string.Format(MEMORYCACHE_RATE, clientIp);
 
             if (_cache.TryGetValue(cacheKey, out int requestCount))
             {
-                if (requestCount >= _appConfig.maxRequestsPerMinute)
+                if (requestCount > _appConfig.maxRequestsPerMinute)
                 {
                     return true;
                 }

@@ -2,7 +2,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Caching.Memory;
-using Microsoft.Extensions.Primitives;
 using Models;
 using Models.Interface;
 using Models.Options;
@@ -24,44 +23,26 @@ namespace Web.Controllers
         {
             ResponseManager responseManager = new(appConfig, options);
 
-            string ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
-            RequestQuery requestQuery = new(controllerName, ipAddress, User.Identity?.Name ?? "anonymous");
+            var request = RequestHelper.GetRequest(Request);
+
+            Dictionary<string, string> info = request["info"];
+            Dictionary<string, string> @params = request["params"];
+            Dictionary<string, string> headers = request["headers"];
+            Dictionary<string, string> body = request["body"];
+
+            RequestQuery requestQuery = new(controllerName, info["ip"], info["userName"]);
+
+            string? value = string.Empty;
+            //Get values from params (cacheID, pageIndex)
+            requestQuery.cacheID = @params.TryGetValue("cacheID", out value) ? value : "";
+            requestQuery.pageIndex = @params.TryGetValue("pageIndex", out value) ? int.TryParse(value, out int pageIndex) ? pageIndex : -1 : -1;
 
             // Get values from the headers (unit, debug)
-            Request.Headers.TryGetValue("unit", out var oUnit);
-            Request.Headers.TryGetValue("debug", out var oDebug);
+            requestQuery.unit = headers.TryGetValue("unit", out value) ? value : "";
+            requestQuery.debug = (headers.TryGetValue("debug", out value) ? value : "") == "1";
 
             //Get the request body as a string (json)
-            requestQuery.jsonBody = new StreamReader(Request.Body).ReadToEndAsync().Result;
-
-            //Get values from params (cacheID, pageIndex)
-            Request.Query.TryGetValue("cacheID", out var oCacheID);
-            Request.Query.TryGetValue("pageIndex", out var oPageIndex);
-
-
-            if (!StringValues.IsNullOrEmpty(oUnit))
-            {
-                requestQuery.unit = oUnit.FirstOrDefault() ?? "";
-            }
-            if (!StringValues.IsNullOrEmpty(oDebug))
-            {
-                requestQuery.debug = (oDebug.FirstOrDefault() ?? "") == "1";
-            }
-            if (!StringValues.IsNullOrEmpty(oCacheID))
-            {
-                requestQuery.cacheID = oCacheID.FirstOrDefault() ?? "";
-            }
-            if (!StringValues.IsNullOrEmpty(oPageIndex))
-            {
-                if (int.TryParse(oPageIndex.FirstOrDefault(), out int pageIndex))
-                {
-                    requestQuery.pageIndex = pageIndex;
-                }
-                else
-                {
-                    requestQuery.pageIndex = -1;
-                }
-            }
+            requestQuery.jsonBody = body["raw"];
 
             if (string.IsNullOrEmpty(requestQuery.unit))
             {

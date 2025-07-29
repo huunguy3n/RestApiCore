@@ -21,17 +21,22 @@ namespace Web.Controllers
         public IActionResult Login(string userName)
         {
             ResponseManager responseManager = new(appConfig, options);
+            
+            var request = RequestHelper.GetRequest(Request);
 
-            string ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
+            Dictionary<string, string> info = request["info"];
+            Dictionary<string, string> headers = request["headers"];
+
+            string ipAddress = info["ip"];
             RequestAuth requestAuth = new(ipAddress, userName);
 
             // Get values from the headers
-            Request.Headers.TryGetValue("time", out var oTime);
-            Request.Headers.TryGetValue("key", out var oKey);
-
+            string oTime = headers["time"];
+            string oKey = headers["key"];
+            
             if (!StringValues.IsNullOrEmpty(oTime))
             {
-                if (long.TryParse(oTime.FirstOrDefault() ?? "", out long parsedTime))
+                if (long.TryParse(oTime, out long parsedTime))
                 {
                     requestAuth.time = parsedTime;
                 }
@@ -43,7 +48,7 @@ namespace Web.Controllers
             }
             if (!StringValues.IsNullOrEmpty(oKey))
             {
-                requestAuth.key = oKey.FirstOrDefault() ?? "";
+                requestAuth.key = oKey;
             }
 
             // Validate required headers
