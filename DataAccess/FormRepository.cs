@@ -11,19 +11,29 @@ using Utilities;
 
 namespace DataAccess
 {
-    public class FormRepository(AppConfig appConfig, Options options)
+    public class FormRepository
     {
         private static readonly ConcurrentDictionary<string, Form> _forms = new();
+
+        private readonly AppConfig _appConfig;
+        private readonly Options _options;
+
+        public FormRepository(AppConfig appConfig, Options options)
+        {
+            _appConfig = appConfig;
+            _options = options;
+            Provider.Provider.CommandTimeout = _appConfig.commandTimeout;
+        }
 
         #region Get Form
         public Form GetForm(string name, string userName)
         {
             //So sánh LastModified
-            string pathFile = Path.Combine(appConfig.pathDirectory, @$"App_Data\Form\{name}.xml");
+            string pathFile = Path.Combine(_appConfig.pathDirectory, @$"App_Data\Form\{name}.xml");
 
             if (File.Exists(pathFile))
             {
-                ServerRepository serverRepository = new(appConfig);
+                ServerRepository serverRepository = new(_appConfig);
 
                 if (!serverRepository.CheckFormRights(name, userName))
                 {
@@ -63,7 +73,7 @@ namespace DataAccess
         /// <returns></returns>
         private Form GetForm(string name)
         {
-            string pathXML = Path.Combine(appConfig.pathDirectory, $"App_Data\\Form\\{name}.xml");
+            string pathXML = Path.Combine(_appConfig.pathDirectory, $"App_Data\\Form\\{name}.xml");
 
             if (!File.Exists(pathXML))
             {
@@ -171,7 +181,7 @@ namespace DataAccess
 
                             check.Script = $"if exists (select 1 from #{@struct.Name} where {check.Condition}) begin\n" +
                                 $"select '{check.ErrorCode}' as [code], '{field.Name}' as [field], '{check.Condition.Replace("''", "''''")}' as [condition]\n" +
-                                $"select top {appConfig.maxRowInResponse} @@primaryKeyListAlias from #{@struct.Name} where {check.Condition} group by @@primaryKeyList\n" +
+                                $"select top {_appConfig.maxRowInResponse} @@primaryKeyListAlias from #{@struct.Name} where {check.Condition} group by @@primaryKeyList\n" +
                                 "return\nend";
 
                             field.Checks.Add(check);
@@ -185,7 +195,7 @@ namespace DataAccess
                         string index = XMLReader.GetAttributes(nodeReference, "index");
                         field.Reference.Index = string.IsNullOrEmpty(index) ? 0 : Convert.ToInt16(index);
 
-                        field.Reference.Script = options.Updates.Get(field.Reference.Controller)?.query
+                        field.Reference.Script = _options.Updates.Get(field.Reference.Controller)?.query
                             .Replace("@@table", $"#{@struct.Name}")
                             .Replace("@@field", field.Mapping)
                             .Replace("@@reference", field.Reference.Name) ?? string.Empty;
@@ -227,12 +237,12 @@ namespace DataAccess
         {
             if (string.IsNullOrEmpty(table)) return null;
             string sql = $"select COLUMN_NAME as [name], DATA_TYPE + case when DATA_TYPE like '%char%' then '(' + cast(CHARACTER_MAXIMUM_LENGTH as varchar) + ')' when DATA_TYPE in ('numeric', 'decimal') then '(' + cast(NUMERIC_PRECISION AS varchar) + ',' + cast(NUMERIC_SCALE AS varchar) + ')' else '' end as [type], CHARACTER_MAXIMUM_LENGTH as maxLength from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = '{table}' order by ORDINAL_POSITION";
-            return Provider.Provider.Retrieve(appConfig.appConnectionString, sql).Tables[0];
+            return Provider.Provider.Retrieve(_appConfig.appConnectionString, sql).Tables[0];
         }
 
         public DataSet ExecuteForm(DataSet dsJson, Form form, RequestQuery request)
         {
-            using var connnection = Provider.Provider.OpenConn(appConfig.appConnectionString);
+            using var connnection = Provider.Provider.OpenConn(_appConfig.appConnectionString);
 
             foreach (Struct @struct in form.Structs)
             {
@@ -268,8 +278,8 @@ namespace DataAccess
             sql = sql.Replace("@@id", $"'{form.Id}'");
             sql = sql.Replace("@@unit", $"'{request.unit}'");
 
-            sql = sql.Replace("@@appDatabaseName", appConfig.appDatabaseName);
-            sql = sql.Replace("@@sysDatabaseName", appConfig.sysDatabaseName);
+            sql = sql.Replace("@@appDatabaseName", _appConfig.appDatabaseName);
+            sql = sql.Replace("@@sysDatabaseName", _appConfig.sysDatabaseName);
 
             sql = sql.Replace("@@type", $"'{form.Type}'");
 

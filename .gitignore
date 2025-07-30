@@ -33,6 +33,7 @@ bld/
 # Ignore log files, but not source code
 [Ll]og/*.log
 [Ll]og/*.txt
+[Ll]og/*.json
 ![Ll]og/*.cs
 [Ll]ogs/
 Cache/
