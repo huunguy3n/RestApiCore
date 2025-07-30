@@ -12,6 +12,7 @@
 	<message code="INVALID_TIME_NUMBER" success="0" httpStatusCode="400" httpMessage="Invalid 'time' parameter. The 'time' must be a number"/>
 	<message code="INVALID_CACHEID" success="0" httpStatusCode="400" httpMessage="Invalid 'cacheID' parameter. The 'cacheID' not found"/>
 	<message code="MISSING_PARAMETER" success="0" httpStatusCode="400" httpMessage="Missing parameters"/>
+	<message code="INVALID_CHECKSUM" success="0" httpStatusCode="400" httpMessage="Invalid check sum"/>
 	<message code="SUCCESS" success="1" httpStatusCode="200" httpMessage="Success"/>
 	<message code="TOO_MANY_REQUESTS" success="0" httpStatusCode="429" httpMessage="Too many requests"/>
 	<message code="UNAUTHORIZED" success="0" httpStatusCode="401" httpMessage="Invalid or missing token"/>

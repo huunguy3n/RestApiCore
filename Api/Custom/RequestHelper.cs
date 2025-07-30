@@ -37,7 +37,8 @@ namespace Web.Custom
                 "debug",
                 "User-Agent",
                 "time",
-                "key"
+                "key",
+                "checksum"
             };
 
             // Lọc các header cần thiết

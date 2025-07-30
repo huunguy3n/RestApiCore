@@ -1,11 +1,11 @@
 ﻿using Business;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Caching.Memory;
 using Models;
 using Models.Interface;
 using Models.Options;
 using Models.Request;
+using Security;
 using Web.Custom;
 
 namespace Web.Controllers
@@ -13,7 +13,7 @@ namespace Web.Controllers
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
-    public class QueryController(AppConfig appConfig, Options options, IMemoryCache cache, ResponseManager responseManager) : ControllerBase
+    public class QueryController(AppConfig appConfig, Options options, ResponseManager responseManager) : ControllerBase
     {
         //POST api/query/controllerName?cacheID=123&pageIndex=1
         //header: unit, debug
@@ -38,6 +38,7 @@ namespace Web.Controllers
             // Get values from the headers (unit, debug)
             requestQuery.unit = headers.TryGetValue("unit", out value) ? value : "";
             requestQuery.debug = (headers.TryGetValue("debug", out value) ? value : "") == "1";
+            string checksum = headers.TryGetValue("checksum", out value) ? value : "";
 
             //Get the request body as a string (json)
             requestQuery.jsonBody = body["raw"];
@@ -50,6 +51,17 @@ namespace Web.Controllers
             if (requestQuery.cacheID != "" && requestQuery.pageIndex < 0)
             {
                 return ResponseHelper.ToActionResult(this, responseManager.GetResponse("MISSING_PARAMETER"));
+            }
+
+            if (string.IsNullOrEmpty(checksum))
+            {
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("MISSING_PARAMETER"));
+            }
+
+            //Checksum body
+            if (EncryptionHelper.ComputeMD5Hash(requestQuery.jsonBody) != checksum)
+            {
+                return ResponseHelper.ToActionResult(this, responseManager.GetResponse("INVALID_CHECKSUM"));
             }
 
             FormManager formManager = new(appConfig, options, responseManager);
