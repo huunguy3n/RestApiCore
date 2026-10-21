@@ -37,6 +37,7 @@ bld/
 ![Ll]og/*.cs
 [Ll]ogs/
 Cache/
+Log/
 !Structure/
 
 # Visual Studio 2015/2017 cache/options directory
@@ -367,3 +368,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+# Bi mat cuc bo (secretKey, connection string) - khong commit
+appsettings.Local.json

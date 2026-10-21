@@ -8,11 +8,20 @@ using Web.Custom;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Bí mật (secretKey, connection string) không commit: đặt ở appsettings.Local.json (đã gitignore) hoặc biến môi trường
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables();
+
 // Bind AppSettings
 var appConfig = new AppConfig();
 builder.Configuration.Bind("AppSettings", appConfig);
 
-appConfig.appConnectionString = builder.Configuration.GetConnectionString("appConnectionString") ?? ".";
+appConfig.appConnectionString = builder.Configuration.GetConnectionString("appConnectionString") ?? "";
+
+if (string.IsNullOrWhiteSpace(appConfig.secretKey) || string.IsNullOrWhiteSpace(appConfig.appConnectionString))
+{
+    throw new InvalidOperationException("Thiếu appSettings:secretKey hoặc connectionStrings:appConnectionString. Khai báo trong appsettings.Local.json hoặc biến môi trường.");
+}
 appConfig.pathDirectory = builder.Environment.ContentRootPath;
 
 // Register DI
