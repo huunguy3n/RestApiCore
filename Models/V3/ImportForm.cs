@@ -4,7 +4,7 @@ namespace Models.V3
     /// Form v3 đã nạp và biên dịch từ App_Data/Form/{verb}{Resource}.xml (KE_HOACH_V3 mục 2). Bất biến: request không sửa được
     /// form đang cache (sửa lỗi 1.4 #4)
     /// </summary>
-    public sealed class ImportForm
+    public sealed record ImportForm
     {
         /// <summary>Tên file không đuôi, vd setSaleInvoice. Cũng là tên quyền trong restApiAllowForm</summary>
         public required string Name { get; init; }
@@ -45,7 +45,7 @@ namespace Models.V3
         Transfer
     }
 
-    public sealed class ImportBlock
+    public sealed record ImportBlock
     {
         /// <summary>Tên khối = thuộc tính JSON = bảng tạm #name</summary>
         public required string Name { get; init; }
@@ -57,7 +57,7 @@ namespace Models.V3
         public required IReadOnlyList<ImportField> Fields { get; init; }
     }
 
-    public sealed class ImportField
+    public sealed record ImportField
     {
         /// <summary>Tên thuộc tính JSON</summary>
         public required string Name { get; init; }
@@ -81,7 +81,17 @@ namespace Models.V3
         /// <summary>Field khóa tự thêm vào khối con từ khóa khối gốc</summary>
         public bool IsInheritedKey { get; init; }
         public IReadOnlyList<ImportCheck> Checks { get; init; } = [];
+
+        /// <summary>Kiểu cột bảng tạm #khối (mục 2.3), gắn lúc nạp form theo cột thật hoặc theo type XML</summary>
+        public string SqlType { get; init; } = string.Empty;
+        /// <summary>Độ dài tối đa dùng để kiểm giá trị chuỗi: min(maxLength XML, độ dài cột thật); null = không giới hạn</summary>
+        public int? EffectiveMaxLength { get; init; }
     }
+
+    /// <summary>
+    /// Cột thật của bảng FBO. MaxLength tính theo ký tự (đã chia đôi với nchar/nvarchar), -1 = MAX
+    /// </summary>
+    public sealed record ColumnInfo(string Name, string TypeName, int MaxLength, int Precision, int Scale);
 
     public enum ImportFieldType
     {

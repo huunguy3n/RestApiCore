@@ -29,4 +29,7 @@
 	<message code="ACCOUNT_LOCKED" success="0" httpStatusCode="403" httpMessage="Too many failed sign-in attempts, try again later"/>
 	<message code="INVALID_SHAPE" success="0" httpStatusCode="400" httpMessage="Request body does not have the expected shape"/>
 	<message code="USER_MISMATCH" success="0" httpStatusCode="400" httpMessage="userName in body does not match X-Fast-User"/>
+	<message code="FIELD_REQUIRED" success="0" httpStatusCode="400" httpMessage="Field is required"/>
+	<message code="INVALID_VALUE" success="0" httpStatusCode="400" httpMessage="Field value does not match its type or format"/>
+	<message code="VALUE_TOO_LONG" success="0" httpStatusCode="400" httpMessage="Field value is longer than allowed"/>
 </messages>

@@ -357,7 +357,7 @@ Middleware ASP.NET Core, partition theo `u_id` (sau xác thực) và theo IP (tr
               { "ItemID": "VT02", "Quantity": 1 } ] }
 ```
 - Nhiều chứng từ: gửi **mảng** các object trên, tối đa `MaxDocumentsPerRequest`.
-- `get`: body là object tham số lọc theo field của `get{Resource}.xml`, vd `{ "FromDate": "01/10/2026", "ToDate": "31/10/2026" }`.
+- `get`: body là object tham số lọc theo field của `get{Resource}.xml`, vd `{ "FromDate": "01/10/2026", "ToDate": "31/10/2026" }`. Form chỉ có một khối thì nhận cả dạng phẳng này lẫn dạng `{ "<khối>": { … } }`; form nhiều khối bắt buộc dạng có tên khối.
 - `delete`/`cancel`: thường chỉ khối gốc với field khóa.
 - Dòng con gửi kèm field khóa thì phải trùng khối gốc. Sai dạng → `400 INVALID_SHAPE`.
 - Thuộc tính không khai trong XML → **bỏ qua**, không báo lỗi (đối tác thêm field không làm hỏng tích hợp).
@@ -624,7 +624,10 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | `Business/V3/CheckingCompiler`: `@@checking(n)` theo giá trị `category`, `@@checking` mọi field; `@@table` → `#khối`; tự loại giá trị rỗng; `condition`/`tag` bọc quanh; cảnh báo field có check mà thiếu/không được gọi category | Xong 23/10/2026 |
 | `Business/V3/ImportFormCatalog`: nạp `App_Data/Form/*.xml` (không đệ quy), file lỗi / trùng route bỏ qua và ghi log (trùng thì bỏ cả hai), phân giải route không phân biệt hoa thường, chỉ `[a-z0-9-]`, method khác POST → 405, form `enable="false"` → 404 | Xong 23/10/2026 |
 | 71 test mới (`Tests/ImportFormTests.cs`) | Xong 23/10/2026, 138/138 đạt |
-| Kiểu/độ rộng cột thật (2.3), JSON object → `#khối` (`_row`, `_parent`), `allowNull`/`upperCase`/`defaultValue`/`format`, `#errors` có vị trí, nối route vào pipeline, kiểm quyền form + `unitCode`, `dryRun`, `Idempotency-Key`, `Fast.Api.Cli upgrade`, mẫu `setSaleInvoice`/`getCustomer` | Chưa |
+| Kiểu/độ rộng cột thật (2.3): `ColumnSchemaRepository` đọc `sys.columns` (kiểu người dùng định nghĩa quy về kiểu gốc, độ dài `nchar`/`nvarchar` tính theo ký tự), `ColumnTypeResolver` gắn `SqlType` + độ dài kiểm. Cột chuỗi thêm `COLLATE DATABASE_DEFAULT` để so được với bảng thật khi tempdb khác collation. Field không có cột trong `table` → dùng type XML + cảnh báo; bảng không tồn tại → lỗi nạp | Xong 23/10/2026 |
+| `JsonBodyMapper`: một chứng từ hoặc mảng (tối đa `MaxDocumentsPerRequest`), tên thuộc tính không phân biệt hoa thường, thuộc tính lạ bỏ qua. **Form một khối nhận thêm dạng phẳng** (body tham số của `get`, 4.3). `_row` = chỉ số trong mảng cha, `_parent` = chỉ số chứng từ; khối con nhận khóa khối gốc, gửi khóa khác → `INVALID_SHAPE`. Field: `allowNull` (thiếu / null / chuỗi trắng → `FIELD_REQUIRED`), `defaultValue`, `upperCase`, độ dài (`VALUE_TOO_LONG`), `checkIrregular` (`INVALID_FIELD_IRREGULAR`), kiểu/format (`INVALID_VALUE`; ngày theo `format` hoặc ISO 8601, có múi giờ thì đổi về giờ máy chủ; `unixtime` = giây), `hidden` không nhận từ JSON. Lỗi giá trị gom đủ với vị trí `[0].detail[2].Quantity`. `justContent` chưa xử lý (chưa rõ nghĩa ở v2) | Xong 23/10/2026 |
+| `CREATE TABLE #khối` theo `SqlType`; 38 test mới (176/176). Thử trên DB dev: resolver theo `m81$000000`/`d81$000000`, bulk copy vào `#master`/`#detail`, chạy `@@checking(1) @@checking(2)` ra đúng 4 lỗi có vị trí | Xong 23/10/2026 |
+| `#errors` → response lỗi, nối route vào pipeline, kiểm quyền form + `unitCode`, `dryRun`, `Idempotency-Key`, `Fast.Api.Cli upgrade`, mẫu `setSaleInvoice`/`getCustomer` | Chưa |
 
 ### 7.4. Ngoài giai đoạn này
 - **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.
