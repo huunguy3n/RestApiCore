@@ -29,9 +29,9 @@
            check="ma_vt not in (select ma_vt from dmvt where status = '1')"
            errorCode="ITEM_NOT_FOUND" example="VT01"/>
     <field name="Promotion" fastName="km_yn" type="int" defaultValue="0" category="2"
-           check="km_yn not in (0, 1, 2, 3)&And;so_luong &lt;= 0"
-           errorCode="INVALID_FIELD&And;INVALID_QUANTITY"/>
-    <field name="Quantity" fastName="so_luong" type="numeric" allowNull="false"/>
+           check="km_yn not in (0, 1, 2, 3)" errorCode="INVALID_FIELD"/>
+    <field name="Quantity" fastName="so_luong" type="numeric" allowNull="false" category="2"
+           check="so_luong &lt;= 0" errorCode="INVALID_QUANTITY" example="2"/>
     <field name="Price" fastName="gia_nt2" type="numeric" defaultValue="0"/>
   </fields>
 

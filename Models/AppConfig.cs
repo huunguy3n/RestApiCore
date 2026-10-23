@@ -72,6 +72,14 @@
         }
 
         /// <summary>
+        /// Origin của portal ApiDocs được gọi /api/v3 từ trình duyệt (CORS), vd "https://docs.congty.vn". Rỗng: không mở CORS
+        /// </summary>
+        public string[] portalOrigins
+        {
+            get; set;
+        }
+
+        /// <summary>
         /// Số phút khóa đăng nhập (đếm lại từ lần sai cuối)
         /// </summary>
         public int loginLockMinutes
@@ -252,6 +260,7 @@
             attackLogRetentionDays = 90;
             loginMaxFailures = 5;
             portalTokenMinutes = 30;
+            portalOrigins = [];
             loginLockMinutes = 15;
             expiryToken = 0;
             issuerToken = string.Empty;

@@ -1,20 +1,14 @@
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 
 namespace ApiDocs.Pages
 {
-    public class IndexModel : PageModel
+    public class IndexModel(IConfiguration configuration) : PageModel
     {
-        private readonly ILogger<IndexModel> _logger;
-
-        public IndexModel(ILogger<IndexModel> logger)
-        {
-            _logger = logger;
-        }
+        /// <summary>Địa chỉ Api (Portal:ApiBaseUrl); rỗng là cùng origin với portal</summary>
+        public string ApiBaseUrl { get; } = (configuration["Portal:ApiBaseUrl"] ?? "").Trim().TrimEnd('/');
 
         public void OnGet()
         {
-
         }
     }
 }

@@ -11,16 +11,16 @@ namespace Tests
     public class MessageSignatureTests
     {
         // private_key = byte 0x00..0x1f
-        private const string PrivateKeyBase64 = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
-        private const string Body = "{\"master\":{\"YourID\":\"HD001\"},\"detail\":[{\"ItemID\":\"VT01\",\"Quantity\":2}]}";
-        private const string BodySha256 = "534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f";
-        private const string Nonce = "9b2e4c1f0a7d4e3b";
-        private const string IdempotencyKey = "6f1c2d3e-0000-4000-8000-000000000001";
-        private const string RequestSignature = "6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa54";
+        internal const string PrivateKeyBase64 = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
+        internal const string Body = "{\"master\":{\"YourID\":\"HD001\"},\"detail\":[{\"ItemID\":\"VT01\",\"Quantity\":2}]}";
+        internal const string BodySha256 = "534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f";
+        internal const string Nonce = "9b2e4c1f0a7d4e3b";
+        internal const string IdempotencyKey = "6f1c2d3e-0000-4000-8000-000000000001";
+        internal const string RequestSignature = "6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa54";
 
-        private const string ResponseBody = "{\"code\":\"SUCCESS\"}";
-        private const string RequestId = "8c2f0000-0000-4000-8000-000000000002";
-        private const string ResponseSignature = "1972c2ae0b53f37dd745becadfd19669a8da4d968fb282891ed43fddec17fd68";
+        internal const string ResponseBody = "{\"code\":\"SUCCESS\"}";
+        internal const string RequestId = "8c2f0000-0000-4000-8000-000000000002";
+        internal const string ResponseSignature = "1972c2ae0b53f37dd745becadfd19669a8da4d968fb282891ed43fddec17fd68";
 
         private static byte[] PrivateKey => Convert.FromBase64String(PrivateKeyBase64);
 

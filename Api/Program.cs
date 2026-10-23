@@ -71,6 +71,7 @@ builder.Services.AddSingleton<ResponseManager>();
 builder.Services.AddSingleton<IIpAccessManager, IpAccessManager>();
 builder.Services.AddSingleton(privateKeyProtector);
 builder.Services.AddSingleton(portalKey);
+builder.Services.AddPortalCors(appConfig.portalOrigins);
 builder.Services.AddSingleton<Business.V3.IPortalCredentialStore, Business.V3.PortalCredentialStore>();
 builder.Services.AddSingleton<ISignerKeyStore, SignerKeyStore>();
 builder.Services.AddSingleton<NonceStore>();
@@ -155,6 +156,8 @@ if (portalKey.IsEphemeral)
 }
 
 app.UseMiddleware<RequestIdMiddleware>();
+// Portal ApiDocs ở origin khác: preflight trả trước log, xác thực, chữ ký
+app.UsePortalCors(appConfig.portalOrigins);
 app.UseSerilogRequestLogging();
 
 // /health/* không ghi log SQL, không tính rate limit, không kiểm IP

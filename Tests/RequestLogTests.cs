@@ -209,7 +209,8 @@ namespace Tests
                 }
                 await worker.StartAsync(CancellationToken.None);
 
-                Assert.True(await WaitUntil(() => sink.Count == 25));
+                // Dọn log chạy sau khi ghi lô cuối, đợi cả hai
+                Assert.True(await WaitUntil(() => sink.Count == 25 && sink.Cleanups > 0));
                 Assert.All(sink.Batches, b => Assert.True(b.Count <= 10));
                 Assert.Equal(1, sink.Cleanups);
                 await worker.StopAsync(CancellationToken.None);

@@ -6,4 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Code mẫu cho đối tác tải về, không biên dịch vào portal -->
+    <Compile Remove="wwwroot\**" />
+  </ItemGroup>
+
 </Project>
