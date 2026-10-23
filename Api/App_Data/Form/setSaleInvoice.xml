@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE import [
+  <!ENTITY And "&#38;#13;">
+]>
+
+<!--
+  Mẫu form v3 (KE_HOACH 2.1): POST /api/sale-invoice?unitCode=CTY
+  Body: { "master": { "YourID": "HD001", "VoucherDate": "21/10/2026", "CustomerID": "KH001" },
+          "detail": [ { "ItemID": "VT01", "Quantity": 2, "Price": 100000 } ] }
+  Processing của mẫu CHƯA ghi chứng từ: chỉ trả lại dữ liệu đã kiểm. Mỗi dự án thay bằng proc ghi chứng từ HDA của mình.
+-->
+<import xmlns="urn:schemas-fast-com:fast-api"
+        type="Voucher" voucherCode="HDA" unitRequired="true"
+        description="Hóa đơn bán hàng">
+
+  <fields name="master" table="m81$000000" key="YourID">
+    <field name="YourID" fastName="id_doitac" type="string" maxLength="36" allowNull="false" isPrimaryKey="true"
+           description="Mã chứng từ phía đối tác" example="HD001"/>
+    <field name="VoucherDate" fastName="ngay_ct" type="datetime" format="dd/MM/yyyy" allowNull="false" example="21/10/2026"/>
+    <field name="CustomerID" fastName="ma_kh" allowNull="false" upperCase="true" category="1"
+           check="ma_kh not in (select ma_kh from dmkh where status = '1')"
+           errorCode="CUSTOMER_NOT_FOUND" example="KH001"/>
+    <field name="Buyer" fastName="ong_ba"/>
+    <field name="Note" fastName="dien_giai" checkIrregular="true"/>
+  </fields>
+
+  <fields name="detail" table="d81$000000">
+    <field name="ItemID" fastName="ma_vt" allowNull="false" upperCase="true" category="2"
+           check="ma_vt not in (select ma_vt from dmvt where status = '1')"
+           errorCode="ITEM_NOT_FOUND" example="VT01"/>
+    <field name="Promotion" fastName="km_yn" type="int" defaultValue="0" category="2"
+           check="km_yn not in (0, 1, 2, 3)" errorCode="INVALID_FIELD"/>
+    <field name="Quantity" fastName="so_luong" type="numeric" allowNull="false" category="2"
+           check="so_luong &lt;= 0" errorCode="INVALID_QUANTITY" example="2"/>
+    <field name="Price" fastName="gia_nt2" type="numeric" defaultValue="0"/>
+  </fields>
+
+  <query action="checking"><text><![CDATA[ @@checking(1) @@checking(2) ]]></text></query>
+
+  <query action="processing">
+    <text>
+      <![CDATA[
+-- Dự án thay đoạn dưới bằng proc ghi chứng từ, vd: exec restApi_ProcessDataFor_m81 @@voucherCode, @@unit, @@userId
+SELECT 'SUCCESS' AS code, '' AS message, 'master,detail' AS tables
+
+SELECT a.id_doitac AS YourID, @@unit AS UnitCode, @@voucherCode AS VoucherCode, a.ngay_ct AS VoucherDate,
+		RTRIM(a.ma_kh) AS CustomerID, b.ten_kh AS CustomerName, a.ong_ba AS Buyer, a.dien_giai AS Note,
+		(SELECT SUM(c.so_luong * c.gia_nt2) FROM #detail c WHERE c._parent = a._parent) AS TotalAmount
+	FROM #master a
+	LEFT JOIN dmkh b ON b.ma_kh = a.ma_kh
+	ORDER BY a._row
+
+SELECT a.id_doitac AS YourID, a._row + 1 AS LineNo, RTRIM(a.ma_vt) AS ItemID, a.km_yn AS Promotion,
+		a.so_luong AS Quantity, a.gia_nt2 AS Price, a.so_luong * a.gia_nt2 AS Amount
+	FROM #detail a
+	ORDER BY a._parent, a._row
+      ]]>
+    </text>
+  </query>
+</import>

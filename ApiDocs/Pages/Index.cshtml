@@ -1,12 +1,30 @@
 ﻿@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Home page";
+    ViewData["Title"] = "Cổng đối tác";
+    ViewData["ApiBaseUrl"] = Model.ApiBaseUrl;
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
-    <a asp-page="/Api/List" class="text-blue-600 hover:underline">Xem danh sách API</a>
+<header class="portal-header">
+    <div class="container d-flex align-items-center gap-3 py-2">
+        <a class="portal-brand" href="#/resources">Fast API</a>
+        <nav id="nav" class="d-flex gap-1 flex-grow-1" hidden>
+            <a class="nav-link" href="#/resources">Tài nguyên</a>
+            <a class="nav-link" href="#/errors">Mã lỗi</a>
+            <a class="nav-link" href="#/samples">Code mẫu</a>
+        </nav>
+        <div id="account" class="d-flex align-items-center gap-2" hidden>
+            <span id="account-name" class="small text-secondary"></span>
+            <button id="logout" type="button" class="btn btn-sm btn-outline-secondary">Đăng xuất</button>
+        </div>
+    </div>
+</header>
 
-</div>
+<main class="container py-4">
+    <noscript>Portal cần JavaScript (WebCrypto) để mã hóa mật khẩu và ký request.</noscript>
+    <div id="view" aria-live="polite"></div>
+</main>
+
+@section Scripts {
+    <script type="module" src="~/js/portal.js" asp-append-version="true"></script>
+}

@@ -18,4 +18,38 @@
 	<message code="UNAUTHORIZED" success="0" httpStatusCode="401" httpMessage="Invalid or missing token"/>
 	<message code="NONE" success="0" httpStatusCode="200" httpMessage=""/>
 	<message code="ERROR" success="0" httpStatusCode="500" httpMessage="Exception"/>
-</messages>
+	<!-- v3: chữ ký HMAC-SHA256 (KE_HOACH 4.2) -->
+	<message code="MISSING_SIGNATURE" success="0" httpStatusCode="401" httpMessage="Missing X-Fast-Timestamp, X-Fast-Nonce, X-Fast-Content-SHA256 or X-Fast-Signature header"/>
+	<message code="TIMESTAMP_EXPIRED" success="0" httpStatusCode="401" httpMessage="X-Fast-Timestamp is outside the allowed clock skew"/>
+	<message code="NONCE_REUSED" success="0" httpStatusCode="401" httpMessage="X-Fast-Nonce has already been used"/>
+	<message code="CHECKSUM_MISMATCH" success="0" httpStatusCode="400" httpMessage="X-Fast-Content-SHA256 does not match the request body"/>
+	<message code="INVALID_SIGNATURE" success="0" httpStatusCode="401" httpMessage="Invalid X-Fast-Signature"/>
+	<message code="KEY_NOT_ISSUED" success="0" httpStatusCode="403" httpMessage="No signing key has been issued for this account"/>
+	<message code="PAYLOAD_TOO_LARGE" success="0" httpStatusCode="413" httpMessage="Request body is too large"/>
+	<message code="ACCOUNT_LOCKED" success="0" httpStatusCode="403" httpMessage="Too many failed sign-in attempts, try again later"/>
+	<message code="INVALID_SHAPE" success="0" httpStatusCode="400" httpMessage="Request body does not have the expected shape"/>
+	<message code="USER_MISMATCH" success="0" httpStatusCode="400" httpMessage="userName in body does not match X-Fast-User"/>
+	<message code="NOT_FOUND" success="0" httpStatusCode="404" httpMessage="Resource or verb not found"/>
+	<message code="METHOD_NOT_ALLOWED" success="0" httpStatusCode="405" httpMessage="Only POST is allowed"/>
+	<message code="UNIT_REQUIRED" success="0" httpStatusCode="400" httpMessage="unitCode is required for this resource"/>
+	<message code="UNIT_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="unitCode does not exist or is inactive"/>
+	<message code="UNIT_DENIED" success="0" httpStatusCode="403" httpMessage="You do not have permission on this unit"/>
+	<message code="VALIDATION_FAILED" success="0" httpStatusCode="400" httpMessage="One or more fields are invalid"/>
+	<message code="INVALID_IDEMPOTENCY_KEY" success="0" httpStatusCode="400" httpMessage="Idempotency-Key must be 1-128 visible ASCII characters"/>
+	<message code="IDEMPOTENCY_CONFLICT" success="0" httpStatusCode="409" httpMessage="Idempotency-Key was already used with a different request"/>
+	<message code="IDEMPOTENCY_IN_PROGRESS" success="0" httpStatusCode="409" httpMessage="A request with this Idempotency-Key is still being processed"/>
+	<message code="FIELD_REQUIRED" success="0" httpStatusCode="400" httpMessage="Field is required"/>
+	<message code="INVALID_VALUE" success="0" httpStatusCode="400" httpMessage="Field value does not match its type or format"/>
+	<message code="VALUE_TOO_LONG" success="0" httpStatusCode="400" httpMessage="Field value is longer than allowed"/>
+	<message code="CURSOR_EXPIRED" success="0" httpStatusCode="404" httpMessage="Cursor has expired or does not belong to this request, send the first request again"/>
+	<message code="PAGE_OUT_OF_RANGE" success="0" httpStatusCode="400" httpMessage="page is out of range"/>
+	<message code="RESULT_TOO_LARGE" success="0" httpStatusCode="500" httpMessage="Result is too large, the form must declare paging"/>
+	<message code="INVALID_KID" success="0" httpStatusCode="400" httpMessage="kid does not match the current portal key, fetch /api/_meta/server again"/>
+	<message code="INVALID_CREDENTIAL" success="0" httpStatusCode="401" httpMessage="Invalid user name or password"/>
+	<message code="PORTAL_TOKEN_NOT_ALLOWED" success="0" httpStatusCode="403" httpMessage="Portal token can only read /api/_meta"/>
+	<message code="TRANSFER_MARK_FAILED" success="0" httpStatusCode="500" httpMessage="Could not mark the page as transferred, request the page again"/>
+	<!-- Mã nghiệp vụ dùng trong errorCode của form mẫu -->
+	<message code="CUSTOMER_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Customer does not exist or is inactive"/>
+	<message code="ITEM_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Item does not exist or is inactive"/>
+	<message code="INVALID_QUANTITY" success="0" httpStatusCode="400" httpMessage="Quantity must be greater than 0"/>
+</messages>

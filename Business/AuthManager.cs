@@ -24,7 +24,7 @@ namespace Business
                 return null;
             }
 
-            if (request.key == EncryptionHelper.GenerateAuthKey(user.Name, request.time, user.Password, appConfig.secretKey, appConfig.positions.Split(',')))
+            if (request.key == EncryptionHelper.GenerateAuthKey(user.Name, request.time, user.Password, appConfig.passwordKey, appConfig.positions.Split(',')))
             {
                 JwtTokenService jwtTokenService = new JwtTokenService(appConfig.secretKey, appConfig.expiryToken, appConfig.issuerToken);
 

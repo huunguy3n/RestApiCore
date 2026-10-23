@@ -10,22 +10,27 @@ namespace DataAccess
         public LogRepository(AppConfig appConfig)
         {
             _appConfig = appConfig;
-            Provider.Provider.CommandTimeout = _appConfig.commandTimeout;
         }
 
-        public void InsertLogData(string guid, long durationMs, string ip, string userName, string method, string path, string metadataRequest, string metadataResponse, string jsonRequest, string jsonResponse)
+        /// <summary>
+        /// Mọi giá trị đi qua tham số có kiểu và độ dài khớp cột #logData (sửa lỗi 1.4 #3: ip, userName, path ghép chuỗi)
+        /// </summary>
+        public async Task InsertLogDataAsync(string guid, long durationMs, string ip, string userName, string method, string path, string metadataRequest, string metadataResponse, CancellationToken cancellationToken = default)
         {
-            using (var connection = Provider.Provider.OpenConn(_appConfig.appConnectionString))
-            {
-                Provider.Provider.Execute(connection, "create table #logData(timeStamp datetime, ipAddress varchar(32), userName varchar(32), method varchar(32), path nvarchar(128), durationMs numeric(19,2), metadataRequest nvarchar(4000), metadataResponse nvarchar(4000), guid varchar(36))");
-                Provider.Provider.Execute(connection, $"insert #logData values(getdate(), N'{ip}', N'{userName}', N'{method}', N'{path}', {durationMs}, @metadataRequest, @metadataResponse, @guid)",
-                    new SqlParameter { ParameterName = "@metadataRequest", Value = metadataRequest },
-                    new SqlParameter { ParameterName = "@metadataResponse", Value = metadataResponse },
-                    new SqlParameter { ParameterName = "@guid", Value = guid }
-                    );
-                Provider.Provider.Execute(connection, "exec restApi_InsertLogData '#logData'");
-                Provider.Provider.CloseConn(connection);
-            }
+            await using var connection = await Provider.Provider.OpenConnAsync(_appConfig.appConnectionString, cancellationToken);
+
+            await Provider.Provider.ExecuteAsync(connection, "create table #logData(timeStamp datetime, ipAddress varchar(32), userName varchar(32), method varchar(32), path nvarchar(128), durationMs numeric(19,2), metadataRequest nvarchar(4000), metadataResponse nvarchar(4000), guid varchar(36))", cancellationToken);
+            await Provider.Provider.ExecuteAsync(connection, "insert #logData values(getdate(), @ipAddress, @userName, @method, @path, @durationMs, @metadataRequest, @metadataResponse, @guid)", cancellationToken,
+                Parameter("@ipAddress", SqlDbType.VarChar, 32, ip),
+                Parameter("@userName", SqlDbType.VarChar, 32, userName),
+                Parameter("@method", SqlDbType.VarChar, 32, method),
+                Parameter("@path", SqlDbType.NVarChar, 128, path),
+                new SqlParameter("@durationMs", SqlDbType.Decimal) { Precision = 19, Scale = 2, Value = durationMs },
+                Parameter("@metadataRequest", SqlDbType.NVarChar, 4000, metadataRequest),
+                Parameter("@metadataResponse", SqlDbType.NVarChar, 4000, metadataResponse),
+                Parameter("@guid", SqlDbType.VarChar, 36, guid)
+                );
+            await Provider.Provider.ExecuteAsync(connection, "exec restApi_InsertLogData '#logData'", cancellationToken);
         }
 
         public void WriteLogData(string guid, string jsonRequest, string jsonResponse)
@@ -74,20 +79,26 @@ namespace DataAccess
             }
         }
 
-        public void InsertLogError(string path, string errorMessage, string stackTrace)
+        public async Task InsertLogErrorAsync(string path, string errorMessage, string stackTrace, CancellationToken cancellationToken = default)
         {
-            errorMessage = errorMessage.Length > 4000 ? errorMessage.Substring(0, 3999) : errorMessage;
-            stackTrace = stackTrace.Length > 4000 ? stackTrace.Substring(0, 3999) : stackTrace;
-            using (var connection = Provider.Provider.OpenConn(_appConfig.appConnectionString))
-            {
-                Provider.Provider.Execute(connection, "create table #logError(timeStamp datetime, path nvarchar(128), message nvarchar(4000), stacktrace nvarchar(4000))");
-                Provider.Provider.Execute(connection, $"insert #logError values(getdate(), N'{path}', @errorMessage, @stackTrace)",
-                    new SqlParameter { ParameterName = "@errorMessage", Value = errorMessage },
-                    new SqlParameter { ParameterName = "@stackTrace", Value = stackTrace }
-                    );
-                Provider.Provider.Execute(connection, "exec restApi_InsertLogError '#logError'");
-                Provider.Provider.CloseConn(connection);
-            }
+            await using var connection = await Provider.Provider.OpenConnAsync(_appConfig.appConnectionString, cancellationToken);
+
+            await Provider.Provider.ExecuteAsync(connection, "create table #logError(timeStamp datetime, path nvarchar(128), message nvarchar(4000), stacktrace nvarchar(4000))", cancellationToken);
+            await Provider.Provider.ExecuteAsync(connection, "insert #logError values(getdate(), @path, @errorMessage, @stackTrace)", cancellationToken,
+                Parameter("@path", SqlDbType.NVarChar, 128, path),
+                Parameter("@errorMessage", SqlDbType.NVarChar, 4000, errorMessage),
+                Parameter("@stackTrace", SqlDbType.NVarChar, 4000, stackTrace)
+                );
+            await Provider.Provider.ExecuteAsync(connection, "exec restApi_InsertLogError '#logError'", cancellationToken);
+        }
+
+        /// <summary>
+        /// Tham số chuỗi cắt theo độ dài cột để không lỗi "String or binary data would be truncated"
+        /// </summary>
+        private static SqlParameter Parameter(string name, SqlDbType type, int size, string? value)
+        {
+            object dbValue = value == null ? DBNull.Value : (value.Length > size ? value.Substring(0, size) : value);
+            return new SqlParameter(name, type, size) { Value = dbValue };
         }
     }
 }
