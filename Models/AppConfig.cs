@@ -7,6 +7,14 @@
             get; set;
         }
 
+        /// <summary>
+        /// Khóa AES mã hóa restApiUser.password, tách riêng khỏi secretKey ký JWT
+        /// </summary>
+        public string passwordKey
+        {
+            get; set;
+        }
+
         public int expiryToken
         {
             get; set;
@@ -75,6 +83,7 @@
         public AppConfig()
         {
             secretKey = string.Empty;
+            passwordKey = string.Empty;
             expiryToken = 0;
             issuerToken = string.Empty;
             maxRequestsPerMinute = 0;

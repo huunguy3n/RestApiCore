@@ -8,7 +8,7 @@ using Web.Custom;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Bí mật (secretKey, connection string) không commit: đặt ở appsettings.Local.json (đã gitignore) hoặc biến môi trường
+// Bí mật (secretKey, passwordKey, connection string) không commit: đặt ở appsettings.Local.json (đã gitignore) hoặc biến môi trường
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables();
 
@@ -21,6 +21,11 @@ appConfig.appConnectionString = builder.Configuration.GetConnectionString("appCo
 if (string.IsNullOrWhiteSpace(appConfig.secretKey) || string.IsNullOrWhiteSpace(appConfig.appConnectionString))
 {
     throw new InvalidOperationException("Thiếu appSettings:secretKey hoặc connectionStrings:appConnectionString. Khai báo trong appsettings.Local.json hoặc biến môi trường.");
+}
+// passwordKey là khóa AES-256 (32 ký tự) mã hóa restApiUser.password, không được trùng secretKey ký JWT
+if (appConfig.passwordKey.Length != 32 || appConfig.passwordKey == appConfig.secretKey)
+{
+    throw new InvalidOperationException("appSettings:passwordKey phải đúng 32 ký tự và khác secretKey. Mã hóa lại mật khẩu bằng: Fast.Api.Cli rekey-passwords.");
 }
 appConfig.pathDirectory = builder.Environment.ContentRootPath;
 

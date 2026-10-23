@@ -1,22 +1,34 @@
 # Kế hoạch FastAPI v3 (RestApiCore) — đề xuất, chờ duyệt
 
-**Cập nhật:** 21/10/2026 · v3 = repo này (`huunguyenit/RestApiCore`), phát triển tiếp, không dựng mới. v2 = FastAPI 2.4.7 (VB, `D:\Fast Source\API\FastAPI 2.4.7`).
+**Cập nhật:** 23/10/2026 · v3 = repo này (`huunguyenit/RestApiCore`), phát triển tiếp, không dựng mới. v2 = FastAPI 2.4.7 (VB, `D:\Fast Source\API\FastAPI 2.4.7`).
 
 ## 0. Quyết định đã chốt
 
 | Hạng mục | Quyết định |
 |---|---|
 | Chiến lược | Hai luồng tách hẳn. v2 đóng băng, chỉ sửa cho đối tác cũ. Đối tác mới làm trên v3. Bỏ dần v2 |
-| Nền | C# / ASP.NET Core. **Nâng từ .NET 8 lên .NET 10 LTS**: .NET 8 hết hỗ trợ ngày 10/11/2026 |
-| Redis | Bắt buộc. Server là Garnet 2.2.3 (chạy native trên Windows), client `StackExchange.Redis`. Garnet **không có Redis Streams** và **mặc định tắt Lua** → hàng đợi log dùng List, server phải chạy với `--lua true` (mục 5.1) |
-| Chia tải | Không dùng WCF Distribute. Chạy N instance sau IIS ARR/nginx, trạng thái chung ở Redis |
-| DB | Object `restApi*` đang có **giữ nguyên**. Object viết mới cũng đặt tên `restApi*` (bảng, view) và `restApi_*` (proc, function). Không dùng chung bảng với v2. `apiToken[_partner]` của v2 chưa đụng tới. DB dev là DB khai báo trong `Api/appsettings.json` |
-| Người dùng | `user_id` = `sysdb..userinfo2.id` |
-| XML | Gốc là `<import>` của v2, mở rộng cho v3. Không có `<response>`: dữ liệu trả về do backend quyết định qua dataset |
-| JSON object | `{ "master": { … }, "detail": [ … ], "tax": [ … ] }`: khối gốc là **một object**, các khối con là mảng |
-| Method | `GET` để lấy, `POST` để ghi. `setCustomers` → `POST /api/v3/customer`. File: `customer.get.xml`, `customer.post.xml` |
-| `unitCode` | Query string `?unitCode=`. Form khai `unitRequired="true"` thì **bắt buộc** nhập. Kiểm quyền đơn vị bằng hàm FBO có sẵn |
-| Cổng đối tác | Phát triển từ project `ApiDocs` |
+| Nền | **ASP.NET Core Web API trên IIS**, C#. **Nâng từ .NET 8 lên .NET 10 LTS**: .NET 8 hết hỗ trợ ngày 10/11/2026 |
+| Nguồn dữ liệu | **SQL Server là nguồn dữ liệu chính** (bản thấp nhất ở khách: 2008 R2) |
+| Triển khai | **Windows-first, zero-dependency**: IIS + Hosting Bundle + SQL Server. Không cài thêm dịch vụ cache/queue/log bên ngoài |
+| Redis / Garnet | **Không dùng** (không bắt buộc, không tùy chọn, không pha sau). Mọi trạng thái: `HybridCache` / Rate Limiting in-process, hoặc bảng SQL, hoặc file trên ổ Windows |
+| Cache | `Microsoft.Extensions.Caching.Hybrid` (memory-only) |
+| Rate limit | ASP.NET Core Rate Limiting (in-process), partition theo `u_id` đã xác thực |
+| Logger | Serilog rolling file (thư mục dữ liệu độc lập, vd `ProgramData\...\Logs`), không ELK/Grafana bắt buộc |
+| Chia tải | **Một instance** sau IIS là baseline. N instance / ARR **ngoài phạm vi**; nếu sau này cần thì dùng SQL làm kho dùng chung, không Redis |
+| DB | Object `restApi*` đang có giữ nguyên, **trừ** thêm cột `restApiUser.private_key` (3.1). Object viết mới cũng đặt tên `restApi*` (bảng, view) và `restApi_*` (proc, function). Không dùng chung bảng với v2 |
+| Người dùng | `restApiUser.name` là khóa chính, `restApiUser.id` là identity (= `u_id`). Nối FBO qua **`restApiUser.name_erp = userinfo2.name`**. `restApiUser.name` **khác** `userinfo2.name`; `restApiUser.id` **khác** `userinfo2.id`. `user_id` (kiểm quyền FBO) = `sysdb..userinfo2.id` |
+| XML | Gốc là `<import>` của v2, mở rộng cho v3. Không có `<response>`: dữ liệu trả về do backend quyết định qua dataset. Không có chế độ chạy file v2, không có thuộc tính `version` |
+| JSON | **Chỉ dạng object**: `{ "master": { … }, "detail": [ … ] }`, khối gốc là **một object**, khối con là mảng. Bỏ dạng flat |
+| Tên file | **Giữ cách đặt tên v2**: `{động từ}{Resource}.xml` (`getCustomer.xml`, `setCustomer.xml`, `cancelInvoice.xml`) |
+| Method | **Nghiệp vụ chỉ dùng `POST`.** `set` → `POST /api/v3/{resource}`. Động từ khác, kể cả `get` → `POST /api/v3/{resource}/{động từ}`. Không dùng HTTP `GET` cho `get{Resource}.xml` |
+| Kiểm tra field | `check`/`condition`/`tag`/`errorCode`/`category` **giống Upload FBO**. Bỏ `<reference>`, `Update.xml`, `@@update(n)` |
+| Body | `application/json`, là **JSON object dữ liệu**. Tham số điều khiển (`unitCode`, `dryRun`, `cursor`, `page`, `Idempotency-Key`) đi bằng query string / header |
+| Bảo mật thông điệp | **SHA-256** cho checksum body, **HMAC-SHA256** xác thực **hai chiều** (request do client ký, response do server ký), khóa bí mật lưu ở `restApiUser.private_key`. Bắt buộc với mọi request, cả HTTP lẫn HTTPS. Đăng nhập trả **JWT** (mục 4.2) |
+| Bí mật nội dung | SHA-256/HMAC **không mã hóa**. **HTTPS/TLS lo phần mã hóa body**. Không có lớp mã hóa body riêng (bỏ `encryptData`), API không dùng khóa bất đối xứng |
+| `unitCode` | Query string `?unitCode=` (được ký). Form khai `unitRequired="true"` thì bắt buộc. Kiểm quyền đơn vị bằng hàm FBO có sẵn |
+| Truyền tệp | **Ngoài giai đoạn này** (Phụ lục A) |
+| Cổng đối tác | Phát triển từ project `ApiDocs`. **Dùng luôn tài khoản `restApiUser`** (không bảng/cờ riêng): đăng nhập bằng `name` + `password`. Mật khẩu **mã hóa tại client** bằng khóa công khai RSA của server, server giải bằng khóa riêng rồi kiểm (5.3). `private_key` chỉ lo phần API |
+| Cấu trúc code | Giữ `Api` / `Business` / `DataAccess` / `Models` / `Security` / `Provider`. Provider ADO.NET giữ, không bắt buộc Dapper |
 
 ---
 
@@ -26,14 +38,14 @@
 
 | Thành phần | Hiện trạng | Hướng xử lý |
 |---|---|---|
-| `Api` | `AuthController`, `QueryController` (`POST api/query/{name}`), middleware log và rate limit, xác thực JWT tự viết | Giữ khung, đổi route (mục 4) |
+| `Api` | `AuthController`, `QueryController` (`POST api/query/{name}`), middleware log và rate limit, xác thực JWT tự viết | Giữ khung, đổi route (mục 4). Bổ sung Serilog, HybridCache, RateLimiter tích hợp, Health Checks |
 | `Business` | `FormManager`, `FormMethodBase`/`FormMethodCache`, `ResponseManager` (phân trang), `AuthManager`, `LogManager` | Giữ cách chia lớp. Viết lại phân trang và log |
-| `DataAccess` | `FormRepository` (đọc XML `<form>`, dựng `#struct`, sinh script reference/check, chạy Checking rồi Processing), `UserRepository`, `CacheRepository` (file JSON + `restApiCache`), `LogRepository` | Đổi bộ đọc XML sang `<import>`. User theo `userinfo2`. Cache sang Redis |
-| `Models` | `Form`, `Struct`, `Field`, `FieldReference`, `FieldCheck`, `Message`, `Update` | Giữ, bổ sung `Shape`, `Paging`, `UnitRequired`, `Method` |
-| `App_Data/Options` | `Message.xml` (mã lỗi ↔ HTTP status), `Update.xml` (script cho `reference`), `Irregular.txt` | Giữ nguyên cách làm |
-| `Security` | JWT HS256 (audience = IP), `GenerateAuthKey` (MD5 + `positions` như v2), AES cho mật khẩu | Giữ JWT. Chữ ký đăng nhập đổi sang HMAC-SHA256 |
+| `DataAccess` | `FormRepository` (đọc XML `<form>`, dựng `#struct`, sinh script reference/check, chạy Checking rồi Processing), `UserRepository`, `CacheRepository` (file JSON + `restApiCache`), `LogRepository` | Đổi bộ đọc XML sang `<import>`. User theo `name_erp` → `userinfo2`. Cache danh mục/quyền sang HybridCache; revoke/idempotency trên SQL |
+| `Models` | `Form`, `Struct`, `Field`, `FieldReference`, `FieldCheck`, `Message`, `Update` | Giữ, bổ sung `Paging`, `UnitRequired`, `Verb`. `FieldCheck` đổi sang 4 danh sách song song kiểu Upload. Bỏ `FieldReference`, `Update` |
+| `App_Data/Options` | `Message.xml` (mã lỗi ↔ HTTP status), `Update.xml` (script cho `reference`), `Irregular.txt` | Giữ `Message.xml`, `Irregular.txt`. `Update.xml` không dùng nữa |
+| `Security` | JWT HS256 (audience = IP), `GenerateAuthKey` (MD5 + `positions` như v2), AES cho mật khẩu | Giữ JWT. Thay MD5 bằng SHA-256 checksum + HMAC-SHA256 hai chiều (4.2). AES dùng để mã hóa `private_key` khi lưu |
 | `ApiDocs` | Khung Razor Pages, dữ liệu giả | Thành cổng đối tác |
-| `CallbackWorker` | Worker mẫu | Dành cho callback/notify, ngoài phạm vi đợt này |
+| `CallbackWorker` | Worker mẫu | Callback/notify, ngoài giai đoạn này |
 | `Provider` | ADO.NET tĩnh, đồng bộ, `CommandTimeout` static dùng chung | Chuyển async, timeout theo cấu hình |
 
 ### 1.2. DB dev (đã truy vấn thật)
@@ -41,155 +53,165 @@
 | Kiểm | Kết quả | Ảnh hưởng tới thiết kế |
 |---|---|---|
 | Phiên bản | **SQL Server 2008 R2 RTM** (10.50.1600), Developer Edition | Xem 1.3 |
-| `FSD_Dev_SP229_S..userinfo2` | `id int`, `name char(30)`, `admin tinyint`, `status char(1)`, `password varchar(256)`, cột audit `datetime0/datetime2/user_id0/user_id2`… | `user_id` = `id`. `@@userName` = `RTRIM(name)` |
-| Quyền đơn vị | `sysunitrights(user_id, ma_dvcs char(8), r_new, r_edit, r_del, r_access)` ở DB app. Có sẵn hàm **`dbo.ff_CheckUnitRight(@nUserID, @cMa_dvcs, @cAction)`**, `@cAction` ∈ `New`/`Edit`/`Del`/`Acc` | `restApi_CheckUnitRights` gọi lại hàm này, không tự đặt quy tắc mới |
+| `FSD_Dev_SP229_S..userinfo2` | `id int`, `name char(30)`, `admin tinyint`, `status char(1)`, `password varchar(256)`, cột audit… | `user_id` = `id`. `@@userName` = `RTRIM(name)` |
+| Quyền đơn vị | `sysunitrights(user_id, ma_dvcs char(8), r_new, r_edit, r_del, r_access)`. Có sẵn **`dbo.ff_CheckUnitRight(@nUserID, @cMa_dvcs, @cAction)`**, `@cAction` ∈ `New`/`Edit`/`Del`/`Acc` | `restApi_CheckUnitRights` gọi lại hàm này |
 | Danh mục đơn vị | `dmdvcs.ma_dvcs char(8)` | `unitCode` tối đa 8 ký tự, phải có trong `dmdvcs` |
-| Object `restApi*` đang có | Bảng `restApiUser`, `restApiAllowForm(u_id, form)`, `restApiAllowIp(u_id, ip_address, description)`, `restApiBlackListIp`, `restApiCache`, `restApiLogData`, `restApiLogError`, `restApiLogActivity`, `restApiLogTransfer`, `restApiNotify`, `restApiTransfer`, `restApiUpdate`. Proc `restApi_CheckFormRights`, `restApi_CheckIPAddress`, `restApi_InsertLogData`, `restApi_InsertLogError`, `restApi_RemoveCache`, `restApi_TableDebug` | Giữ nguyên cấu trúc, cách v3 dùng ở mục 3.1 |
+| Object `restApi*` đang có | Bảng `restApiUser`, `restApiAllowForm(u_id, form)`, `restApiAllowIp(u_id, ip_address, description)`, `restApiBlackListIp`, `restApiCache`, `restApiLogData`, `restApiLogError`, `restApiLogActivity`, `restApiLogTransfer`, `restApiNotify`, `restApiTransfer`, `restApiUpdate`. Proc `restApi_CheckFormRights`, `restApi_CheckIPAddress`, `restApi_InsertLogData`, `restApi_InsertLogError`, `restApi_RemoveCache`, `restApi_TableDebug` | Cách v3 dùng ở mục 3.1 |
 
 Hai điểm trong logic quyền hiện tại cần đổi ở v3:
 - `restApi_CheckFormRights` và `restApi_CheckIPAddress`: user **không có dòng nào** trong `restApiAllowForm`/`restApiAllowIp` thì được **mọi form / mọi IP**. v3 đổi sang **mặc định từ chối** với form. Riêng IP vẫn giữ cách "không khai thì cho mọi IP", vì nhiều đối tác không có IP tĩnh.
-- `fsd_GetUnitRight` (có trong DB) có nhánh `@Admin = 0` khi truyền `@Unit` thì trả lại nguyên danh sách đơn vị mà **không kiểm quyền**. v3 không dùng hàm này.
+- `fsd_GetUnitRight` có nhánh `@Admin = 0` khi truyền `@Unit` thì trả nguyên danh sách đơn vị mà **không kiểm quyền**. v3 không dùng hàm này.
 
 ### 1.3. SQL Server 2008 R2 — giới hạn phải tuân theo
-Mọi SQL `restApi*` và câu lệnh do v3 tự sinh phải chạy được trên 2008 R2. Nghĩa là **không dùng**: `OFFSET/FETCH`, `THROW`, `IIF`, `CONCAT`, `FORMAT`, `TRY_CONVERT`, `STRING_SPLIT`, các hàm JSON, `SEQUENCE`. Phân trang SQL dùng `ROW_NUMBER()`, tách chuỗi dùng hàm sẵn có của FBO (vd `fsd_StringToTable`).
+Mọi SQL `restApi*` và câu lệnh v3 tự sinh phải chạy được trên 2008 R2: **không dùng** `OFFSET/FETCH`, `THROW`, `IIF`, `CONCAT`, `FORMAT`, `TRY_CONVERT`, `STRING_SPLIT`, hàm JSON, `SEQUENCE`. Phân trang dùng `ROW_NUMBER()`, tách chuỗi dùng hàm sẵn có của FBO (vd `fsd_StringToTable`).
 
-Rủi ro kết nối: 2008 R2 bản RTM chưa hỗ trợ TLS 1.2. `Microsoft.Data.SqlClient` mới trên Windows Server đã tắt TLS cũ có thể không kết nối được. **SQL Server 2008 là bản thấp nhất ở khách**, nên giới hạn trên áp dụng cố định.
-
-Đã thử (pha 0, 21/10/2026): .NET 10 + `Microsoft.Data.SqlClient` 6.1.7 kết nối **được** tới DB dev 10.50.1600, cả `Encrypt=True` lẫn `False`, nhưng **phải hạ xuống TLS 1.0** (SqlClient in cảnh báo). Checklist deploy cho khách dùng SQL 2008/2008 R2: hoặc cài bản vá TLS 1.2 cho SQL Server (2008 R2 SP3 + bản cập nhật TLS 1.2), hoặc máy chạy API phải còn bật TLS 1.0 phía client. Máy đã tắt TLS 1.0 mà SQL chưa vá thì sẽ không kết nối được.
+Đã thử (pha 0, 21/10/2026): .NET 10 + `Microsoft.Data.SqlClient` 6.1.7 kết nối **được** tới 10.50.1600, cả `Encrypt=True` lẫn `False`, nhưng **phải hạ xuống TLS 1.0**. Checklist deploy cho SQL 2008/2008 R2: cài bản vá TLS 1.2 cho SQL Server (2008 R2 SP3 + bản cập nhật TLS 1.2), hoặc máy chạy API còn bật TLS 1.0 phía client.
 
 ### 1.4. Lỗi cần sửa trước khi đưa cho đối tác
 
-| # | Mức độ | Vấn đề | Vị trí |
-|---|---|---|---|
-| 1 | **Nghiêm trọng** | `Api/appsettings.json` chứa connection string (gồm mật khẩu SQL) và `secretKey` ký JWT, **đã commit và push lên GitHub** | `Api/appsettings.json` |
-| 2 | **Nghiêm trọng** | SQL injection: header `unit` ghép thẳng vào SQL (`'{request.unit}'`) | `FormRepository.ReplaceDefaultVaraible` |
-| 3 | **Nghiêm trọng** | SQL injection: `path`, `ip`, `userName` ghép chuỗi vào `insert #logData`/`#logError` | `LogRepository` |
-| 4 | Cao | `GetScriptUpdate`/`GetScriptCheck` sửa `form.Queries` của form đang cache dùng chung, `GetTypeByName` sửa `field.MaxLength`/`Type` trên mỗi request → các request đồng thời ghi đè lên nhau | `FormRepository`, `FormMethodBase` |
-| 5 | Cao | `@@update({i})` thay theo số thứ tự vòng lặp, không theo `index` khai trong XML | `FormRepository` |
-| 6 | Trung bình | Log ghi SQL đồng bộ trong middleware, đệm cả response vào `MemoryStream` | `LogMiddleware` |
-| 7 | Trung bình | Rate limit và chống replay đăng nhập nằm trong RAM từng instance, đọc rồi ghi không nguyên tử. Mỗi request đều gọi proc kiểm IP | `RateLimitManager`, `AuthController` |
-| 8 | Thấp | `Api/Log/*.json` (request/response thật) đang được commit | `.gitignore` |
-| 9 | Thấp | Checksum body là MD5 không khóa → không chống được sửa nội dung | `QueryController` |
-
-Lỗi #1 xử lý ngay: đổi mật khẩu SQL và `secretKey`, đưa bí mật ra biến môi trường/user-secrets, gỡ file khỏi git. Lịch sử git vẫn giữ giá trị cũ, nên bước đổi mật khẩu là bắt buộc.
+| # | Mức độ | Vấn đề | Vị trí | Sửa ở pha |
+|---|---|---|---|---|
+| 1 | **Nghiêm trọng** | Connection string và `secretKey` JWT đã commit lên GitHub | `Api/appsettings.json` | 0 (xong phần code; còn đổi mật khẩu) |
+| 2 | **Nghiêm trọng** | SQL injection: header `unit` ghép thẳng vào SQL | `FormRepository.ReplaceDefaultVaraible` | 3 |
+| 3 | **Nghiêm trọng** | SQL injection: `path`, `ip`, `userName` ghép chuỗi vào `#logData`/`#logError` | `LogRepository` | 1 |
+| 4 | Cao | Request sửa `form.Queries`, `field.MaxLength`/`Type` của form đang cache dùng chung → request đồng thời ghi đè nhau | `FormRepository`, `FormMethodBase` | 3 |
+| 5 | Cao | `@@update({i})` thay theo số thứ tự vòng lặp, không theo `index`. v3 bỏ `@@update`; `@@checking(n)` phải tránh lại lỗi này | `FormRepository` | 3 |
+| 6 | Trung bình | Log ghi SQL đồng bộ trong middleware, đệm cả response | `LogMiddleware` | 5 |
+| 7 | Trung bình | Rate limit, chống replay đăng nhập trong RAM, đọc rồi ghi không nguyên tử; mỗi request gọi proc kiểm IP | `RateLimitManager`, `AuthController` | 1, 2 |
+| 8 | Thấp | `Api/Log/*.json` đang được commit | `.gitignore` | 0 (xong) |
+| 9 | Thấp | Checksum body là MD5 không khóa | `QueryController` | 2 |
 
 ---
 
 ## 2. Định nghĩa API bằng XML (`<import>` mở rộng)
 
-### 2.1. Ví dụ `App_Data/Form/sale-invoice.post.xml`
+### 2.1. Ví dụ `App_Data/Form/setSaleInvoice.xml`
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE import [ <!ENTITY IrregularValue SYSTEM "..\Options\Irregular.txt"> ]>
+<!DOCTYPE import [
+  <!ENTITY And "&#13;">
+  <!ENTITY IrregularValue SYSTEM "..\Options\Irregular.txt">
+]>
 
-<import xmlns="urn:schemas-fast-com:fast-api" version="3"
-        type="Voucher" voucherCode="HDA" shape="both" unitRequired="true"
+<import xmlns="urn:schemas-fast-com:fast-api"
+        type="Voucher" voucherCode="HDA" unitRequired="true"
         description="Hóa đơn bán hàng">
 
   <fields name="master" table="m81$000000" key="YourID">
     <field name="YourID"      fastName="id_doitac" type="string" maxLength="36" allowNull="false" isPrimaryKey="true"/>
     <field name="VoucherDate" fastName="ngay_ct"   type="datetime" format="dd/MM/yyyy" allowNull="false"/>
-    <field name="CustomerID"  fastName="customer_id" type="string" maxLength="36" allowNull="false">
-      <reference controller="Customer" fastName="ma_kh" index="0"/>
-    </field>
+    <field name="CustomerID"  fastName="ma_kh" allowNull="false" upperCase="true" category="1"
+           check="ma_kh not in (select ma_kh from dmkh where status = '1')"
+           errorCode="CUSTOMER_NOT_FOUND"/>
     <field name="SaleEmployee" fastName="ma_nvbh" checkIrregular="true"/>
-    <field name="ma_kh" hidden="true"/>
   </fields>
 
   <fields name="detail" table="d81$000000">
-    <field name="ItemID"    fastName="item_id" type="string" maxLength="36" allowNull="false">
-      <reference controller="Item" fastName="ma_vt" index="1"/>
-    </field>
-    <field name="Promotion" fastName="km_yn" type="int" defaultValue="0">
-      <check condition="km_yn not in (0, 1, 2, 3)" errorCode="INVALID_FIELD" index="0"/>
-    </field>
+    <field name="ItemID"    fastName="ma_vt" allowNull="false" upperCase="true" category="2"
+           check="ma_vt not in (select ma_vt from dmvt where status = '1')"
+           errorCode="ITEM_NOT_FOUND"/>
+    <field name="Promotion" fastName="km_yn" type="int" defaultValue="0" category="2"
+           check="km_yn not in (0, 1, 2, 3)" errorCode="INVALID_FIELD"/>
     <field name="Quantity"  fastName="so_luong" type="numeric"/>
   </fields>
 
-  <query action="checking"><text><![CDATA[ @@update(0) @@checking(0) @@update(1) ]]></text></query>
+  <query action="checking"><text><![CDATA[ @@checking(1) @@checking(2) ]]></text></query>
   <query action="processing"><text><![CDATA[ exec restApi_ProcessDataFor_m81 @@voucherCode, @@unit, @@userId ]]></text></query>
 </import>
 ```
-Khối `detail` không cần khai `YourID`: khóa `key` của khối gốc được tự thêm vào mọi khối con (cột `id_doitac` trong `#detail`), để query nối `#master` với `#detail`.
+Khối `detail` không cần khai `YourID`: khóa `key` của khối gốc được tự thêm vào mọi khối con, để query nối `#master` với `#detail`.
+
+Đối tác gửi **mã FBO** (`ma_kh`, `ma_vt`) như khi Upload Excel; API chỉ kiểm mã tồn tại. Đối tác bắt buộc gửi mã của họ (`id_doitac`) thì khai cột riêng và tự tra ra mã FBO trong query `checking`, trước `@@checking(n)`.
 
 ### 2.2. Thuộc tính
 
 | Phần tử | Thuộc tính | Ý nghĩa |
 |---|---|---|
-| `import` | `version` | `3` = định dạng v3. Không khai = file v2, chạy chế độ tương thích (2.4) |
-| | `type` | `List` / `Voucher` / `Report` / `Transfer` |
+| `import` | `type` | `List` / `Voucher` / `Report` / `Transfer` |
 | | `voucherCode` | Mã chứng từ |
-| | `shape` | `object` / `flat` / `both` (mặc định `both`), chỉ áp dụng cho POST |
-| | `unitRequired` | `true` → bắt buộc `?unitCode=`, thiếu thì trả `UNIT_REQUIRED`. Mặc định `false`. Có gửi `unitCode` thì luôn bị kiểm quyền, dù `unitRequired` là gì |
+| | `unitRequired` | `true` → bắt buộc `?unitCode=`, thiếu thì `UNIT_REQUIRED`. Mặc định `false`. Có gửi `unitCode` thì luôn bị kiểm quyền |
+| | `unitAction` | Quyền đơn vị cần kiểm: `Acc`/`New`/`Edit`/`Del`. Không khai thì suy từ động từ (3.2) |
 | | `enable`, `description` | Bật/tắt, mô tả trên portal |
-| `fields` | `name` | Tên khối = tên thuộc tính trong JSON object = bảng tạm `#<name>`. Khối đầu tiên là **khối gốc**. Không khai thì là `_data` → `#_data` như v2 |
-| | `table` | Bảng FBO thật mà khối đổ vào. Có khai thì kiểu và độ rộng lấy từ cột thật (2.3) |
-| | `key` | Chỉ khai ở khối gốc. Khóa nối khối gốc với khối con, và dùng để gộp dòng khi nhận JSON phẳng |
+| `fields` | `name` | Tên khối = tên thuộc tính JSON = bảng tạm `#<name>`. Khối đầu tiên là **khối gốc** |
+| | `table` | Bảng FBO thật. Có khai thì kiểu và độ rộng lấy từ cột thật (2.3) |
+| | `key` | Chỉ khai ở khối gốc. Khóa nối khối gốc với khối con |
 | `field` | `name`, `fastName`, `type`, `maxLength`, `allowNull`, `isPrimaryKey`, `upperCase`, `hidden`, `defaultValue`, `justContent`, `checkIrregular` | Giữ nguyên tên thuộc tính của v2 |
-| | `type` | v2: `string`, `numeric`, `datetime`, `bool`. Thêm: `int`, `unixtime` |
+| | `type` | `string`, `numeric`, `datetime`, `bool`, `int`, `unixtime` |
 | | `format` | Định dạng ngày nhận vào. Luôn nhận thêm ISO 8601 |
 | | `description`, `example` | Hiện trên portal |
-| `reference` | `controller`, `fastName`, `index` | Tra mã FBO từ mã đối tác theo `Options/Update.xml`, chèn vào `@@update(index)` |
-| `check` | `condition`, `errorCode`, `index` | Điều kiện SQL trên `#<khối>`, chèn vào `@@checking(index)`, lỗi lấy từ `Message.xml` |
-| `query` | `action` | `checking` (trả bảng lỗi thì dừng) rồi `processing`. `<query>` không khai `action` = `processing` (dạng v2) |
+| | `check`, `condition`, `tag`, `errorCode` | **Như Upload FBO**: 4 danh sách song song ngăn bằng `&And;`. `check` là mệnh đề SQL trên `#<khối>`, **đúng = lỗi**. `condition`/`tag` là SQL mở/đóng bọc quanh mệnh đề cùng vị trí. `errorCode` là mã trong `Message.xml`. Số phần tử 4 danh sách phải bằng nhau, lệch thì lỗi lúc nạp XML |
+| | `category` | `@@checking(N)` chỉ chạy field có `category="N"`; `@@checking` không số chạy mọi field. Đã dùng `@@checking(N)` mà field không khai `category` thì nạp XML cảnh báo |
+| `query` | `action` | `checking` (có lỗi thì dừng) rồi `processing`. Không khai `action` = `processing` |
 | `paging` | `pageSize`, `key` | Mục 4.4 |
 
 ### 2.3. Kiểu dữ liệu và độ rộng
 
 | Kiểu XML | Cột bảng tạm khi khối có `table` | Khi khối không có `table` |
 |---|---|---|
-| `string` | Đúng kiểu cột thật (`char(8)`, `nvarchar(128)`…) | `NVARCHAR(maxLength)`, không có thì `NVARCHAR(MAX)` |
-| `numeric` | Đúng `numeric(p,s)` của cột | `NUMERIC(30,12)` (như v2) |
+| `string` | Đúng kiểu cột thật | `NVARCHAR(maxLength)`, không có thì `NVARCHAR(MAX)` |
+| `numeric` | Đúng `numeric(p,s)` của cột | `NUMERIC(30,12)` |
 | `int` | `INT` | `INT` |
 | `datetime`, `unixtime` | Đúng `datetime`/`smalldatetime` của cột | `DATETIME` |
 | `bool` | `BIT` | `BIT` |
 
-- `maxLength` khai lớn hơn cột thật → cảnh báo khi nạp XML, dữ liệu được kiểm theo độ rộng cột thật.
-- Cấu trúc cột đọc **một lần khi nạp XML**, file đổi thì nạp lại.
+`maxLength` lớn hơn cột thật → cảnh báo khi nạp XML, kiểm theo cột thật. Cấu trúc cột đọc **một lần khi nạp XML**, file đổi thì nạp lại.
 
-### 2.4. Chạy file XML v2
-File không có `version="3"`: một khối `_data`, một query. Kiểu dữ liệu và thứ tự kiểm tra (`Hidden`, `justContent`, `MaxLength`, numeric, bool) y như v2. JSON đi qua bản chuyển sang C# của `JsonFlattener` v2. Bộ Parity (mục 6) bảo đảm cùng XML + JSON thì `#_data` giống v2.
+### 2.4. `@@checking` sinh ra gì
+Mỗi bảng tạm `#<khối>` có thêm cột ẩn `_row` và `_parent`. Mỗi mệnh đề `check` thứ *n* được biên dịch **một lần lúc nạp XML** thành:
+```sql
+<condition[n]>
+insert into #errors (block, row_no, parent_no, field, code)
+  select 'detail', _row, _parent, 'ItemID', 'ITEM_NOT_FOUND' from #detail where <check[n]>
+<tag[n]>
+```
+Hết query `checking` mà `#errors` có dòng thì dừng, trả **đủ** lỗi kèm vị trí `[0].detail[2].ItemID`. Mệnh đề tự loại giá trị rỗng như Upload (`ma_kh <> '' and ma_kh not in (…)`).
 
-Tool `Fast.Api.Cli upgrade` chuyển file v2 sang v3: đổi tên theo `resource.method.xml`, gợi ý tách khối gốc và khối con. Người xem lại rồi mới dùng.
+### 2.5. File XML v2
+Không có chế độ chạy file v2. Tool `Fast.Api.Cli upgrade` hỗ trợ chuyển: giữ tên file, gợi ý tách khối gốc/khối con, đổi `<reference>` thành `check` tồn tại mã. Người xem lại rồi mới dùng.
 
-### 2.5. Biến thay thế trong query
-`@@form`, `@@resource`, `@@method`, `@@type`, `@@voucherCode`, `@@userId` (= `userinfo2.id`), `@@userName` (= `RTRIM(userinfo2.name)`), `@@unit`, `@@appDatabaseName`, `@@sysDatabaseName`, `@@primaryKeyList`, `@@primaryKeyListAlias`, `@@update(n)`, `@@checking(n)`, cộng các biến v2 (`@@table`, `@@primaryKey`, `@@key`, `@@checkIrregular`, `$controller`) cho file v2.
+### 2.6. Biến thay thế trong query
+`@@form` (= tên file), `@@resource`, `@@verb`, `@@type`, `@@voucherCode`, `@@userId` (= `userinfo2.id`), `@@userName` (= `RTRIM(userinfo2.name)`), `@@admin`, `@@unit`, `@@appDatabaseName`, `@@sysDatabaseName`, `@@primaryKeyList`, `@@primaryKeyListAlias`, `@@checking`, `@@checking(n)`. Trong `check`, `@@table` = bảng tạm của khối chứa field.
 
-- `@@unit` chỉ được thay **sau khi** `unitCode` đã khớp một mã có trong `dmdvcs` và qua kiểm quyền. Lớp phòng thứ hai: escape `'`.
-- Form được biên dịch **một lần lúc nạp XML** thành bản không đổi. Request không sửa form trong cache nữa (sửa lỗi 1.4 #4, #5).
+- `@@unit` chỉ được thay **sau khi** `unitCode` đã khớp `dmdvcs` và qua kiểm quyền. Lớp phòng thứ hai: escape `'`.
+- Form biên dịch **một lần lúc nạp XML** thành bản không đổi (sửa lỗi 1.4 #4, #5).
 
 ---
 
 ## 3. Cơ sở dữ liệu `restApi*`
 
-**Quy tắc:** object `restApi*` đang có **giữ nguyên cấu trúc**. Object viết mới cũng đặt tên `restApi*` (bảng, view) và `restApi_*` (proc, function). Không gọi hay sửa proc `api_*` của v2. Mọi script tương thích SQL Server 2008, để ở `sql/` của repo, chạy lại không lỗi.
+**Quy tắc:** object `restApi*` đang có giữ nguyên cấu trúc, **trừ** thêm cột `restApiUser.private_key`. Object viết mới đặt tên `restApi*` / `restApi_*`. Không gọi hay sửa proc `api_*` của v2. Mọi script tương thích SQL Server 2008, để ở `sql/`, chạy lại không lỗi.
 
 ### 3.1. Object có sẵn — v3 dùng thế nào
 
 | Object | v3 dùng |
 |---|---|
-| `restApiUser` | Tài khoản API: `name` là tên đăng nhập, `password` (mã hóa) là khóa ký. **Nối với user FBO qua `name_erp = RTRIM(userinfo2.name)`** (đã chốt). Lúc đăng nhập v3 tra ra `userinfo2.id`; đó là `user_id` dùng cho mọi kiểm quyền FBO (`restApi_CheckUnitRights`, `@@userId`). `restApiUser.id` chỉ là khóa nội bộ của các bảng `restApi*` (`u_id`) |
-| `restApiAllowForm(u_id, form varchar(32))` | Quyền theo tài nguyên **và** method: `form` = tên file XML không đuôi, vd `customer.get`, `sale-invoice.post`. Vì `form` rộng 32 nên tên resource tối đa 27 ký tự |
-| `restApiAllowIp`, `restApiBlackListIp` | Giữ nguyên ý nghĩa: `255` = wildcard; user không khai IP thì cho mọi IP |
-| `restApiLogError` + `restApi_InsertLogError` | Giữ, ghi qua tham số (sửa lỗi 1.4 #3 ở phía C#) |
-| `restApiLogData` + `restApi_InsertLogData` | Dùng tới pha 4, sau đó thay bằng bảng log mới (3.2) |
-| `restApiCache` + `restApi_RemoveCache` | v3 không dùng nữa (cache phân trang chuyển sang Redis). Giữ nguyên, không xoá |
+| `restApiUser` | Tài khoản API. **`name` khóa chính** (tên đăng nhập API), **`id` identity** (= `u_id` trong các bảng `restApi*`). **`name_erp = userinfo2.name`** nối sang user FBO. `name` khác `userinfo2.name`, `id` khác `userinfo2.id`: hai bộ định danh độc lập, chỉ nối qua `name_erp`. Lúc đăng nhập tra ra `sysdb..userinfo2.id` làm `user_id` cho mọi kiểm quyền FBO. Script kiểm và sửa khóa chính/identity nếu DB khách khác |
+| `restApiUser.private_key` (**cột mới**) | Khóa bí mật dùng chung giữa đối tác và server cho HMAC-SHA256 (4.2). 256 bit ngẫu nhiên do server sinh. **Lưu dạng mã hóa** (AES-256-GCM, khóa chủ `Security:KeyEncryptionKey` ở biến môi trường / `appsettings.Local.json`), không lưu rõ, không băm (HMAC cần khóa gốc). `nvarchar(512) null`; user chưa có khóa thì không gọi được v3 |
+| `restApiUser.password` | **Mật khẩu đăng nhập portal** (5.3) và đăng nhập kiểu cũ của RestApiCore (`GenerateAuthKey`) tới khi pha 2 thay. Lưu AES giải ngược được (`EncryptionHelper.EncryptString`), từ 23/10/2026 bằng khóa riêng **`appSettings:passwordKey`** (32 ký tự, khác `secretKey`). FastAPI 2.4.7 không đọc bảng này (đã grep). Không dùng cho API v3 (API dùng `private_key`) |
+| `restApiAllowForm(u_id, form varchar(32))` | Quyền theo tên file XML không đuôi, như v2: `getCustomer`, `setSaleInvoice`, `cancelInvoice`. Mỗi động từ là một quyền riêng |
+| `restApiAllowIp`, `restApiBlackListIp` | Giữ nguyên ý nghĩa: `255` = wildcard; không khai IP thì cho mọi IP |
+| `restApiLogError` + `restApi_InsertLogError` | Giữ, ghi qua tham số (sửa lỗi 1.4 #3) |
+| `restApiLogData` + `restApi_InsertLogData` | Dùng tới pha 5, sau đó thay bằng bảng log mới |
+| `restApiCache` + `restApi_RemoveCache` | v3 không dùng. Giữ nguyên, không xoá |
 | `restApiLogActivity`, `restApiLogTransfer`, `restApiNotify`, `restApiTransfer`, `restApiUpdate` | Giữ nguyên, dùng khi tới chức năng tương ứng |
-| `restApi_CheckFormRights`, `restApi_CheckIPAddress` | Giữ nguyên, nhưng v3 chuyển sang `restApi_GetUserRights` (3.2). Lý do: proc cũ cho user **không khai dòng nào** được gọi **mọi form**, còn v3 cần mặc định từ chối; và mỗi request đang tốn hai lượt gọi DB |
+| `restApi_CheckFormRights`, `restApi_CheckIPAddress` | Giữ nguyên; v3 dùng `restApi_GetUserRights` thay thế (mặc định từ chối form, một lượt gọi DB) |
 
 ### 3.2. Object viết mới
 
 | Object | Pha | Nội dung |
 |---|---|---|
-| `restApi_CheckUnitRights` (proc) | 0 | Kiểm `unitCode` theo quyền FBO (bên dưới) |
-| `restApi_GetUserRights` (proc) | 2 | Một lần gọi trả về: thông tin user, `admin` (từ `userinfo2`), danh sách `form` được phép (**không có dòng = không quyền**), danh sách IP cho phép / chặn. Kết quả cache ở Redis |
-| `restApiLogReq`, `restApiLogBody`, `restApiLogAgg`, `restApiLogAttack`, `restApiLogAttackAgg` | 4 | Log mới (mục 5.2): dòng chỉ mục mỏng, body nén loại trùng (`IGNORE_DUP_KEY`), bảng gộp theo phút |
-| `restApi_LogSearch`, `restApi_LogCleanup` | 4 | Xem log từ FBO/portal; dọn log theo lô (SQL 2008 không có `TRUNCATE ... PARTITIONS`) |
+| `restApi_CheckUnitRights` (proc) | 0 (xong) | Kiểm `unitCode` theo quyền FBO (bên dưới) |
+| `ALTER restApiUser ADD private_key` (script) | 1 | Thêm cột nếu chưa có; kiểm `name` là khóa chính, `id` identity |
+| `restApi_GetUserRights` (proc) | 1 | Một lượt trả: thông tin user, `user_id`/`admin` từ `userinfo2` qua `name_erp`, `private_key` (mã hóa), form được phép (**không có dòng = không quyền**), IP cho phép/chặn |
+| `restApiRevokedToken` (bảng) | 1 | JWT đã thu hồi: `jti`, `u_id`, `expires_at`. Dọn theo `expires_at` |
+| `restApiIdempotency` (bảng) | 1 | `Idempotency-Key` + `u_id` + SHA256(bản rõ + query) + response, TTL 24 giờ |
+| `restApiLogReq`, `restApiLogBody`, `restApiLogAgg`, `restApiLogAttack`, `restApiLogAttackAgg` | 5 | Log mới (5.2) |
+| `restApi_LogSearch`, `restApi_LogCleanup` | 5 | Xem log; dọn theo lô |
 
 **`restApi_CheckUnitRights @user_id, @unit_code, @action`**
-1. `@unit_code` phải có trong `dmdvcs` với `status = '1'`, nếu không trả `UNIT_NOT_FOUND`.
-2. `userinfo2.admin = 1` → **được mọi đơn vị** (admin là quyền lớn nhất).
-3. Còn lại → `dbo.ff_CheckUnitRight(@user_id, @unit_code, @action)` của FBO, với action theo method: `GET` → `Acc`, `POST` → `New`, `DELETE` → `Del`. POST cập nhật bản ghi có sẵn thì proc nghiệp vụ tự kiểm thêm `Edit`.
+1. `@unit_code` phải có trong `dmdvcs` với `status = '1'`, không thì `UNIT_NOT_FOUND`.
+2. `userinfo2.admin = 1` → được mọi đơn vị.
+3. Còn lại → `dbo.ff_CheckUnitRight`. `@action` lấy từ `unitAction`; không khai thì theo động từ: `get` → `Acc`, `set` → `New`, `delete` → `Del`, động từ khác → `Edit`.
 
 ---
 
@@ -197,102 +219,217 @@ Tool `Fast.Api.Cli upgrade` chuyển file v2 sang v3: đổi tên theo `resource
 
 ### 4.1. Route
 
-| Method | Đường dẫn | File XML / việc |
+| Method | Đường dẫn | Việc |
 |---|---|---|
 | `POST` | `/api/v3/auth/token` | Lấy JWT |
-| `POST` | `/api/v3/auth/revoke` | Thu hồi JWT (đưa `jti` vào Redis tới khi hết hạn) |
-| `GET` | `/api/v3/{resource}?unitCode=&…` | `{resource}.get.xml`, tham số lọc lấy từ query string |
-| `GET` | `/api/v3/{resource}?cursor=…&page=n` | Trang `n` của kết quả đã truy vấn |
-| `POST` | `/api/v3/{resource}?unitCode=` | `{resource}.post.xml`, body JSON |
-| `POST` | `/api/v3/{resource}?unitCode=&dryRun=true` | Chạy hết `checking`, không chạy `processing`, rollback |
-| `GET` | `/api/v3/_meta/resources` | Tài nguyên và method user được cấp quyền |
-| `GET` | `/api/v3/_meta/resources/{resource}/{method}` | Định nghĩa khối, field, mẫu JSON |
-| `GET` | `/health/live`, `/health/ready` | Cho load balancer. `ready` kiểm SQL + Redis |
+| `POST` | `/api/v3/auth/revoke` | Thu hồi JWT |
+| `POST` | `/api/v3/{resource}` | `set{Resource}.xml` |
+| `POST` | `/api/v3/{resource}/{verb}` | `{verb}{Resource}.xml`: `getCustomer` → `/customer/get`, `deleteInvoice` → `/invoice/delete`, `cancelInvoice` → `/invoice/cancel` |
+| `GET` | `/api/v3/_meta/server` | Giờ server (để client đồng bộ timestamp), phiên bản chữ ký, **khóa công khai RSA dùng cho đăng nhập portal** (JWK + `kid`). Không cần token |
+| `POST` | `/api/v3/auth/portal` | Đăng nhập portal bằng `name` + mật khẩu đã mã hóa (5.3). Trả JWT phạm vi `portal`, chỉ gọi được `_meta` |
+| `GET` | `/api/v3/_meta/resources` | Tài nguyên và động từ user được cấp quyền |
+| `GET` | `/api/v3/_meta/resources/{form}` | Định nghĩa khối, field, mẫu JSON |
+| `GET` | `/health/live`, `/health/ready` | Giám sát. `ready` kiểm SQL + thư mục log |
 
-- `resource` viết thường, nối bằng gạch ngang, chỉ nhận `[a-z0-9-]`, không phân biệt hoa thường.
-- Có file nhưng sai method → `405` kèm `Allow`. Không có file → `404`.
-- Đối chiếu v2: `setCustomers` → `customer.post.xml`, `getPayableReport` → `payable-report.get.xml`.
+Tham số điều khiển:
 
-### 4.2. Xác thực và phân quyền
-- **Lấy token:** `{ "userName": "NGUYENTDH", "time": 1792574400, "signature": hex(HMAC-SHA256(pri_key, "NGUYENTDH.1792574400")) }`, `userName` = `restApiUser.name`. Lệch giờ tối đa `ClockSkewSeconds`. Kiểm `restApiUser.status`; `name_erp` phải khớp một dòng `userinfo2` có `status = '1'`, không khớp thì từ chối; kiểm IP; khoá đăng nhập sai nhiều lần qua Redis. Trả JWT: `sub` = `restApiUser.name`, claim `u_id` = `restApiUser.id`, `user_id` = `userinfo2.id`, `name_erp`, `jti`.
-- **Gọi API:** `Authorization: Bearer <jwt>`.
-- **HMAC theo request** (user được bật ký theo request; cột cờ đặt ở đâu chốt cùng mục 8): `X-Fast-Timestamp`, `X-Fast-Nonce`, `X-Fast-Signature = hex(HMAC-SHA256(pri_key, METHOD\nPATH?QUERY\nTIMESTAMP\nNONCE\nhex(SHA256(body))))`. Nonce lưu Redis `SET NX EX`. Thay header `checksum` MD5. `unitCode` nằm trong query string nên được ký cùng.
-- **Thứ tự kiểm:** user còn hiệu lực → IP (`restApiBlackListIp`, `restApiAllowIp`) → `restApiAllowForm` (`form` = `resource.method`) → `unitRequired`/`unitCode` → `restApi_CheckUnitRights`. Kết quả cache Redis vài phút. Admin đổi quyền thì publish lệnh xoá cache.
+| Tham số | Đi bằng | Ý nghĩa |
+|---|---|---|
+| `unitCode` | query | Đơn vị |
+| `dryRun` | query | Chạy hết `checking`, không chạy `processing`, rollback |
+| `cursor`, `page` | query | Phân trang (4.4) |
+| `Idempotency-Key` | header | Chống ghi trùng (4.3) |
 
-### 4.3. Request POST: object / flat / both
+**Tách tên file thành động từ + resource** (lúc nạp XML):
+- Động từ = đoạn chữ thường đầu tên file; **chấp nhận mọi tiền tố chữ thường** (`get`, `set`, `delete`, `cancel`, `post`, `approve`…), không có danh sách cố định. Resource = phần còn lại, PascalCase → kebab-case: `setSaleInvoice` → `sale-invoice`. Không tự bỏ số nhiều.
+- `set` → `POST /{resource}`, động từ khác → `POST /{resource}/{verb}`. Không dùng `GET`/`DELETE` cho nghiệp vụ vì mọi động từ đều cần body.
+- Hai file ra cùng route hoặc tên không tách được → lỗi lúc nạp, bỏ qua file, ghi log.
+- URL không phân biệt hoa thường, chỉ nhận `[a-z0-9-]`. Sai method → `405` (`Allow: POST`). Không có resource/động từ → `404`.
 
-**object** — **một chứng từ**: khối gốc là object, khối con là mảng. Không cần lặp `YourID` ở dòng con:
+### 4.2. Bảo mật thông điệp: SHA-256 + HMAC-SHA256 hai chiều
+
+#### 4.2.1. Mục tiêu và giới hạn
+
+| Yêu cầu | Cơ chế |
+|---|---|
+| **Toàn vẹn** request: body, query, tham số header không bị sửa | SHA-256 checksum body + HMAC-SHA256 trên chuỗi chuẩn hóa |
+| **Xác thực** client: request đúng do đối tác gửi | HMAC-SHA256 với khóa chỉ đối tác và server biết (`private_key`) |
+| **Xác thực** server: response đúng do server tạo, không bị sửa | HMAC-SHA256 trên response (chiều ngược lại) |
+| **Chống phát lại** | Timestamp + nonce, nonce lưu HybridCache |
+
+**Giới hạn phải ghi rõ với khách:**
+- SHA-256 và HMAC **không mã hóa**. Ai bắt được gói tin trên HTTP vẫn đọc được dữ liệu. Bí mật nội dung do HTTPS/TLS đảm nhận; triển khai cho khách khuyến nghị bắt buộc HTTPS.
+- HMAC dựa trên khóa dùng chung: cả client lẫn server đều tạo được HMAC hợp lệ, nên **không chống chối bỏ** như chữ ký số bất đối xứng. Log chứng minh được "request khớp khóa của đối tác", không chứng minh được với bên thứ ba rằng chỉ đối tác mới tạo được.
+
+#### 4.2.2. Bốn loại checksum/chữ ký
+
+| Thành phần | Công thức | Mục đích |
+|---|---|---|
+| Request checksum | `SHA256(rawBody)` | Tóm tắt chính xác byte body |
+| Request signature | `HMAC-SHA256(K_request, canonicalRequest)` | Xác thực client và toàn vẹn request |
+| Query/cache fingerprint | `SHA256(canonicalQuery)` | Cache key ổn định (cursor, idempotency) |
+| Response signature | `HMAC-SHA256(K_response, canonicalResponse)` | Xác minh response do server tạo |
+
+**Khóa.** Hai khóa dẫn xuất từ cùng `private_key`, tách mục đích để chữ ký request không dùng lại được làm chữ ký response:
+```
+K_request  = HMAC-SHA256(private_key, "FAST-API-V3-REQUEST")
+K_response = HMAC-SHA256(private_key, "FAST-API-V3-RESPONSE")
+```
+- `private_key`: 32 byte ngẫu nhiên (`RandomNumberGenerator`), giao cho đối tác dạng base64 **một lần** qua kênh an toàn (không qua email rõ, không ghi log).
+- Đổi khóa: sinh khóa mới, ghi đè cột, đối tác cập nhật cùng lúc (có cắt ngang ngắn). Đổi khóa không gián đoạn (hai khóa song song) **ngoài phạm vi đợt này**.
+
+#### 4.2.3. Request
+
+```
+POST /api/v3/sale-invoice?unitCode=CTY&dryRun=false
+Authorization: Bearer <jwt>
+Content-Type: application/json
+Idempotency-Key: 6f1c…
+X-Fast-Timestamp: 1792574400
+X-Fast-Nonce: 9b2e4c…              (16–64 ký tự ngẫu nhiên)
+X-Fast-Content-SHA256: 3a7bd3e2…   (hex SHA256 byte thô của body)
+X-Fast-Signature: 5d41402a…        (hex HMAC-SHA256)
+
+{ "master": { … }, "detail": [ … ] }
+```
+
+```
+canonicalRequest =
+  "FAST-HMAC-SHA256"  + "\n" +
+  METHOD              + "\n" +   // POST
+  PATH                + "\n" +   // /api/v3/sale-invoice, viết thường
+  canonicalQuery      + "\n" +   // tham số sắp theo tên (rồi theo giá trị), URL-encode RFC 3986, nối bằng &; không có thì rỗng
+  TIMESTAMP           + "\n" +
+  NONCE               + "\n" +
+  IDEMPOTENCY_KEY     + "\n" +   // không gửi thì rỗng
+  CONTENT_SHA256                 // hex chữ thường; body rỗng = SHA256 của chuỗi rỗng
+```
+
+**Server kiểm theo thứ tự, sai bước nào dừng ở bước đó:**
+1. JWT hợp lệ, `jti` không nằm trong `restApiRevokedToken`. Lấy `u_id` → `private_key` (cache HybridCache, giải mã trong bộ nhớ).
+2. `|now − TIMESTAMP| ≤ ClockSkewSeconds` (mặc định 300). Nonce chưa gặp (HybridCache, TTL 2 × `ClockSkewSeconds`).
+3. Tự tính `SHA256(rawBody)`, so với `X-Fast-Content-SHA256` → sai: `400 CHECKSUM_MISMATCH`.
+4. Tự dựng `canonicalRequest`, tính HMAC bằng `K_request`, so với `X-Fast-Signature` bằng `CryptographicOperations.FixedTimeEquals` → sai: `401 INVALID_SIGNATURE`.
+5. Parse JSON object (4.3) → sai dạng: `400 INVALID_SHAPE`.
+6. Phân quyền: user còn hiệu lực → IP → `restApiAllowForm` → `unitRequired`/`unitCode` → `restApi_CheckUnitRights`. Kết quả cache vài phút; đổi quyền thì xoá cache.
+
+Body đọc **một lần** (buffer có giới hạn `MaxRequestBodySize`), vừa băm vừa giữ để parse. Thay header `checksum` MD5 hiện tại (lỗi 1.4 #9).
+
+#### 4.2.4. Response
+
+```
+HTTP/1.1 200
+Content-Type: application/json
+X-Request-ID: 8c2f…
+X-Fast-Timestamp: 1792574401
+X-Fast-Content-SHA256: …
+X-Fast-Signature: …
+
+{ "code": "SUCCESS", … }
+```
+```
+canonicalResponse =
+  "FAST-HMAC-SHA256-RESPONSE" + "\n" +
+  STATUS            + "\n" +   // 200
+  REQUEST_ID        + "\n" +
+  REQUEST_NONCE     + "\n" +   // nonce của request tương ứng
+  TIMESTAMP         + "\n" +
+  CONTENT_SHA256
+```
+- Gắn `REQUEST_NONCE` để response cũ không phát lại được cho request khác.
+- Lỗi **trước bước 1** (thiếu/sai JWT, user không tồn tại): chưa biết khóa của ai nên **không ký**, chỉ trả `code`, `message` chung, `request_id`. Client coi response không ký là lỗi xác thực, không tin nội dung.
+
+#### 4.2.5. Lấy token
+
+`POST /api/v3/auth/token`, không có `Authorization`, có thêm header `X-Fast-User: <restApiUser.name>`. Ký y như 4.2.3, body `{ "userName": "<restApiUser.name>" }` phải khớp `X-Fast-User`. Server kiểm `restApiUser.status`, `name_erp = userinfo2.name` khớp một dòng `status = '1'`, IP, khoá đăng nhập sai nhiều lần (HybridCache). Response ký như 4.2.4, chứa `{ "accessToken": "<jwt>", "expiresIn": 3600 }`. JWT: `sub` = `restApiUser.name`, claim `u_id` = `restApiUser.id`, `user_id` = `sysdb..userinfo2.id`, `name_erp`, `jti`. JWT ký bằng `secretKey` của server (khác `private_key`).
+
+#### 4.2.6. Rate limit
+Middleware ASP.NET Core, partition theo `u_id` (sau xác thực) và theo IP (trước xác thực, cho `auth/token`). In-process, phù hợp một instance.
+
+### 4.3. Body request (chỉ dạng object)
+
 ```json
 { "master": { "YourID": "HD001", "VoucherDate": "21/10/2026", "CustomerID": "KH01" },
   "detail": [ { "ItemID": "VT01", "Quantity": 2 },
               { "ItemID": "VT02", "Quantity": 1 } ] }
 ```
-Nhiều chứng từ một lần: gửi **mảng** các object trên. Dòng con có gửi kèm field khóa thì giá trị phải trùng với khối gốc, khác thì báo lỗi.
-
-**flat** — mỗi dòng chứa field của mọi khối. v3 tách field về đúng khối, gộp dòng khối gốc theo `key`:
-```json
-[ { "YourID": "HD001", "VoucherDate": "21/10/2026", "CustomerID": "KH01", "ItemID": "VT01", "Quantity": 2 },
-  { "YourID": "HD001", "VoucherDate": "21/10/2026", "CustomerID": "KH01", "ItemID": "VT02", "Quantity": 1 } ]
-```
-- `both`: phần tử có thuộc tính trùng tên khối gốc (`master`) → object; ngược lại → flat.
-- Flat: hai dòng cùng `key` mà field khối gốc khác nhau → `INVALID_FLAT_CONFLICT`, chỉ rõ dòng.
-- Kiểm tra gom đủ lỗi, có vị trí (`detail[2].Quantity`), mã lấy từ `Message.xml`.
-- `Idempotency-Key` cho POST: Redis giữ response 24 giờ. Gửi lại đúng key thì nhận lại kết quả cũ; cùng key mà body khác → `409`.
+- Nhiều chứng từ: gửi **mảng** các object trên, tối đa `MaxDocumentsPerRequest`.
+- `get`: body là object tham số lọc theo field của `get{Resource}.xml`, vd `{ "FromDate": "01/10/2026", "ToDate": "31/10/2026" }`.
+- `delete`/`cancel`: thường chỉ khối gốc với field khóa.
+- Dòng con gửi kèm field khóa thì phải trùng khối gốc. Sai dạng → `400 INVALID_SHAPE`.
+- Thuộc tính không khai trong XML → **bỏ qua**, không báo lỗi (đối tác thêm field không làm hỏng tích hợp).
+- Kiểm tra gom đủ lỗi, có vị trí (`[0].detail[2].Quantity`).
+- `Idempotency-Key`: `restApiIdempotency` giữ response 24 giờ. Gửi lại đúng key → nhận kết quả cũ (ký lại cho request mới); cùng key mà body/query khác → `409`.
 
 ### 4.4. Response và phân trang dataset nhiều bảng
 Quy ước dataset do query `processing` trả về:
-- Bảng 0: `code`, `message` (`field`, `condition` khi lỗi), tùy chọn `tables` = danh sách tên bảng dữ liệu, vd `'master,detail,tax'`.
-- Bảng 1..N: dữ liệu. Không khai `tables` thì tên là `data` (1 bảng) hoặc `data1..dataN`.
+- Bảng 0: `code`, `message` (`field`, `condition` khi lỗi), tùy chọn `tables` = danh sách tên bảng, vd `'master,detail,tax'`.
+- Bảng 1..N: dữ liệu. Không khai `tables` thì tên là `data` hoặc `data1..dataN`.
 
 ```json
 { "code": "SUCCESS", "success": true, "message": "", "request_id": "8c2f…",
   "data": { "master": [ … ], "detail": [ … ], "tax": [ … ] },
   "paging": { "cursor": "a1b2…", "page_index": 0, "page_count": 12, "page_size": 100, "total_row_count": 1180 } }
 ```
-Một bảng dữ liệu thì `data` là mảng, như RestApiCore hiện tại.
 
 **Phân trang N bảng** — `<paging pageSize="100" key="stt_rec"/>`:
-1. Cắt theo giá trị `key` của bảng dữ liệu đầu tiên: mỗi trang tối đa `pageSize` giá trị key, kèm mọi dòng cùng key ở các bảng khác. Một chứng từ không bị tách sang hai trang.
+1. Cắt theo giá trị `key` của bảng dữ liệu đầu tiên; mỗi trang kèm mọi dòng cùng key ở các bảng khác. Một chứng từ không bị tách sang hai trang.
 2. Bảng không có cột `key` chỉ trả ở trang 0.
-3. Kết quả nén lưu Redis theo trang (TTL `CursorTtlMinutes`), instance nào cũng trả được. Bỏ cache file JSON và `restApiCache`.
-4. Không khai `<paging>` thì trả hết một lần, có trần `MaxRowsWithoutPaging`.
+3. Kết quả nén lưu HybridCache theo trang, cache key có `u_id` + `form` + `unitCode` + `SHA256(canonicalQuery)` + SHA256(body). TTL `CursorTtlMinutes`. Recycle → `CURSOR_EXPIRED`.
+4. Không khai `<paging>` thì trả hết, có trần `MaxRowsWithoutPaging`.
 5. `Transfer`: chỉ đánh dấu đã chuyển các dòng của trang đã trả.
 
-Mã mới thêm vào `Message.xml`: `METHOD_NOT_ALLOWED` (405), `NOT_FOUND` (404), `UNIT_REQUIRED` (400), `UNIT_NOT_FOUND` (400), `UNIT_DENIED` (403), `INVALID_FLAT_CONFLICT` (400), `IDEMPOTENCY_CONFLICT` (409), `CURSOR_EXPIRED` (404), `INVALID_SIGNATURE` (401).
+Mã mới trong `Message.xml`: `METHOD_NOT_ALLOWED` (405), `NOT_FOUND` (404), `UNIT_REQUIRED` (400), `UNIT_NOT_FOUND` (400), `UNIT_DENIED` (403), `INVALID_SHAPE` (400), `CHECKSUM_MISMATCH` (400), `INVALID_SIGNATURE` (401), `TIMESTAMP_EXPIRED` (401), `NONCE_REUSED` (401), `IDEMPOTENCY_CONFLICT` (409), `CURSOR_EXPIRED` (404), cùng các mã nghiệp vụ dùng trong `errorCode` của `check`.
 
 ---
 
-## 5. Redis, log, portal
+## 5. Trạng thái in-process, log, portal
 
-### 5.1. Redis (Garnet)
+### 5.1. Phân bổ trạng thái (không Redis)
 
-| Khoá | Dùng cho |
+| Dữ liệu | Nơi lưu |
 |---|---|
-| `fa3:{env}:user:{id}` | `restApiUser`, quyền form, IP, quyền đơn vị |
-| `fa3:{env}:jti:{jti}` | JWT đã thu hồi |
-| `fa3:{env}:nonce:{user}:{nonce}` | Chống replay HMAC |
-| `fa3:{env}:rl:{ip}`, `:rlu:{user}` | Rate limit (Lua, nguyên tử) |
-| `fa3:{env}:lock:{user}` | Khoá đăng nhập sai nhiều lần |
-| `fa3:{env}:cur:{cursor}:{page}` | Trang kết quả đã nén |
-| `fa3:{env}:idem:{user}:{key}` | Response theo `Idempotency-Key` |
-| List `fa3:{env}:log` + `fa3:{env}:log:proc:{instance}` | Hàng đợi log tin cậy: `RPUSH` vào `log`; worker `LMOVE` sang `proc:{instance}`, ghi SQL xong mới `DEL`. Khởi động lại thì xử lý tiếp phần còn trong `proc:{instance}`. `LTRIM` giữ trần `LogQueueMax` |
-| `fa3:{env}:job:{name}` | Khoá chạy job trên 1 instance |
+| Quyền user, IP, `private_key` đã giải mã | `HybridCache` memory-only, TTL ngắn |
+| Rate limit | ASP.NET Core Rate Limiting (in-process) |
+| JWT đã thu hồi (`jti`) | SQL `restApiRevokedToken` |
+| Nonce / khoá đăng nhập sai | HybridCache + TTL |
+| `Idempotency-Key` | SQL `restApiIdempotency` |
+| Cursor phân trang | HybridCache + TTL |
+| Hàng đợi log | `Channel` → `BackgroundService` → SQL; lỗi → spool file |
+| `private_key` | SQL, mã hóa bằng `Security:KeyEncryptionKey` |
+| Cặp khóa RSA đăng nhập portal | Khóa riêng: tệp PFX ngoài thư mục release (mật khẩu ở biến môi trường) hoặc Windows Certificate Store. Khóa công khai: công bố qua `/_meta/server` |
 
-Redis lỗi: `/health/ready` báo không sẵn sàng; tra user/quyền rơi về SQL; rate limit, nonce, idempotency từ chối an toàn (`503`); log ghi tạm ra file. Garnet bật checkpoint (`-c <thư mục> -r --checkpoint-freq 60`).
-
-**Đã thử trên Garnet 2.2.3 từ .NET (pha 0):** chạy được `PING`, `INFO`, `SET NX EX`, `EVAL` Lua (khi bật `--lua true`), Hash nhị phân, `RPUSH`/`LMOVE`/`BLMOVE`/`LPOP count`/`LREM`/`LTRIM`, `MULTI/EXEC`, `SCAN`, `PUBLISH/SUBSCRIBE`. **Không chạy được**: `XADD`, `XGROUP`, `XREADGROUP`, `XACK` (`ERR unknown command`).
+Quy tắc cache cho ERP: cache key chứa đơn vị và tham số ảnh hưởng kết quả; đổi quyền/dữ liệu thì xoá hoặc tăng version key; không cache công nợ, tồn kho, phân quyền theo cách có thể trả nhầm giữa hai công ty / hai user.
 
 ### 5.2. Log mới
-Middleware gom thông tin rồi `RPUSH` vào List `fa3:{env}:log`, không chờ SQL. `LogWorker` (BackgroundService, mỗi instance một worker) `LMOVE` từng lô sang `log:proc:{instance}`, `SqlBulkCopy` vào các bảng log mới (3.2). SQL lỗi thì ghi spool `.jsonl.gz`, đẩy lại sau. Body nén GZip, loại trùng theo hash. Dọn theo `LogRetentionDays` bằng `restApi_LogCleanup` (xoá theo lô vì SQL 2008 R2 không có `TRUNCATE ... PARTITIONS`). `X-Request-ID` (đã có) = `req_id` để tra log.
+Middleware đẩy vào `Channel`, `LogWorker` ghi theo lô vào bảng log mới qua tham số / bulk copy; SQL lỗi thì spool `.jsonl.gz`. Body nén GZip, loại trùng theo SHA256. Dọn theo `LogRetentionDays` bằng `restApi_LogCleanup`. Log ghi kèm `X-Fast-Content-SHA256`, nonce, timestamp, kết quả kiểm chữ ký; **không** ghi `private_key`, chữ ký HMAC, JWT, connection string.
+
+**Serilog** ghi file chẩn đoán vận hành: rolling theo ngày, giới hạn dung lượng, path ngoài thư mục release. `X-Request-ID` = `req_id` để tra log file và SQL.
 
 ### 5.3. Cổng đối tác (`ApiDocs`)
-Lấy dữ liệu từ `/api/v3/_meta`:
-- **Đăng nhập:** `userId` + `pri_key`. Chữ ký tính trên trình duyệt (WebCrypto), khóa không gửi lên server.
-- **Danh sách tài nguyên** theo quyền, kèm method.
-- **Chi tiết:** các khối và field (tên · kiểu · độ rộng thật · bắt buộc · giá trị cho phép · mô tả), mẫu JSON object và flat, có cần `unitCode` không, có phân trang không.
-- **Gọi thử:** `unitCode`, tham số GET, nút "Kiểm tra" (`dryRun`) và "Gửi thật" (hỏi xác nhận), nút "Trang tiếp".
-- **Code mẫu:** cURL, C#, JavaScript, Python, có cách ký HMAC.
-- **Bảng mã lỗi:** sinh từ `Message.xml`.
+
+**Ai vào được:** mọi tài khoản `restApiUser` còn hiệu lực (`status = '1'`), đăng nhập bằng `name` + `password`. Không có bảng hay cờ riêng.
+
+**Đăng nhập (mật khẩu mã hóa bất đối xứng tại client):**
+1. Trình duyệt lấy khóa công khai RSA của server (`/_meta/server`, ≥ 2048 bit).
+2. Mã hóa bằng WebCrypto `RSA-OAEP` (SHA-256) gói `{ "password": "…", "timestamp": 1792574400, "nonce": "…" }`. Mật khẩu rõ không bao giờ rời trình duyệt, không nằm trong log.
+3. Gửi `POST /api/v3/auth/portal` với `{ "userName": "<restApiUser.name>", "kid": "…", "credential": "<base64 bản mã>" }`.
+4. Server giải bằng khóa riêng theo `kid`, kiểm `timestamp` trong `ClockSkewSeconds` và `nonce` chưa dùng (chống phát lại gói đã bắt được), giải `restApiUser.password` (AES) rồi so bằng `CryptographicOperations.FixedTimeEquals`. Kiểm `status`, IP, khoá sau nhiều lần sai (HybridCache), như `auth/token`.
+5. Trả JWT phạm vi `portal` (claim `scope = portal`), thời hạn ngắn. JWT này **chỉ** gọi được `/_meta/*`; route nghiệp vụ từ chối dù chữ ký đúng.
+
+Server chỉ giữ một cặp khóa RSA cho cả instance, không cần đối tác đăng ký khóa gì. Mã hóa RSA ở đây là lớp thứ hai: portal vẫn phải chạy HTTPS, vì trang portal tải qua HTTP thì kẻ đứng giữa có thể thay cả khóa công khai lẫn script mã hóa.
+
+**Nội dung:**
+- **Danh sách tài nguyên** theo quyền; **chi tiết** khối, field, mẫu JSON, có cần `unitCode`, có phân trang.
+- **Gọi thử:** đối tác dán `private_key` vào ô riêng, chỉ giữ trong bộ nhớ trình duyệt; HMAC tính bằng WebCrypto, khóa không gửi lên server. Có `unitCode`, tham số lọc, "Kiểm tra" (`dryRun`), "Gửi thật" (hỏi xác nhận), "Trang tiếp"; hiện `canonicalRequest` để đối tác so khi debug chữ ký.
+- **Code mẫu:** cURL, C#, JavaScript, Python, Java: tính checksum, ký request, kiểm chữ ký response. Kèm **vector thử cố định** (khóa, body, kết quả mong đợi).
+- **Bảng mã lỗi** sinh từ `Message.xml`.
+
+### 5.4. Cài đặt IIS (gói zero-dependency)
+1. **Preflight:** Windows, IIS, Hosting Bundle, quyền thư mục, port, kết nối SQL (lưu ý TLS ở mục 1.3), dung lượng ổ.
+2. **Cấu hình:** URL, SQL connection, JWT `secretKey`, `KeyEncryptionKey`, đường dẫn log — bí mật ở biến môi trường / `appsettings.Local.json`.
+3. **Deploy:** copy release, App Pool riêng, **HTTPS** (chứng chỉ, binding — đây là lớp mã hóa body), ACL.
+4. **Verify:** `/health/ready`, thử đăng nhập có ký, gọi một form có ký, kiểm log, thử vượt rate limit.
 
 ---
 
@@ -300,45 +437,132 @@ Lấy dữ liệu từ `/api/v3/_meta`:
 
 | Bộ | Nội dung |
 |---|---|
-| Unit | Đọc XML v2/v3, tách object/flat, tự gán khóa cho khối con, kiểm kiểu/độ rộng, dựng `@@update`/`@@checking`, cắt trang N bảng, HMAC |
-| Parity với v2 | Mỗi XML v2 + JSON mẫu: `#_data` của v3 phải giống `api_<control>_tmp` mà v2 ghi ra khi `dev=1`; cùng dữ liệu sai thì cùng bị từ chối. Chạy trong transaction rồi rollback |
-| Integration | DB dev + Garnet: GET/POST, `unitRequired`, `unitCode` sai quyền / không tồn tại, phân trang 3 bảng, idempotency, 2 instance dùng chung Redis |
-| Bảo mật | SQL injection qua `unitCode`, tham số GET, tên resource; replay nonce; JWT đã thu hồi; user không có dòng `restApiAllowForm` |
-| Tải | N instance sau ARR, độ trễ khi bật log và phân trang |
+| Unit | Đọc XML, tách tên file → động từ + resource, JSON object, gán khóa khối con, kiểu/độ rộng, 4 danh sách `check`, `@@checking(n)`, cắt trang N bảng, `canonicalQuery` (sắp xếp, encode, tham số trùng tên), `canonicalRequest`/`canonicalResponse`, dẫn xuất `K_request`/`K_response`, HMAC với **vector cố định** dùng chung cho code mẫu portal |
+| Chuyển đổi v2 | Mỗi XML v2 qua `Fast.Api.Cli upgrade` + JSON mẫu: dữ liệu đúng thì processing nhận cùng bảng tạm như v2; dữ liệu sai thì cùng bị từ chối. Transaction rồi rollback |
+| Integration | DB dev: `POST /{resource}` và `/{verb}` (kể cả `/get`), `GET` vào route nghiệp vụ → `405`, `unitRequired`, `unitCode` sai quyền / không tồn tại, phân trang 3 bảng, idempotency, revoke JWT, recycle → cursor hết hạn, thuộc tính JSON lạ bị bỏ qua, file có động từ tự đặt (vd `approveInvoice` → `/invoice/approve`) |
+| Bảo mật | SQL injection qua `unitCode`, tham số lọc, tên resource; thiếu/sai checksum; sai chữ ký; sửa 1 byte body; đổi `unitCode`/`dryRun` trên query; đổi `Idempotency-Key`; timestamp quá hạn; nonce dùng lại; chữ ký request dùng làm chữ ký response; response cũ phát lại cho request mới; JWT đã thu hồi; user không có `restApiAllowForm`; user chưa có `private_key`; so chữ ký không theo thời gian hằng; portal: gửi mật khẩu rõ, bản mã sai `kid`, phát lại bản mã cũ (`nonce`/`timestamp`), JWT `portal` gọi route nghiệp vụ → bị từ chối, sai mật khẩu nhiều lần → khoá |
+| Tải | Một instance IIS; độ trễ khi bật ký, log, phân trang |
 
 ---
 
-## 7. Lộ trình
+## 7. Roadmap triển khai
 
-| Pha | Việc | Kết quả kiểm được |
-|---|---|---|
-| **0. Dọn nền** | Lỗi 1.4 #1, #8. Nâng .NET 10 và **thử kết nối tới SQL 2008 R2**. Cài Garnet dev. Script `restApi_CheckUnitRights`. Thêm project test | Build sạch .NET 10; đăng nhập bằng user `userinfo2` |
-| **1. XML `<import>`** | Bộ đọc v2 + v3, form biên dịch một lần, kiểu/độ rộng từ DB, `reference`/`check`, object/flat/both, chế độ v2 + Parity | Parity khớp XML v2; `sale-invoice.post.xml` chạy cả hai dạng JSON |
-| **2. Route + bảo mật** | GET/POST theo resource, `unitRequired`/`unitCode` + `restApi_CheckUnitRights`, `restApi_GetUserRights`, HMAC, Redis cho rate limit/nonce/revoke/quyền, sửa lỗi 1.4 #2–#7, `dryRun`, `Idempotency-Key` | Bộ test bảo mật đạt; 2 instance dùng chung trạng thái |
-| **3. Phân trang N bảng** | Quy ước bảng 0 (`tables`), cắt theo key, Redis, `Transfer` theo trang | Báo cáo 3 bảng × 10.000 dòng lấy đủ qua cursor, không tách chứng từ |
-| **4. Log mới** | Middleware → List Redis → worker → `restApiLogReq`…, spool, dọn dữ liệu, `restApi_LogSearch` | Log không làm tăng độ trễ request |
-| **5. Portal** | `ApiDocs` theo 5.3 | Đối tác thử đủ luồng |
-| **6. Phát hành** | Gói deploy (Hosting Bundle, site IIS, dịch vụ Garnet, appsettings mẫu không có bí mật, script SQL), tài liệu đối tác, hướng dẫn chuyển từ v2 | Cài trên bản sao DB khách đang chạy v2: v2 vẫn chạy, v3 chạy song song |
+### 7.1. Tổng quan
 
-Phụ thuộc: 0 → 1 → 2. Sau 2 thì 3, 4, 5 song song. Cuối cùng là 6.
+```
+Pha 0  Dọn nền ─────────────► (xong, còn đổi mật khẩu SQL + secretKey)
+Pha 1  Nền vận hành + DB ───► M1: health, log file, script DB chạy trên DB dev
+Pha 2  Bảo mật HMAC ────────► M2: đăng nhập + gọi API mẫu có ký 2 chiều
+Pha 3  XML engine + route ──► M3: setSaleInvoice / getCustomer chạy thật trên DB dev
+Pha 4  Phân trang N bảng ───┐
+Pha 5  Log mới ─────────────┤  (4, 5, 6 song song sau M3)
+Pha 6  Portal ──────────────┘
+Pha 7  Phát hành + pilot ───► M4: chạy song song v2 trên bản sao DB khách
+```
+Phụ thuộc: 0 → 1 → 2 → 3. Sau 3 thì 4, 5, 6 song song. 7 cuối cùng. Pha 2 làm trước pha 3 để mọi endpoint nghiệp vụ sinh ra đã nằm sau lớp ký, không có giai đoạn chạy không ký.
 
----
+### 7.2. Chi tiết từng pha
 
-## 7.1. Tiến độ pha 0 (21/10/2026, nhánh `v3/phase0`)
+**Pha 0 — Dọn nền** · *Xong 21/10/2026* (chi tiết 7.3)
+- Còn lại (người phụ trách), **đúng thứ tự**:
+  1. Thêm `passwordKey` (32 ký tự ngẫu nhiên) vào `appsettings.Local.json`, giữ nguyên `secretKey` cũ.
+  2. `Fast.Api.Cli rekey-passwords --config Api/appsettings.Local.json` (xem trước) rồi thêm `--apply`.
+  3. Đổi `secretKey` JWT (mọi token cũ mất hiệu lực) và mật khẩu SQL.
+
+**Pha 1 — Nền vận hành zero-dependency + DB**
+| Việc | Đầu ra |
+|---|---|
+| Serilog rolling file, correlation `X-Request-ID` | Log ra `ProgramData\…\Logs` |
+| HybridCache memory-only, RateLimiter ASP.NET Core (bỏ `RateLimitManager` tự viết) | 429 khi vượt ngưỡng |
+| Health Checks `/health/live`, `/health/ready` | `ready` kiểm SQL + thư mục log |
+| `Provider` chuyển async, timeout theo cấu hình; `LogRepository` ghi qua tham số (lỗi 1.4 #3) | Không còn ghép chuỗi trong log |
+| Script SQL: `restApiUser` + `private_key` (kiểm PK `name`, identity `id`), `restApi_GetUserRights`, `restApiRevokedToken`, `restApiIdempotency` | Chạy lại không lỗi trên DB dev (2008 R2) |
+| Lớp `UserRepository` mới: tra `restApiUser` → `name_erp` → `userinfo2` | Lấy đúng `user_id`, `admin` |
+| Bộ PowerShell cài IIS (preflight, App Pool, ACL) | Cài sạch trên máy test |
+
+*Nghiệm thu M1:* `/health/ready` đạt; log ghi file; rate limit trả 429; script DB chạy 2 lần liên tiếp không lỗi.
+
+**Pha 2 — Bảo mật thông điệp HMAC hai chiều**
+| Việc | Đầu ra |
+|---|---|
+| Sinh / mã hóa / giải mã `private_key` (AES-256-GCM, `KeyEncryptionKey`); lệnh quản trị cấp khóa cho user | Khóa lưu mã hóa, hiện cho người cấp đúng một lần |
+| Middleware đọc body một lần, `SHA256(rawBody)`, dựng `canonicalQuery`/`canonicalRequest`, HMAC `K_request`, so thời gian hằng | 400/401 đúng mã lỗi |
+| Timestamp + nonce (HybridCache) | Phát lại → 401 |
+| Ký response `K_response` (mọi response sau khi xác định được user) | Header ký trên mọi response |
+| `auth/token` ký theo `X-Fast-User`, trả JWT có `u_id`, `user_id`, `name_erp`, `jti`; `auth/revoke` | Đăng nhập không còn MD5 |
+| `restApi_GetUserRights` + HybridCache; thứ tự kiểm quyền 4.2.3 bước 6 | Một lượt gọi DB cho quyền |
+| `GET /_meta/server` | Đối tác lấy giờ server |
+| Vector thử cố định + client mẫu C# trong `Tests` | Test ký/kiểm hai chiều xanh |
+
+*Nghiệm thu M2:* đăng nhập và gọi một endpoint mẫu có ký hai chiều, cả HTTP lẫn HTTPS; toàn bộ ca "Bảo mật" ở mục 6 (phần ký) đạt.
+
+**Pha 3 — XML engine + route**
+| Việc | Đầu ra |
+|---|---|
+| Bộ đọc `<import>`, biên dịch form một lần (lỗi 1.4 #4, #5) | Form bất biến trong cache |
+| Tách tên file → động từ + resource, route `POST /{resource}`, `/{resource}/{verb}`, 405/404 | Bảng route lúc khởi động |
+| Kiểu/độ rộng từ cột thật, JSON object → `#<khối>` (`_row`, `_parent`, khóa khối con) | Bảng tạm đúng cấu trúc |
+| `check`/`condition`/`tag`/`errorCode`/`category`, `@@checking(n)`, `#errors` có vị trí | Lỗi trả đủ, đúng vị trí |
+| `unitCode` + `restApi_CheckUnitRights`, `@@unit` sau kiểm quyền (lỗi 1.4 #2) | Không còn ghép header vào SQL |
+| `dryRun`, `Idempotency-Key` | Rollback / trả lại kết quả cũ |
+| `Fast.Api.Cli upgrade` | Chuyển được XML v2 mẫu |
+
+*Nghiệm thu M3:* `setSaleInvoice.xml` và `getCustomer.xml` chạy thật trên DB dev qua lớp ký; bộ "Chuyển đổi v2" đạt.
+
+**Pha 4 — Phân trang N bảng**: quy ước bảng 0 (`tables`), cắt theo key, cursor HybridCache (cache key có fingerprint query), `Transfer` theo trang. *Nghiệm thu:* 3 bảng × 10.000 dòng lấy đủ qua cursor, không tách chứng từ.
+
+**Pha 5 — Log mới**: Middleware → Channel → worker → bảng log mới, spool file, `restApi_LogCleanup`, `restApi_LogSearch`. *Nghiệm thu:* bật log không làm tăng đáng kể độ trễ; SQL tắt thì spool rồi đẩy lại được.
+
+**Pha 6 — Portal**: cặp khóa RSA server (PFX / Certificate Store) + công bố qua `/_meta/server`, `POST /auth/portal` (giải RSA-OAEP, so `password`, chống phát lại), JWT phạm vi `portal`; `ApiDocs` theo 5.3, code mẫu 5 ngôn ngữ dùng chung vector thử. *Nghiệm thu:* một người ngoài nhóm tự tích hợp được một endpoint chỉ bằng portal.
+
+**Pha 7 — Phát hành + pilot**: gói deploy (Hosting Bundle, site IIS, appsettings mẫu không bí mật, script SQL, `Install.ps1`/`Update.ps1`/`Uninstall.ps1`), tài liệu đối tác, hướng dẫn chuyển từ v2, quy trình cấp/đổi `private_key`. *Nghiệm thu M4:* cài trên bản sao DB khách đang chạy v2: v2 vẫn chạy, v3 chạy song song, một đối tác pilot gọi được.
+
+### 7.3. Tiến độ pha 0 (21/10/2026, nhánh `v3/phase0`)
 
 | Việc | Trạng thái |
 |---|---|
-| Gỡ bí mật khỏi git: giá trị thật chuyển sang `Api/appsettings.Local.json` (gitignore), `appsettings.json` của `Api` và `CallbackWorker` để trống, có `appsettings.Local.example.json`. `Program.cs` nạp file Local + biến môi trường, báo lỗi rõ nếu thiếu | Xong. **Còn việc của người phụ trách:** đổi mật khẩu SQL và `secretKey` (giá trị cũ vẫn còn trong lịch sử git) |
+| Gỡ bí mật khỏi git: giá trị thật sang `Api/appsettings.Local.json` (gitignore), có `appsettings.Local.example.json`; `Program.cs` nạp Local + biến môi trường | Xong. **Còn:** đổi mật khẩu SQL và `secretKey` |
 | Bỏ theo dõi `Api/Log/*.json` | Xong |
-| Nâng .NET 8 → 10, cập nhật gói (SqlClient 6.1.7, Hosting/Caching 10.0.13, Jwt 8.23.0, Newtonsoft 13.0.4), ghim `System.Security.Cryptography.Pkcs` 10.0.13 để bỏ 2 lỗ hổng | Xong, build 0 lỗi, không còn cảnh báo lỗ hổng |
-| Thử kết nối SQL 2008 R2 | Xong, kết quả ở mục 1.3 |
-| Project `Tests` (xUnit), 3 test chốt hành vi `EncryptionHelper` | Xong, 3/3 đạt |
-| `sql/restApi_CheckUnitRights.sql`: đọc `admin` qua view chuẩn `vsysuserinfo`, user thường theo `ff_CheckUnitRight` | Xong, đã tạo trên DB dev, thử 10 trường hợp (admin, đơn vị không tồn tại, action sai, user không tồn tại, chuỗi injection, user thường có/không quyền) đều đúng |
-| Cài Garnet cho máy dev | Xong: `dotnet tool install -g garnet-server --version 2.2.3`, chạy bằng `tools/garnet/start-garnet-dev.ps1` (chỉ nghe `127.0.0.1:6379`, bật Lua, checkpoint ở `%LOCALAPPDATA%\Garnet\dev`). Đã thử các lệnh ở 5.1 |
+| Nâng .NET 8 → 10, cập nhật gói, ghim `System.Security.Cryptography.Pkcs` 10.0.13 | Xong, build 0 lỗi, không cảnh báo lỗ hổng |
+| Thử kết nối SQL 2008 R2 | Xong (mục 1.3) |
+| Project `Tests` (xUnit), 3 test `EncryptionHelper` | Xong, 3/3 đạt |
+| `sql/restApi_CheckUnitRights.sql` | Xong, thử 10 trường hợp đều đúng |
+| Garnet cho máy dev | **Hủy** (23/10/2026), đã gỡ `tools/garnet` |
+| Tách khóa mật khẩu (8.1): `appSettings:passwordKey`, Api từ chối khởi động nếu thiếu/trùng `secretKey`; `Fast.Api.Cli rekey-passwords` mã hóa lại `restApiUser.password` (mặc định chạy thử, `--apply` ghi trong một transaction, chạy lại không lỗi); 7 test mới | Xong (23/10/2026). Chạy thử trên DB dev: 1 tài khoản cần mã hóa lại, 2 trống. **Chưa `--apply`** |
+| Kiểm lại 23/10/2026 | Build 0 lỗi (63 cảnh báo nullable có sẵn), test 3/3 đạt, `dotnet list package --vulnerable` sạch, file cấu hình đã commit không còn bí mật |
+
+### 7.4. Ngoài giai đoạn này
+- **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M4.
+- Callback/notify (`CallbackWorker`).
+- Nhiều instance / ARR.
+- Đổi `private_key` không gián đoạn (hai khóa song song, `private_key_next`).
+- Mã hóa body ở tầng ứng dụng, chữ ký số / khóa bất đối xứng cho API: **không làm**, HTTPS lo phần mã hóa. (RSA chỉ dùng cho đăng nhập portal, 5.3.)
+
+---
 
 ## 8. Đã chốt và còn cần chốt
 
-Đã chốt (21/10/2026): tài khoản API nối với user FBO qua `restApiUser.name_erp`; admin `userinfo2.admin = 1` là quyền lớn nhất, được mọi đơn vị; SQL Server 2008 là bản thấp nhất; object `restApi*` giữ nguyên, object mới cũng tên `restApi*`.
+Đã chốt (21/10/2026): tài khoản API nối với user FBO qua `restApiUser.name_erp`; admin `userinfo2.admin = 1` được mọi đơn vị; SQL Server 2008 là bản thấp nhất.
 
-Còn cần chốt:
-1. Cờ bật **ký HMAC theo request** và cờ **cho vào portal** theo user: `restApiUser` giữ nguyên cấu trúc nên cần chỗ khác. Đề xuất bảng mới `restApiUserOption(u_id, hmac_yn, portal_yn)`; cần chốt trước pha 2.
+Đã chốt (23/10/2026): zero-dependency (không Redis/Garnet); một instance IIS; giữ tên file `{động từ}{Resource}.xml`; JSON chỉ dạng object; bỏ `version` và chế độ chạy file v2; `check` kiểu Upload FBO thay `<reference>`; nghiệp vụ chỉ dùng `POST` (`get` → `POST /{resource}/get`); body là object dữ liệu, tham số khác qua query/header; đăng nhập trả JWT.
+
+Đã chốt (23/10/2026, lần cuối): **SHA-256** checksum body, **HMAC-SHA256** xác thực hai chiều, ASP.NET Core Web API trên IIS, SQL Server là nguồn dữ liệu chính; thêm cột `restApiUser.private_key`; `restApiUser.name_erp = userinfo2.name`, `restApiUser.name ≠ userinfo2.name`, `restApiUser.id ≠ userinfo2.id`; truyền tệp ngoài giai đoạn này. Thay thế phương án JWE/JWS trước đó.
+
+Đã chốt (23/10/2026, bổ sung): bỏ khóa bất đối xứng và mã hóa body tầng ứng dụng (`encryptData`), HTTPS lo phần mã hóa body; đổi khóa không gián đoạn ngoài phạm vi đợt này; động từ chấp nhận mọi tiền tố chữ thường; thuộc tính JSON không khai trong XML thì bỏ qua.
+
+Đã chốt (23/10/2026, portal): dùng luôn `restApiUser` cho portal, đăng nhập `name` + `password`; mật khẩu mã hóa tại client, server kiểm bằng cặp khóa bất đối xứng (RSA-OAEP); `private_key` chỉ lo phần API.
+
+Đã chốt (23/10/2026, 8.1): tách khóa mã hóa `password` khỏi `secretKey` JWT. Mật khẩu dùng `appSettings:passwordKey`, mã hóa lại bằng `Fast.Api.Cli rekey-passwords` trước khi đổi `secretKey`. Giữ định dạng AES hiện tại.
+
+Còn cần chốt: không còn mục nào.
+
+---
+
+## Phụ lục A. Truyền tệp (ngoài giai đoạn này)
+
+Thiết kế sơ bộ, chưa làm:
+- Field `type="file"` với `accept`, `maxSize`, `maxCount`. Tệp đi base64 trong JSON: `"Attachment": { "fileName": "hd001.pdf", "content": "JVBERi0x…" }`, nên vẫn nằm trong checksum và chữ ký HMAC.
+- Kiểm loại tệp theo byte đầu (PDF `%PDF`, PNG `89 50 4E 47`, JPG `FF D8 FF`), không tin tên tệp; giới hạn dung lượng; tên tệp chỉ giữ phần tên.
+- Vào SQL qua bảng tạm `#files(block, _row, _parent, field, file_no, file_name, content_type, file_size, sha256, content varbinary(max))` nạp bằng `SqlBulkCopy`; proc nghiệp vụ tự lưu.
+- Động từ `get` khai `responseType="file"` trả `"files": [ { fileName, contentType, sha256, content } ]`.
+- Cần tra trước: FBO lưu đính kèm ở bảng/thư mục nào.
