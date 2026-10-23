@@ -29,6 +29,10 @@ if (appConfig.passwordKey.Length != 32 || appConfig.passwordKey == appConfig.sec
 {
     throw new InvalidOperationException("appSettings:passwordKey phải đúng 32 ký tự và khác secretKey. Mã hóa lại mật khẩu bằng: Fast.Api.Cli rekey-passwords.");
 }
+// Khóa chủ mã hóa restApiUser.private_key (HMAC v3). PrivateKeyProtector báo lỗi nếu không phải base64 32 byte
+appConfig.keyEncryptionKey = builder.Configuration["Security:KeyEncryptionKey"] ?? "";
+var privateKeyProtector = new Security.PrivateKeyProtector(appConfig.keyEncryptionKey);
+
 appConfig.pathDirectory = builder.Environment.ContentRootPath;
 Provider.Provider.Configure(appConfig.commandTimeout);
 
@@ -56,6 +60,10 @@ builder.Services.AddSingleton<Options, OptionsRepository>();
 builder.Services.AddSingleton<LogManager>();
 builder.Services.AddSingleton<ResponseManager>();
 builder.Services.AddSingleton<IpAccessManager>();
+builder.Services.AddSingleton(privateKeyProtector);
+builder.Services.AddSingleton<ISignerKeyStore, SignerKeyStore>();
+builder.Services.AddSingleton<NonceStore>();
+builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddControllers(options =>
 {
@@ -121,6 +129,9 @@ app.UseWhen(IsBusinessRequest, branch =>
     branch.UseMiddleware<IpAccessMiddleware>();
 });
 
+// /api/v3: kiểm chữ ký request, ký response. Đặt ngoài UseExceptionHandler để response lỗi 500 cũng được ký
+app.UseMiddleware<SignatureMiddleware>();
+
 app.UseAuthorization();
 
 app.UseExceptionHandler(builder =>
@@ -148,6 +159,26 @@ app.MapGet("/", () => "REST API");
 // live: tiến trình còn chạy, không kiểm gì. ready: SQL + thư mục log
 app.MapHealthChecks("/health/live", new() { Predicate = _ => false, ResponseWriter = HealthCheckResponse.Writer(appConfig) });
 app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready"), ResponseWriter = HealthCheckResponse.Writer(appConfig) });
+
+// v3 meta: server không cần token, không ký (đồng bộ giờ). ping cần JWT + chữ ký, để đối tác thử ký hai chiều
+app.MapGet("/api/v3/_meta/server", (TimeProvider time) => Results.Json(new
+{
+    serverTime = time.GetUtcNow().ToUnixTimeSeconds(),
+    signatureVersion = Security.MessageSignature.RequestAlgorithm,
+    clockSkewSeconds = appConfig.clockSkewSeconds
+}));
+app.MapPost("/api/v3/_meta/ping", (HttpContext context, TimeProvider time) =>
+{
+    var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;
+    return Results.Json(new
+    {
+        code = "SUCCESS",
+        success = true,
+        message = "",
+        request_id = context.Items["requestID"]?.ToString(),
+        data = new { u_id = signer.UId, name = signer.Name, serverTime = time.GetUtcNow().ToUnixTimeSeconds() }
+    });
+});
 app.MapControllers();
 
 app.Run();

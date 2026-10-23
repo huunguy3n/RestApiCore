@@ -33,10 +33,11 @@ namespace Web.Custom
             {
                 // Validate the token
                 var principal = authManager.AuthenticateToken(token, ipAddress);
+                // Không tự ghi response ở đây: request vẫn đi tiếp, ghi ở đây sẽ bị ghi đè hoặc ghi hai lần.
+                // Route [Authorize] trả 401 qua HandleChallengeAsync, /api/v3 trả 401 ở SignatureMiddleware
                 if (principal == null)
                 {
-                    await ResponseHelper.WriteJsonAsync(Context, _responseManager.GetResponse("UNAUTHORIZED"));
-                    return AuthenticateResult.NoResult();
+                    return AuthenticateResult.Fail("Invalid token");
                 }
 
                 var ticket = new AuthenticationTicket(principal, Scheme.Name);
@@ -44,8 +45,7 @@ namespace Web.Custom
             }
             catch (Exception ex)
             {
-                await ResponseHelper.WriteJsonAsync(Context, _responseManager.GetResponse("EXCEPTION", _appConfig.isDevState ? ex.Message : ""));
-                return AuthenticateResult.NoResult();
+                return AuthenticateResult.Fail(ex);
             }
         }
 

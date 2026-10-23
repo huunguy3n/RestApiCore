@@ -18,4 +18,12 @@
 	<message code="UNAUTHORIZED" success="0" httpStatusCode="401" httpMessage="Invalid or missing token"/>
 	<message code="NONE" success="0" httpStatusCode="200" httpMessage=""/>
 	<message code="ERROR" success="0" httpStatusCode="500" httpMessage="Exception"/>
+	<!-- v3: chữ ký HMAC-SHA256 (KE_HOACH_V3 4.2) -->
+	<message code="MISSING_SIGNATURE" success="0" httpStatusCode="401" httpMessage="Missing X-Fast-Timestamp, X-Fast-Nonce, X-Fast-Content-SHA256 or X-Fast-Signature header"/>
+	<message code="TIMESTAMP_EXPIRED" success="0" httpStatusCode="401" httpMessage="X-Fast-Timestamp is outside the allowed clock skew"/>
+	<message code="NONCE_REUSED" success="0" httpStatusCode="401" httpMessage="X-Fast-Nonce has already been used"/>
+	<message code="CHECKSUM_MISMATCH" success="0" httpStatusCode="400" httpMessage="X-Fast-Content-SHA256 does not match the request body"/>
+	<message code="INVALID_SIGNATURE" success="0" httpStatusCode="401" httpMessage="Invalid X-Fast-Signature"/>
+	<message code="KEY_NOT_ISSUED" success="0" httpStatusCode="403" httpMessage="No signing key has been issued for this account"/>
+	<message code="PAYLOAD_TOO_LARGE" success="0" httpStatusCode="413" httpMessage="Request body is too large"/>
 </messages>

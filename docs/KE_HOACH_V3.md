@@ -597,7 +597,15 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | `Security/PrivateKeyProtector`: AES-256-GCM, khóa chủ `Security:KeyEncryptionKey` (base64 32 byte), AAD gắn `u_id`, định dạng `v1:` + base64(nonce, tag, bản mã) | Xong 23/10/2026 |
 | `Fast.Api.Cli issue-key --user <name> [--rotate] [--apply]`: cấp/thay `private_key`, in khóa một lần | Xong 23/10/2026, chạy thử (không ghi) trên DB dev |
 | Vector thử cố định (`Tests/MessageSignatureTests.cs`, kết quả mong đợi tính độc lập bằng Python): khóa dẫn xuất, checksum, chữ ký request/response, sửa 1 byte body, đổi query, chữ ký request không dùng làm chữ ký response; 26 test mới | Xong 23/10/2026, 50/50 đạt |
-| Middleware kiểm chữ ký (đọc body một lần, timestamp + nonce), ký response, `auth/token` + `auth/revoke`, nối `restApi_GetUserRights` + HybridCache, `GET /_meta/server`, client mẫu C# | Chưa |
+| `SignatureMiddleware` cho `/api/v3/*` (trừ `GET /_meta/server`): bước 1–4 của 4.2.3. Khóa ký lấy qua `SignerKeyStore` (`restApi_GetUserRights` → giải `private_key` → chỉ giữ `K_request`/`K_response`, HybridCache `userCacheSeconds`). Body đọc một lần, giới hạn `maxRequestBodyBytes` (mặc định 10 MB), giữ ở `HttpContext.Items["rawBody"]`. Nonce `[A-Za-z0-9_-]{16,64}`, **ghi sau khi chữ ký đúng** (request giả không đốt được nonce), kiểm-và-ghi nguyên tử bằng `IMemoryCache` + lock (HybridCache không có thao tác nguyên tử) | Xong 23/10/2026 |
+| Ký response (4.2.4) cho mọi response sau khi biết khóa, kể cả lỗi và 500 (middleware đặt ngoài `UseExceptionHandler`). Chưa xác thực / tài khoản không hiệu lực / chưa cấp khóa → không ký | Xong 23/10/2026 |
+| Mã lỗi mới trong `Message.xml`: `MISSING_SIGNATURE` (401), `TIMESTAMP_EXPIRED`, `NONCE_REUSED`, `CHECKSUM_MISMATCH`, `INVALID_SIGNATURE`, **`KEY_NOT_ISSUED` (403)**, **`PAYLOAD_TOO_LARGE` (413)** (hai mã cuối không có trong 4.4, thêm vì cần) | Xong 23/10/2026 |
+| `GET /api/v3/_meta/server` (giờ server, phiên bản chữ ký; khóa RSA portal để pha 6), `POST /api/v3/_meta/ping` (cần JWT + chữ ký, trả `u_id`, `name`) | Xong 23/10/2026 |
+| Client mẫu C# tự chứa `Tests/Sample/FastApiV3Signer.cs` (chỉ dùng `System.Security.Cryptography`); 17 test TestServer: ký đúng, sửa body, đổi query, đổi `Idempotency-Key`, sai khóa, timestamp ±301 s, nonce dùng lại, chữ ký sai không đốt nonce, nonce sai dạng, thiếu header, body quá lớn, chưa xác thực, chưa cấp khóa, response cũ không khớp request khác | Xong 23/10/2026, 67/67 đạt |
+| `CustomJwtAuthenticationHandler` trả `Fail` thay vì tự ghi response (trước đây token sai bị ghi response hai lần) | Xong 23/10/2026 |
+| Api bắt buộc `Security:KeyEncryptionKey` (base64 32 byte) lúc khởi động | Xong 23/10/2026 |
+| `auth/token` ký theo `X-Fast-User` + JWT mới (`u_id`, `user_id`, `name_erp`, `jti`), `auth/revoke` + kiểm `restApiRevokedToken`, kiểm quyền bước 6 | Chưa |
+| Chạy end-to-end trên DB dev (cần `KeyEncryptionKey` trong `appsettings.Local.json` + `issue-key --apply`) | Chưa |
 
 ### 7.4. Ngoài giai đoạn này
 - **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.
