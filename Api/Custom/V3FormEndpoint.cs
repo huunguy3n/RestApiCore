@@ -12,15 +12,6 @@ using Security;
 namespace Web.Custom
 {
     /// <summary>
-    /// Bảng route form v3 và mẫu ký tự đặc biệt, dựng một lần lúc khởi động
-    /// </summary>
-    public sealed class V3FormRuntime(ImportFormCatalog catalog, Regex? irregular)
-    {
-        public ImportFormCatalog Catalog { get; } = catalog;
-        public Regex? Irregular { get; } = irregular;
-    }
-
-    /// <summary>
     /// Route nghiệp vụ v3: POST /api/v3/{resource} và /api/v3/{resource}/{verb} (KE_HOACH_V3 4.1).
     /// Chữ ký đã kiểm ở SignatureMiddleware. Thứ tự: route → quyền form → unitCode → dạng body → giá trị field
     /// → Idempotency-Key → checking → processing

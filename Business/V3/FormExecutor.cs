@@ -144,6 +144,7 @@ namespace Business.V3
                 "vouchercode" => Literal(form.VoucherCode),
                 "userid" => call.UserId.ToString(),
                 "username" => Literal(call.UserNameErp.TrimEnd()),
+                "apiusername" => Literal(call.UserName),
                 "admin" => call.Admin ? "1" : "0",
                 "unit" => Literal(call.Unit),
                 "appdatabasename" => Identifier(appConfig.appDatabaseName),

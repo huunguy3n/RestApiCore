@@ -68,25 +68,17 @@ builder.Services.AddSingleton<LoginLockout>();
 builder.Services.AddSingleton<Business.V3.IUnitRightsChecker, Business.V3.UnitRightsChecker>();
 builder.Services.AddSingleton<Business.V3.IFormExecutor, Business.V3.FormExecutor>();
 builder.Services.AddSingleton<Business.V3.IIdempotencyStore, Business.V3.IdempotencyStore>();
-// Form v3: nạp App_Data/Form một lần, gắn kiểu theo cột thật của bảng FBO (mỗi bảng đọc một lần)
+// Form v3: nạp App_Data/Form lúc khởi động, gắn kiểu theo cột thật; file đổi thì V3FormReloader nạp lại
+builder.Services.AddSingleton<V3FormLoader>();
 builder.Services.AddSingleton(services =>
 {
-    var logger = services.GetRequiredService<ILogger<Business.V3.ImportFormCatalog>>();
-    var columns = new DataAccess.ColumnSchemaRepository(appConfig);
-    var schemaCache = new Dictionary<string, IReadOnlyDictionary<string, Models.V3.ColumnInfo>?>(StringComparer.OrdinalIgnoreCase);
-
-    var catalog = Business.V3.ImportFormCatalog.LoadDirectory(Path.Combine(appConfig.pathDirectory, "App_Data", "Form"), logger,
-        form => Business.V3.ColumnTypeResolver.Resolve(form, table =>
-        {
-            if (!schemaCache.TryGetValue(table, out var schema))
-            {
-                schema = schemaCache[table] = columns.GetColumnsAsync(table).GetAwaiter().GetResult();
-            }
-            return schema;
-        }));
-
     string irregular = services.GetRequiredService<Options>().Irregular.Trim();
-    return new V3FormRuntime(catalog, irregular.Length > 0 ? new System.Text.RegularExpressions.Regex(irregular) : null);
+    return new V3FormRuntime(services.GetRequiredService<V3FormLoader>().Load(), irregular.Length > 0 ? new System.Text.RegularExpressions.Regex(irregular) : null);
+});
+builder.Services.AddHostedService(services =>
+{
+    var loader = services.GetRequiredService<V3FormLoader>();
+    return new V3FormReloader(services.GetRequiredService<V3FormRuntime>(), loader.Load, loader.Directory, services.GetRequiredService<ILogger<V3FormReloader>>());
 });
 builder.Services.AddSingleton(TimeProvider.System);
 

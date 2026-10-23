@@ -18,6 +18,7 @@
     <!-- Provider keo theo Microsoft.Data.SqlClient va ban ghim Cryptography.Pkcs -->
     <ProjectReference Include="..\Provider\Provider.csproj" />
     <ProjectReference Include="..\Security\Security.csproj" />
+    <ProjectReference Include="..\Business\Business.csproj" />
   </ItemGroup>
 
 </Project>
