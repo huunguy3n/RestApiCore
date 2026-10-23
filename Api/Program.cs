@@ -33,6 +33,15 @@ if (appConfig.passwordKey.Length != 32 || appConfig.passwordKey == appConfig.sec
 appConfig.keyEncryptionKey = builder.Configuration["Security:KeyEncryptionKey"] ?? "";
 var privateKeyProtector = new Security.PrivateKeyProtector(appConfig.keyEncryptionKey);
 
+// Cặp khóa RSA đăng nhập portal: PFX hoặc Certificate Store; không khai thì khóa tạm (chỉ máy dev, restart là đổi)
+string portalKeyPath = builder.Configuration["Security:PortalKeyPath"] ?? "";
+string portalKeyThumbprint = builder.Configuration["Security:PortalKeyThumbprint"] ?? "";
+var portalKey = portalKeyPath.Length > 0
+    ? Security.PortalKeyProvider.FromPfx(portalKeyPath, builder.Configuration["Security:PortalKeyPassword"])
+    : portalKeyThumbprint.Length > 0
+        ? Security.PortalKeyProvider.FromStore(portalKeyThumbprint)
+        : Security.PortalKeyProvider.Ephemeral();
+
 appConfig.pathDirectory = builder.Environment.ContentRootPath;
 Provider.Provider.Configure(appConfig.commandTimeout);
 
@@ -61,6 +70,8 @@ builder.Services.AddSingleton<LogManager>();
 builder.Services.AddSingleton<ResponseManager>();
 builder.Services.AddSingleton<IIpAccessManager, IpAccessManager>();
 builder.Services.AddSingleton(privateKeyProtector);
+builder.Services.AddSingleton(portalKey);
+builder.Services.AddSingleton<Business.V3.IPortalCredentialStore, Business.V3.PortalCredentialStore>();
 builder.Services.AddSingleton<ISignerKeyStore, SignerKeyStore>();
 builder.Services.AddSingleton<NonceStore>();
 builder.Services.AddSingleton<IRevokedTokenStore, RevokedTokenStore>();
@@ -138,6 +149,11 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+if (portalKey.IsEphemeral)
+{
+    app.Logger.LogWarning("Chưa khai Security:PortalKeyPath / PortalKeyThumbprint: dùng khóa RSA portal tạm, restart là đổi khóa");
+}
+
 app.UseMiddleware<RequestIdMiddleware>();
 app.UseSerilogRequestLogging();
 
@@ -192,9 +208,12 @@ app.MapGet("/api/v3/_meta/server", (TimeProvider time) => Results.Json(new
 {
     serverTime = time.GetUtcNow().ToUnixTimeSeconds(),
     signatureVersion = Security.MessageSignature.RequestAlgorithm,
-    clockSkewSeconds = appConfig.clockSkewSeconds
+    clockSkewSeconds = appConfig.clockSkewSeconds,
+    // Khóa công khai RSA-OAEP-256 để trình duyệt mã hóa mật khẩu đăng nhập portal (5.3)
+    portalKey = portalKey.PublicJwk()
 }));
 app.MapV3Auth();
+app.MapV3Portal();
 app.MapPost("/api/v3/_meta/ping", (HttpContext context, TimeProvider time) =>
 {
     var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;

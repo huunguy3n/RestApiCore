@@ -53,7 +53,7 @@ namespace Security
         /// <summary>
         /// JWT v3 (KE_HOACH_V3 4.2.5): sub = restApiUser.name, u_id = restApiUser.id, user_id = userinfo2.id, name_erp, jti
         /// </summary>
-        public string GenerateV3Token(string userName, int uId, int userId, string nameErp, string jti, DateTime expiresUtc)
+        public string GenerateV3Token(string userName, int uId, int userId, string nameErp, string jti, DateTime expiresUtc, string scope = "api")
         {
             var claims = new[]
             {
@@ -61,7 +61,7 @@ namespace Security
                 new Claim("u_id", uId.ToString(), ClaimValueTypes.Integer32),
                 new Claim("user_id", userId.ToString(), ClaimValueTypes.Integer32),
                 new Claim("name_erp", nameErp),
-                new Claim("scope", "api"),
+                new Claim("scope", scope),
                 new Claim(JwtRegisteredClaimNames.Jti, jti)
             };
 

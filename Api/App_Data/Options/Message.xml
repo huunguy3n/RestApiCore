@@ -44,6 +44,9 @@
 	<message code="CURSOR_EXPIRED" success="0" httpStatusCode="404" httpMessage="Cursor has expired or does not belong to this request, send the first request again"/>
 	<message code="PAGE_OUT_OF_RANGE" success="0" httpStatusCode="400" httpMessage="page is out of range"/>
 	<message code="RESULT_TOO_LARGE" success="0" httpStatusCode="500" httpMessage="Result is too large, the form must declare paging"/>
+	<message code="INVALID_KID" success="0" httpStatusCode="400" httpMessage="kid does not match the current portal key, fetch /api/v3/_meta/server again"/>
+	<message code="INVALID_CREDENTIAL" success="0" httpStatusCode="401" httpMessage="Invalid user name or password"/>
+	<message code="PORTAL_TOKEN_NOT_ALLOWED" success="0" httpStatusCode="403" httpMessage="Portal token can only read /api/v3/_meta"/>
 	<message code="TRANSFER_MARK_FAILED" success="0" httpStatusCode="500" httpMessage="Could not mark the page as transferred, request the page again"/>
 	<!-- Mã nghiệp vụ dùng trong errorCode của form mẫu -->
 	<message code="CUSTOMER_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Customer does not exist or is inactive"/>

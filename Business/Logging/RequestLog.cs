@@ -50,7 +50,9 @@ namespace Business.Logging
         public static readonly IReadOnlySet<string> All = new HashSet<string>(StringComparer.Ordinal)
         {
             "UNAUTHORIZED", "INVALID_SIGNATURE", "MISSING_SIGNATURE", "TIMESTAMP_EXPIRED", "NONCE_REUSED", "CHECKSUM_MISMATCH",
-            "ACCOUNT_LOCKED", "ACCESS_DENIED", "TOO_MANY_REQUESTS", "FORBIDDEN", "KEY_NOT_ISSUED"
+            "ACCOUNT_LOCKED", "ACCESS_DENIED", "TOO_MANY_REQUESTS", "FORBIDDEN", "KEY_NOT_ISSUED",
+            // Portal: dò mật khẩu, dùng token portal gọi route nghiệp vụ
+            "INVALID_CREDENTIAL", "PORTAL_TOKEN_NOT_ALLOWED"
         };
     }
 

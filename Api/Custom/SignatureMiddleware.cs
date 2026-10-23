@@ -35,9 +35,18 @@ namespace Web.Custom
             {
                 return false;
             }
-            // Không cần token, không ký: lấy giờ server để đồng bộ timestamp
-            return !(HttpMethods.IsGet(context.Request.Method) && context.Request.Path.Equals("/api/v3/_meta/server", StringComparison.OrdinalIgnoreCase));
+            // Không cần token, không ký: giờ server + khóa công khai portal; đăng nhập portal (mật khẩu mã hóa RSA, không có private_key)
+            return !(HttpMethods.IsGet(context.Request.Method) && context.Request.Path.Equals("/api/v3/_meta/server", StringComparison.OrdinalIgnoreCase)
+                || HttpMethods.IsPost(context.Request.Method) && context.Request.Path.Equals(V3PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase));
         }
+
+        /// <summary>
+        /// JWT scope=portal chỉ đọc GET /api/v3/_meta/* (trừ ping, dùng để thử ký); không ký request/response vì trình duyệt không giữ private_key
+        /// </summary>
+        public static bool PortalMayCall(HttpContext context) =>
+            HttpMethods.IsGet(context.Request.Method)
+            && context.Request.Path.StartsWithSegments("/api/v3/_meta", StringComparison.OrdinalIgnoreCase)
+            && !context.Request.Path.StartsWithSegments("/api/v3/_meta/ping", StringComparison.OrdinalIgnoreCase);
 
         public async Task Invoke(HttpContext context)
         {
@@ -58,6 +67,21 @@ namespace Web.Custom
                 await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("UNAUTHORIZED"));
                 return;
             }
+
+            if (!isTokenRequest && context.User.FindFirst("scope")?.Value == "portal")
+            {
+                if (!PortalMayCall(context))
+                {
+                    context.Items[RequestLogMiddleware.SignatureResultItem] = "PORTAL_TOKEN_NOT_ALLOWED";
+                    await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("PORTAL_TOKEN_NOT_ALLOWED"));
+                    return;
+                }
+                context.Items[SignerItem] = signer;
+                context.Items[RequestLogMiddleware.SignatureResultItem] = "PORTAL";
+                await next(context);
+                return;
+            }
+
             if (!signer.HasKey)
             {
                 context.Items[RequestLogMiddleware.SignatureResultItem] = "KEY_NOT_ISSUED";

@@ -64,6 +64,14 @@
         }
 
         /// <summary>
+        /// Thời hạn (phút) JWT scope=portal cấp ở /api/v3/auth/portal
+        /// </summary>
+        public int portalTokenMinutes
+        {
+            get; set;
+        }
+
+        /// <summary>
         /// Số phút khóa đăng nhập (đếm lại từ lần sai cuối)
         /// </summary>
         public int loginLockMinutes
@@ -243,6 +251,7 @@
             logRetentionDays = 30;
             attackLogRetentionDays = 90;
             loginMaxFailures = 5;
+            portalTokenMinutes = 30;
             loginLockMinutes = 15;
             expiryToken = 0;
             issuerToken = string.Empty;

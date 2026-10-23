@@ -232,6 +232,7 @@ Không có chế độ chạy file v2. Tool `Fast.Api.Cli upgrade` hỗ trợ ch
 | `POST` | `/api/v3/auth/portal` | Đăng nhập portal bằng `name` + mật khẩu đã mã hóa (5.3). Trả JWT phạm vi `portal`, chỉ gọi được `_meta` |
 | `GET` | `/api/v3/_meta/resources` | Tài nguyên và động từ user được cấp quyền |
 | `GET` | `/api/v3/_meta/resources/{form}` | Định nghĩa khối, field, mẫu JSON |
+| `GET` | `/api/v3/_meta/errors` | Bảng mã lỗi (`Message.xml`) |
 | `GET` | `/health/live`, `/health/ready` | Giám sát. `ready` kiểm SQL + thư mục log |
 
 Tham số điều khiển:
@@ -663,6 +664,18 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | 13 test mới (251/251) | Xong 23/10/2026 |
 | *Nghiệm thu pha 5* trên DB dev: (1) sink trỏ SQL không tồn tại → 1 file spool, 0 dòng; (2) SQL lên → đẩy lại đủ 10 dòng, spool rỗng; 10 request cùng body chỉ 1 bản body; (3) `LogSearch` giải nén được body; (4) `LogCleanup` đổ vào `restApiLogAgg`/`restApiLogAttackAgg` rồi xoá. Api thật: 320 request ghi đủ, **thời gian xử lý trung bình 0,2 ms/request** (log không chặn request). Dữ liệu thử đã dọn | **Đạt** (23/10/2026) |
 | Chưa có giao diện xem log (portal, pha 6) và lệnh CLI tra log; `LogManager.WriteLogDataAsync` cũ còn trong code nhưng không ai gọi | Lưu ý |
+
+### 7.3g. Tiến độ pha 6 (nhánh `v3/phase6`)
+
+| Việc | Trạng thái |
+|---|---|
+| `Security/PortalKeyProvider`: RSA ≥ 2048 bit từ PFX (`Security:PortalKeyPath` + `PortalKeyPassword`) hoặc `LocalMachine\My` (`Security:PortalKeyThumbprint`); không khai → khóa tạm trong bộ nhớ + cảnh báo log (chỉ máy dev, restart là đổi). `kid` = JWK thumbprint RFC 7638 (kiểm bằng vector của RFC). `/_meta/server` thêm `portalKey` (JWK `RSA-OAEP-256`) | Xong 23/10/2026 |
+| `POST /api/v3/auth/portal` `{ userName, kid, credential }`, không cần chữ ký HMAC (tài khoản chưa cấp `private_key` vẫn vào portal được). Kiểm: tài khoản → khóa đăng nhập → IP → `kid` (`INVALID_KID`) → giải RSA-OAEP SHA-256 → `timestamp` (`TIMESTAMP_EXPIRED`) + `nonce` (`NONCE_REUSED`) → giải `restApiUser.password` bằng `passwordKey`, so theo thời gian hằng (`INVALID_CREDENTIAL`). Sai mật khẩu / bản mã hỏng tính vào khóa đăng nhập. Trả JWT `scope=portal`, `portalTokenMinutes` (30). Log không lưu body request (mật khẩu đã mã hóa) lẫn response (JWT) | Xong 23/10/2026 |
+| JWT `scope=portal` chỉ gọi được `GET /api/v3/_meta/*` trừ `ping`, không ký request/response; route khác → 403 `PORTAL_TOKEN_NOT_ALLOWED`. JWT `scope=api` gọi `_meta` vẫn phải ký như cũ | Xong 23/10/2026 |
+| `GET /_meta/resources` (form được cấp quyền), `GET /_meta/resources/{form}` (tóm tắt, khối, field hiện được — bỏ `hidden` và khóa tự thêm —, kiểu, độ dài thật, bắt buộc, format, mã lỗi của check, **mẫu body**: nhiều khối có tên khối, một khối dạng phẳng), `GET /_meta/errors` (bảng mã lỗi từ `Message.xml`). Không có quyền → `FORBIDDEN`, không có → `NOT_FOUND` | Xong 23/10/2026 |
+| Mã lỗi mới `INVALID_KID`, `INVALID_CREDENTIAL`, `PORTAL_TOKEN_NOT_ALLOWED`; hai mã sau vào danh sách tấn công của log. 20 test mới (271/271), client test mã hóa bằng JWK lấy từ `/_meta/server` như WebCrypto | Xong 23/10/2026 |
+| End-to-end trên DB dev (Api thật): `_meta/server` → sai mật khẩu 401 → đăng nhập 200 → phát lại gói 401 `NONCE_REUSED` → `_meta/resources`, `_meta/resources/setSaleInvoice`, `_meta/errors` (49 mã) → token portal gọi `sale-invoice` 403 → form không cấp quyền 403. Dữ liệu thử đã trả lại (mật khẩu `ADMIN` về chuỗi rỗng như trước, quyền form, log) | Xong 23/10/2026 |
+| `ApiDocs`: trang đăng nhập (WebCrypto RSA-OAEP), danh sách/chi tiết tài nguyên, gọi thử (HMAC bằng WebCrypto, `private_key` chỉ trong bộ nhớ trình duyệt, hiện `canonicalRequest`), code mẫu cURL/C#/JavaScript/Python/Java dùng chung vector thử, bảng mã lỗi | Chưa |
 
 ### 7.4. Ngoài giai đoạn này
 - **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.
