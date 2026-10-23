@@ -201,10 +201,10 @@ Không có chế độ chạy file v2. Tool `Fast.Api.Cli upgrade` hỗ trợ ch
 | Object | Pha | Nội dung |
 |---|---|---|
 | `restApi_CheckUnitRights` (proc) | 0 (xong) | Kiểm `unitCode` theo quyền FBO (bên dưới) |
-| `ALTER restApiUser ADD private_key` (script) | 1 | Thêm cột nếu chưa có; kiểm `name` là khóa chính, `id` identity |
-| `restApi_GetUserRights` (proc) | 1 | Một lượt trả: thông tin user, `user_id`/`admin` từ `userinfo2` qua `name_erp`, `private_key` (mã hóa), form được phép (**không có dòng = không quyền**), IP cho phép/chặn |
-| `restApiRevokedToken` (bảng) | 1 | JWT đã thu hồi: `jti`, `u_id`, `expires_at`. Dọn theo `expires_at` |
-| `restApiIdempotency` (bảng) | 1 | `Idempotency-Key` + `u_id` + SHA256(bản rõ + query) + response, TTL 24 giờ |
+| `ALTER restApiUser ADD private_key` (script) | 1 (xong) | Thêm cột nếu chưa có; kiểm `name` là khóa chính, `id` identity |
+| `restApi_GetUserRights` (proc) | 1 (xong) | Một lượt trả: thông tin user, `user_id`/`admin` từ `userinfo2` qua `name_erp`, `private_key` (mã hóa), form được phép (**không có dòng = không quyền**), IP cho phép/chặn |
+| `restApiRevokedToken` (bảng) | 1 (xong) | JWT đã thu hồi: `jti`, `u_id`, `expires_at`. Dọn theo `expires_at` |
+| `restApiIdempotency` (bảng) | 1 (xong) | `Idempotency-Key` + `u_id` + SHA256(bản rõ + query) + response, TTL 24 giờ |
 | `restApiLogReq`, `restApiLogBody`, `restApiLogAgg`, `restApiLogAttack`, `restApiLogAttackAgg` | 5 | Log mới (5.2) |
 | `restApi_LogSearch`, `restApi_LogCleanup` | 5 | Xem log; dọn theo lô |
 | `restApiSetupLog` (bảng) | 7 | Script setup đã áp: `version`, `script`, `sha256`, `applied_at`, `applied_by`, `duration_ms`. Script đầu tiên của setup tạo bảng này; nhờ nó chạy lại hay nâng cấp chỉ áp script chưa có |
@@ -584,7 +584,10 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | Kiểm IP tách thành `IpAccessManager`/`IpAccessMiddleware`, kết quả `restApi_CheckIPAddress` cache HybridCache `ipCheckCacheSeconds` (mặc định 60), xoá theo tag `ip-access` (lỗi 1.4 #7) | Xong 23/10/2026. **Đổi hành vi:** trước đây kiểm IP chạy trước xác thực nên luôn gửi `anonymous`; nay gửi đúng user nên `restApiAllowIp` theo user có hiệu lực |
 | `Provider`: thêm `OpenConnAsync`/`ExecuteAsync`/`RetrieveAsync`/`BulkAsync` có `CancellationToken`; `CommandTimeout` đặt **một lần** lúc khởi động (`Provider.Configure(appSettings:commandTimeout)`), repository không gán lại biến static nữa. Hàm đồng bộ giữ cho `FormRepository` tới pha 3 | Xong 23/10/2026 |
 | `LogRepository` ghi `#logData`/`#logError` hoàn toàn qua tham số có kiểu + độ dài, tự cắt theo cột (lỗi 1.4 #3); ghi log và kiểm IP chạy async | Xong 23/10/2026, chạy thử: path `/x'y';--` lưu nguyên văn vào `restApiLogData` |
-| Script SQL `NNN_ten.sql`, `UserRepository` mới | Chưa |
+| Script SQL đánh số trong `sql/`: `001_restApi_CheckUnitRights`, `002_restApiUser_private_key` (thêm cột; kiểm PK `name`, identity `id`: thiếu PK thì tạo, sai PK / thiếu identity thì báo lỗi để sửa tay), `003_restApiRevokedToken`, `004_restApiIdempotency`, `005_restApi_GetUserRights` (4 result set cố định: user + userinfo2 qua `vsysuserinfo`, form, IP cho phép, IP chặn) | Xong 23/10/2026, chạy 2 lần liên tiếp trên DB dev không lỗi |
+| `UserRepository.GetUserRightsAsync` → `UserRights` (`UId` ≠ `UserId`, `IsActive`, `CanAccessForm` mặc định từ chối, `IsIpAllowed` như `restApi_CheckIPAddress`); 14 test mới. Chưa nối vào xác thực (pha 2) | Xong 23/10/2026. DB dev: `ADMIN` → u_id 2, user_id 1, admin; `NGUYENTDH` không có user FBO tương ứng nên không hiệu lực |
+
+*M1:* `/health/ready` đạt, log ghi file, rate limit trả 429, script DB chạy 2 lần không lỗi → **đạt** (23/10/2026).
 
 ### 7.4. Ngoài giai đoạn này
 - **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.
