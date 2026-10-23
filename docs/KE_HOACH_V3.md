@@ -207,6 +207,7 @@ Không có chế độ chạy file v2. Tool `Fast.Api.Cli upgrade` hỗ trợ ch
 | `restApiIdempotency` (bảng) | 1 | `Idempotency-Key` + `u_id` + SHA256(bản rõ + query) + response, TTL 24 giờ |
 | `restApiLogReq`, `restApiLogBody`, `restApiLogAgg`, `restApiLogAttack`, `restApiLogAttackAgg` | 5 | Log mới (5.2) |
 | `restApi_LogSearch`, `restApi_LogCleanup` | 5 | Xem log; dọn theo lô |
+| `restApiSetupLog` (bảng) | 7 | Script setup đã áp: `version`, `script`, `sha256`, `applied_at`, `applied_by`, `duration_ms`. Script đầu tiên của setup tạo bảng này; nhờ nó chạy lại hay nâng cấp chỉ áp script chưa có |
 
 **`restApi_CheckUnitRights @user_id, @unit_code, @action`**
 1. `@unit_code` phải có trong `dmdvcs` với `status = '1'`, không thì `UNIT_NOT_FOUND`.
@@ -425,11 +426,32 @@ Server chỉ giữ một cặp khóa RSA cho cả instance, không cần đối 
 - **Code mẫu:** cURL, C#, JavaScript, Python, Java: tính checksum, ký request, kiểm chữ ký response. Kèm **vector thử cố định** (khóa, body, kết quả mong đợi).
 - **Bảng mã lỗi** sinh từ `Message.xml`.
 
-### 5.4. Cài đặt IIS (gói zero-dependency)
-1. **Preflight:** Windows, IIS, Hosting Bundle, quyền thư mục, port, kết nối SQL (lưu ý TLS ở mục 1.3), dung lượng ổ.
-2. **Cấu hình:** URL, SQL connection, JWT `secretKey`, `KeyEncryptionKey`, đường dẫn log — bí mật ở biến môi trường / `appsettings.Local.json`.
-3. **Deploy:** copy release, App Pool riêng, **HTTPS** (chứng chỉ, binding — đây là lớp mã hóa body), ACL.
-4. **Verify:** `/health/ready`, thử đăng nhập có ký, gọi một form có ký, kiểm log, thử vượt rate limit.
+### 5.4. Cài đặt: `Fast.Api.Cli setup`
+
+Cài và nâng cấp chỉ qua **một CLI**. NSD chỉ khai tham số, CLI làm hết phần còn lại: copy toàn bộ dll, exe, XML từ **gói gốc** vào thư mục dự án; tạo table, view, proc trên DB khách; dựng site IIS. Không còn bộ `Install.ps1`/`Update.ps1` riêng.
+
+**Gói gốc** (`--source`): thư mục release do build tạo ra, gồm `bin/` (Api, ApiDocs, Cli đã `dotnet publish`), `sql/` (script đánh số thứ tự `NNN_ten.sql`), `App_Data/` (Form, Options) và `setup.manifest.json` (phiên bản, danh sách tệp + SHA-256, thứ tự script).
+
+**NSD khai** (hỏi tương tác, hoặc `--config setup.json` để chạy lại không hỏi):
+
+| Nhóm | Tham số |
+|---|---|
+| Thư mục | Thư mục cài (dự án), thư mục log, thư mục dữ liệu (khóa PFX, spool) |
+| SQL | Server, DB app, DB sys, kiểu đăng nhập (Windows / SQL + tài khoản) |
+| IIS | Tên site, App Pool, hostname, port, chứng chỉ HTTPS (thumbprint) |
+| Phạm vi | Danh sách XML form cài (mặc định: tất cả trong gói); có cài portal `ApiDocs` không |
+| Tùy chọn | Tạo tài khoản `restApiUser` đầu tiên (`name`, `name_erp`) |
+
+**CLI tự làm**, theo thứ tự:
+1. **Preflight:** chạy quyền Administrator, Windows, IIS, Hosting Bundle .NET 10, port trống, dung lượng ổ, kết nối SQL (cảnh báo TLS cho 2008 R2, mục 1.3), quyền DDL của tài khoản SQL, `userinfo2`/`dmdvcs`/`ff_CheckUnitRight` có tồn tại. Kiểm SHA-256 mọi tệp trong gói theo manifest. Hỏng bước nào thì dừng, chưa ghi gì.
+2. **Sinh bí mật** (chỉ lần cài đầu): `secretKey`, `passwordKey`, `KeyEncryptionKey`, cặp khóa RSA portal (PFX + mật khẩu). Ghi vào `appsettings.Local.json` và thư mục dữ liệu, ACL chỉ cho App Pool identity + Administrators. Không in ra màn hình, không ghi log.
+3. **SQL:** chạy các script chưa áp theo thứ tự manifest, mỗi script một transaction, ghi vào `restApiSetupLog` (3.2). Script nào đã áp mà checksum khác → dừng, báo. Chỉ tạo/sửa object `restApi*`; không đụng object FBO chuẩn hay `api_*` của v2.
+4. **Tệp:** copy `bin/` và `App_Data/`. XML khách đã sửa (khác checksum bản gốc lần cài trước) thì **giữ nguyên**, ghi bản mới cạnh nó dạng `.new` và báo.
+5. **IIS:** tạo/cập nhật App Pool (No Managed Code), site, binding HTTPS, ACL thư mục log/dữ liệu.
+6. **Verify:** `/health/ready`, gọi `/_meta/server`, đăng nhập thử bằng tài khoản đầu tiên (nếu có tạo). Tạo tài khoản thì in `private_key` **đúng một lần**.
+7. **Báo cáo:** phiên bản, script đã áp, tệp giữ lại, cảnh báo; ghi file log setup (không có bí mật).
+
+**Chế độ:** mặc định **chạy thử** (in kế hoạch, không ghi), `--apply` mới làm thật (như `rekey-passwords`). Chạy lại cùng phiên bản không đổi gì. Gói mới hơn = **nâng cấp**: backup thư mục cài trước khi copy; verify hỏng thì khôi phục thư mục. Script SQL không tự rollback, nên chỉ được thêm, không xoá dữ liệu, chạy lại không lỗi. `setup verify` chỉ chạy bước 1 và 6.
 
 ---
 
@@ -441,6 +463,7 @@ Server chỉ giữ một cặp khóa RSA cho cả instance, không cần đối 
 | Chuyển đổi v2 | Mỗi XML v2 qua `Fast.Api.Cli upgrade` + JSON mẫu: dữ liệu đúng thì processing nhận cùng bảng tạm như v2; dữ liệu sai thì cùng bị từ chối. Transaction rồi rollback |
 | Integration | DB dev: `POST /{resource}` và `/{verb}` (kể cả `/get`), `GET` vào route nghiệp vụ → `405`, `unitRequired`, `unitCode` sai quyền / không tồn tại, phân trang 3 bảng, idempotency, revoke JWT, recycle → cursor hết hạn, thuộc tính JSON lạ bị bỏ qua, file có động từ tự đặt (vd `approveInvoice` → `/invoice/approve`) |
 | Bảo mật | SQL injection qua `unitCode`, tham số lọc, tên resource; thiếu/sai checksum; sai chữ ký; sửa 1 byte body; đổi `unitCode`/`dryRun` trên query; đổi `Idempotency-Key`; timestamp quá hạn; nonce dùng lại; chữ ký request dùng làm chữ ký response; response cũ phát lại cho request mới; JWT đã thu hồi; user không có `restApiAllowForm`; user chưa có `private_key`; so chữ ký không theo thời gian hằng; portal: gửi mật khẩu rõ, bản mã sai `kid`, phát lại bản mã cũ (`nonce`/`timestamp`), JWT `portal` gọi route nghiệp vụ → bị từ chối, sai mật khẩu nhiều lần → khoá |
+| Setup | Máy sạch: chạy thử rồi `--apply` → API chạy, `/health/ready` đạt. Chạy lại cùng gói → không đổi gì. Nâng cấp gói → chỉ áp script mới, giữ XML khách đã sửa, giữ `appsettings.Local.json`. Gói bị sửa 1 tệp → dừng ở preflight. Verify hỏng → khôi phục thư mục. Log setup không chứa bí mật. Cài trên DB đang chạy v2 → v2 không bị ảnh hưởng |
 | Tải | Một instance IIS; độ trễ khi bật ký, log, phân trang |
 
 ---
@@ -457,9 +480,12 @@ Pha 3  XML engine + route ──► M3: setSaleInvoice / getCustomer chạy th�
 Pha 4  Phân trang N bảng ───┐
 Pha 5  Log mới ─────────────┤  (4, 5, 6 song song sau M3)
 Pha 6  Portal ──────────────┘
-Pha 7  Phát hành + pilot ───► M4: chạy song song v2 trên bản sao DB khách
+Pha 7  Setup CLI ───────────► M4: cài sạch + nâng cấp bằng một lệnh   (khung bắt đầu sau M1, chạy song song)
+Pha 8  Phát hành + pilot ───► M5: chạy song song v2 trên bản sao DB khách
 ```
-Phụ thuộc: 0 → 1 → 2 → 3. Sau 3 thì 4, 5, 6 song song. 7 cuối cùng. Pha 2 làm trước pha 3 để mọi endpoint nghiệp vụ sinh ra đã nằm sau lớp ký, không có giai đoạn chạy không ký.
+Phụ thuộc: 0 → 1 → 2 → 3. Sau 3 thì 4, 5, 6 song song. Pha 7 dựng khung ngay sau M1 và chạy song song; mỗi pha sau đưa script SQL / XML / tệp của mình vào gói gốc, nên đến lúc xong pha 6 thì setup đã cài được đủ. 8 cuối cùng, chỉ cài bằng setup. Pha 2 làm trước pha 3 để mọi endpoint nghiệp vụ sinh ra đã nằm sau lớp ký, không có giai đoạn chạy không ký.
+
+Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, cấu hình) phải nằm trong gói gốc và cài được bằng `setup`. Không cài tay trên DB khách.
 
 ### 7.2. Chi tiết từng pha
 
@@ -478,7 +504,7 @@ Phụ thuộc: 0 → 1 → 2 → 3. Sau 3 thì 4, 5, 6 song song. 7 cuối cùng
 | `Provider` chuyển async, timeout theo cấu hình; `LogRepository` ghi qua tham số (lỗi 1.4 #3) | Không còn ghép chuỗi trong log |
 | Script SQL: `restApiUser` + `private_key` (kiểm PK `name`, identity `id`), `restApi_GetUserRights`, `restApiRevokedToken`, `restApiIdempotency` | Chạy lại không lỗi trên DB dev (2008 R2) |
 | Lớp `UserRepository` mới: tra `restApiUser` → `name_erp` → `userinfo2` | Lấy đúng `user_id`, `admin` |
-| Bộ PowerShell cài IIS (preflight, App Pool, ACL) | Cài sạch trên máy test |
+| Đánh số script SQL theo thứ tự `NNN_ten.sql` trong `sql/` (chuẩn bị cho setup, pha 7) | Thứ tự áp script cố định |
 
 *Nghiệm thu M1:* `/health/ready` đạt; log ghi file; rate limit trả 429; script DB chạy 2 lần liên tiếp không lỗi.
 
@@ -515,7 +541,23 @@ Phụ thuộc: 0 → 1 → 2 → 3. Sau 3 thì 4, 5, 6 song song. 7 cuối cùng
 
 **Pha 6 — Portal**: cặp khóa RSA server (PFX / Certificate Store) + công bố qua `/_meta/server`, `POST /auth/portal` (giải RSA-OAEP, so `password`, chống phát lại), JWT phạm vi `portal`; `ApiDocs` theo 5.3, code mẫu 5 ngôn ngữ dùng chung vector thử. *Nghiệm thu:* một người ngoài nhóm tự tích hợp được một endpoint chỉ bằng portal.
 
-**Pha 7 — Phát hành + pilot**: gói deploy (Hosting Bundle, site IIS, appsettings mẫu không bí mật, script SQL, `Install.ps1`/`Update.ps1`/`Uninstall.ps1`), tài liệu đối tác, hướng dẫn chuyển từ v2, quy trình cấp/đổi `private_key`. *Nghiệm thu M4:* cài trên bản sao DB khách đang chạy v2: v2 vẫn chạy, v3 chạy song song, một đối tác pilot gọi được.
+**Pha 7 — Setup CLI** (`Fast.Api.Cli setup`, thiết kế ở 5.4)
+| Việc | Đầu ra |
+|---|---|
+| Lệnh `pack`: `dotnet publish` Api, ApiDocs, Cli + gom `sql/`, `App_Data/` + sinh `setup.manifest.json` (phiên bản, SHA-256 từng tệp, thứ tự script) | Gói gốc tái tạo được từ một commit |
+| Khai tham số: hỏi tương tác hoặc `--config setup.json`; kiểm giá trị (đường dẫn, port, kết nối SQL) trước khi chạy | NSD chỉ trả lời câu hỏi |
+| Preflight (5.4 bước 1) | Báo đủ lỗi môi trường một lần, chưa ghi gì |
+| Sinh bí mật + `appsettings.Local.json` + PFX RSA, ACL | Không bí mật nào nằm trong gói hay log |
+| Trình chạy SQL: `restApiSetupLog`, mỗi script một transaction, kiểm checksum script đã áp | Chạy lại không lỗi, nâng cấp chỉ áp script mới |
+| Copy tệp có backup; giữ XML khách đã sửa (`.new`) | Nâng cấp không mất tùy biến của khách |
+| IIS: App Pool, site, binding HTTPS, ACL (`Microsoft.Web.Administration`) | Site chạy sau một lệnh |
+| Verify + khôi phục thư mục khi hỏng; `setup verify`; báo cáo + log setup | Lỗi thì quay về bản trước |
+| Tạo tài khoản `restApiUser` đầu tiên, in `private_key` một lần | Có thể gọi API ngay sau cài |
+| Gộp `rekey-passwords` và `upgrade` (XML v2) thành lệnh con của cùng CLI | Một công cụ duy nhất cho NSD |
+
+*Nghiệm thu M4:* máy Windows sạch có IIS + SQL: một lệnh `setup --apply` ra API chạy được, `/health/ready` đạt; chạy lại không đổi gì; nâng cấp lên gói mới giữ nguyên cấu hình và XML khách đã sửa; toàn bộ ca "Setup" ở mục 6 đạt.
+
+**Pha 8 — Phát hành + pilot**: gói gốc phát hành (từ `pack`), tài liệu đối tác, hướng dẫn NSD chạy setup, hướng dẫn chuyển từ v2, quy trình cấp/đổi `private_key`. *Nghiệm thu M5:* chạy `setup` trên bản sao DB khách đang chạy v2: v2 vẫn chạy, v3 chạy song song, một đối tác pilot gọi được.
 
 ### 7.3. Tiến độ pha 0 (21/10/2026, nhánh `v3/phase0`)
 
@@ -531,8 +573,18 @@ Phụ thuộc: 0 → 1 → 2 → 3. Sau 3 thì 4, 5, 6 song song. 7 cuối cùng
 | Tách khóa mật khẩu (8.1): `appSettings:passwordKey`, Api từ chối khởi động nếu thiếu/trùng `secretKey`; `Fast.Api.Cli rekey-passwords` mã hóa lại `restApiUser.password` (mặc định chạy thử, `--apply` ghi trong một transaction, chạy lại không lỗi); 7 test mới | Xong (23/10/2026). Chạy thử trên DB dev: 1 tài khoản cần mã hóa lại, 2 trống. **Chưa `--apply`** |
 | Kiểm lại 23/10/2026 | Build 0 lỗi (63 cảnh báo nullable có sẵn), test 3/3 đạt, `dotnet list package --vulnerable` sạch, file cấu hình đã commit không còn bí mật |
 
+### 7.3b. Tiến độ pha 1 (nhánh `v3/phase1`)
+
+| Việc | Trạng thái |
+|---|---|
+| Serilog rolling file (`appSettings:logDirectory`, trống = `ProgramData\FastRestApi\Logs`; cuộn theo ngày + 50 MB, giữ 31 tệp), `X-Request-ID` sinh ở `RequestIdMiddleware`, gắn vào mọi dòng log file và dùng chung với `LogMiddleware` | Xong 23/10/2026, chạy thử: log ghi đúng `RequestId` |
+| `/health/live` (không kiểm gì), `/health/ready` (SQL `SELECT 1` + ghi thử thư mục log); bỏ qua `LogMiddleware`/rate limit | Xong 23/10/2026, cả hai trả 200 trên DB dev |
+| HybridCache, RateLimiter ASP.NET Core | Chưa |
+| `Provider` async, `LogRepository` ghi qua tham số | Chưa |
+| Script SQL `NNN_ten.sql`, `UserRepository` mới | Chưa |
+
 ### 7.4. Ngoài giai đoạn này
-- **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M4.
+- **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.
 - Callback/notify (`CallbackWorker`).
 - Nhiều instance / ARR.
 - Đổi `private_key` không gián đoạn (hai khóa song song, `private_key_next`).
@@ -554,7 +606,11 @@ Phụ thuộc: 0 → 1 → 2 → 3. Sau 3 thì 4, 5, 6 song song. 7 cuối cùng
 
 Đã chốt (23/10/2026, 8.1): tách khóa mã hóa `password` khỏi `secretKey` JWT. Mật khẩu dùng `appSettings:passwordKey`, mã hóa lại bằng `Fast.Api.Cli rekey-passwords` trước khi đổi `secretKey`. Giữ định dạng AES hiện tại.
 
-Còn cần chốt: không còn mục nào.
+Đã chốt (23/10/2026, setup): thêm pha Setup CLI. Chạy CLI thì hệ thống tự sinh toàn bộ dll, exe, table, view, proc, XML từ gói gốc vào dự án; NSD chỉ khai tham số (5.4, pha 7).
+
+Còn cần chốt:
+1. **"Source gốc" là gì**: đề xuất là **gói release đã build** (lệnh `pack` tạo, có manifest + SHA-256), để máy khách không cần .NET SDK hay mã nguồn. Phương án khác: CLI tự `dotnet publish` từ repo, khi đó máy cài phải có SDK. Chốt trước pha 7.
+2. **Gỡ cài đặt** (`setup uninstall`): có cần trong đợt này không. Nếu có: chỉ gỡ site, App Pool, thư mục; **không** xoá object `restApi*` hay dữ liệu trên DB khách trừ khi NSD xác nhận riêng.
 
 ---
 

@@ -80,6 +80,14 @@
             get; set;
         }
 
+        /// <summary>
+        /// Thư mục log file (Serilog), nằm ngoài thư mục release. Trống thì dùng ProgramData\FastRestApi\Logs
+        /// </summary>
+        public string logDirectory
+        {
+            get; set;
+        }
+
         public AppConfig()
         {
             secretKey = string.Empty;
@@ -97,6 +105,7 @@
             sysDatabaseName = string.Empty;
             appConnectionString = string.Empty;
             pathDirectory = string.Empty;
+            logDirectory = string.Empty;
         }
     }
 }

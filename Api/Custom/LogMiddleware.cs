@@ -16,21 +16,15 @@ namespace Web.Custom
         {
             var stopwatch = Stopwatch.StartNew();
 
-            Guid requestID = Guid.NewGuid();
-            httpContext.Items["requestID"] = requestID;
+            // requestID do RequestIdMiddleware sinh
+            Guid requestID = (Guid)httpContext.Items["requestID"]!;
 
             var request = RequestHelper.GetRequest(httpContext.Request);
-            
+
             // Capture response
             var originalBody = httpContext.Response.Body;
             using var memStream = new MemoryStream();
             httpContext.Response.Body = memStream;
-
-            httpContext.Response.OnStarting(() =>
-            {
-                httpContext.Response.Headers["X-Request-ID"] = requestID.ToString();
-                return Task.CompletedTask;
-            });
 
             // Thực thi middleware tiếp theo
             await _next(httpContext); //gọi đúng 1 lần, có await
