@@ -37,7 +37,7 @@ namespace Web.Custom
             var responseBody = await new StreamReader(memStream).ReadToEndAsync();
             memStream.Seek(0, SeekOrigin.Begin);
 
-            logManager.WriteLogData(requestID.ToString(), elapsed, request["info"], request["params"], request["headers"], request["body"]["raw"],
+            await logManager.WriteLogDataAsync(requestID.ToString(), elapsed, request["info"], request["params"], request["headers"], request["body"]["raw"],
                 httpContext.Response.Headers.ToDictionary(h => h.Key, h => h.Value.ToString()), httpContext.Response.StatusCode, responseBody
             );
 

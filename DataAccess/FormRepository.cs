@@ -22,7 +22,6 @@ namespace DataAccess
         {
             _appConfig = appConfig;
             _options = options;
-            Provider.Provider.CommandTimeout = _appConfig.commandTimeout;
         }
 
         #region Get Form

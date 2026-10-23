@@ -17,7 +17,7 @@ namespace Business
         {
             bool allowed = await cache.GetOrCreateAsync(
                 $"ip-access:{userName}:{clientIp}",
-                _ => ValueTask.FromResult(new ServerRepository(appConfig).CheckIPAddress(clientIp, userName)),
+                async token => await new ServerRepository(appConfig).CheckIPAddressAsync(clientIp, userName, token),
                 new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(appConfig.ipCheckCacheSeconds) },
                 [CacheTag],
                 cancellationToken);

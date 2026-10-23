@@ -21,7 +21,6 @@ namespace DataAccess
         public CacheRepository(AppConfig appConfig)
         {
             _appConfig = appConfig;
-            Provider.Provider.CommandTimeout = _appConfig.commandTimeout;
         }
 
         public void WriteResponseCache(string formName, string cacheID, int pageIndex, ResponseData responseData)

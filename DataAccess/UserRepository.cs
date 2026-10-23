@@ -10,7 +10,6 @@ namespace DataAccess
         public UserRepository(AppConfig appConfig)
         {
             _appConfig = appConfig;
-            Provider.Provider.CommandTimeout = _appConfig.commandTimeout;
         }
         /// <summary>
         /// Lấy user theo id

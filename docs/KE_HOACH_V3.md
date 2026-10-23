@@ -73,7 +73,7 @@ Mọi SQL `restApi*` và câu lệnh v3 tự sinh phải chạy được trên 2
 |---|---|---|---|---|
 | 1 | **Nghiêm trọng** | Connection string và `secretKey` JWT đã commit lên GitHub | `Api/appsettings.json` | 0 (xong phần code; còn đổi mật khẩu) |
 | 2 | **Nghiêm trọng** | SQL injection: header `unit` ghép thẳng vào SQL | `FormRepository.ReplaceDefaultVaraible` | 3 |
-| 3 | **Nghiêm trọng** | SQL injection: `path`, `ip`, `userName` ghép chuỗi vào `#logData`/`#logError` | `LogRepository` | 1 |
+| 3 | **Nghiêm trọng** | SQL injection: `path`, `ip`, `userName` ghép chuỗi vào `#logData`/`#logError` | `LogRepository` | 1 (xong) |
 | 4 | Cao | Request sửa `form.Queries`, `field.MaxLength`/`Type` của form đang cache dùng chung → request đồng thời ghi đè nhau | `FormRepository`, `FormMethodBase` | 3 |
 | 5 | Cao | `@@update({i})` thay theo số thứ tự vòng lặp, không theo `index`. v3 bỏ `@@update`; `@@checking(n)` phải tránh lại lỗi này | `FormRepository` | 3 |
 | 6 | Trung bình | Log ghi SQL đồng bộ trong middleware, đệm cả response | `LogMiddleware` | 5 |
@@ -582,7 +582,8 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | HybridCache memory-only (`AddHybridCache`, không đăng ký `IDistributedCache`) | Xong 23/10/2026 |
 | RateLimiter ASP.NET Core thay `RateLimitManager`: fixed window `maxRequestsPerMinute`/phút, partition theo user đã xác thực (claim `sub`), chưa xác thực thì theo IP; 429 `TOO_MANY_REQUESTS` + `Retry-After`. Chạy sau `UseAuthentication` | Xong 23/10/2026, chạy thử: request thứ 6 → 429, `/health` không bị tính. Pha 2 đổi partition sang `u_id` |
 | Kiểm IP tách thành `IpAccessManager`/`IpAccessMiddleware`, kết quả `restApi_CheckIPAddress` cache HybridCache `ipCheckCacheSeconds` (mặc định 60), xoá theo tag `ip-access` (lỗi 1.4 #7) | Xong 23/10/2026. **Đổi hành vi:** trước đây kiểm IP chạy trước xác thực nên luôn gửi `anonymous`; nay gửi đúng user nên `restApiAllowIp` theo user có hiệu lực |
-| `Provider` async, `LogRepository` ghi qua tham số | Chưa |
+| `Provider`: thêm `OpenConnAsync`/`ExecuteAsync`/`RetrieveAsync`/`BulkAsync` có `CancellationToken`; `CommandTimeout` đặt **một lần** lúc khởi động (`Provider.Configure(appSettings:commandTimeout)`), repository không gán lại biến static nữa. Hàm đồng bộ giữ cho `FormRepository` tới pha 3 | Xong 23/10/2026 |
+| `LogRepository` ghi `#logData`/`#logError` hoàn toàn qua tham số có kiểu + độ dài, tự cắt theo cột (lỗi 1.4 #3); ghi log và kiểm IP chạy async | Xong 23/10/2026, chạy thử: path `/x'y';--` lưu nguyên văn vào `restApiLogData` |
 | Script SQL `NNN_ten.sql`, `UserRepository` mới | Chưa |
 
 ### 7.4. Ngoài giai đoạn này

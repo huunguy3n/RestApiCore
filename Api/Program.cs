@@ -30,6 +30,7 @@ if (appConfig.passwordKey.Length != 32 || appConfig.passwordKey == appConfig.sec
     throw new InvalidOperationException("appSettings:passwordKey phải đúng 32 ký tự và khác secretKey. Mã hóa lại mật khẩu bằng: Fast.Api.Cli rekey-passwords.");
 }
 appConfig.pathDirectory = builder.Environment.ContentRootPath;
+Provider.Provider.Configure(appConfig.commandTimeout);
 
 // Log file chẩn đoán vận hành: ngoài thư mục release, cuộn theo ngày và dung lượng
 if (string.IsNullOrWhiteSpace(appConfig.logDirectory))
@@ -130,7 +131,7 @@ app.UseExceptionHandler(builder =>
         var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
         context.RequestServices.GetRequiredService<ILogger<Program>>().LogError(exception, "Lỗi chưa xử lý tại {Path}", context.Request.Path);
         
-        logManager.WriteLogError(context.Request.Path, exception?.Message ?? "An error occurred during execution", exception?.StackTrace ?? "");
+        await logManager.WriteLogErrorAsync(context.Request.Path, exception?.Message ?? "An error occurred during execution", exception?.StackTrace ?? "");
 
         await ResponseHelper.WriteJsonAsync(context,
             new Models.Response.Response

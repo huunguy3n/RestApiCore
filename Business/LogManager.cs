@@ -21,7 +21,7 @@ namespace Business
         /// Lưu thông tin log từ request và response.
         /// Thông tin lưu ở SQL và file json
         /// </summary>
-        public void WriteLogData(string guid, long durationMs, Dictionary<string, string> infoRequest, Dictionary<string, string> paramsRequest, Dictionary<string, string> headersRequest, string bodyRequest,
+        public async Task WriteLogDataAsync(string guid, long durationMs, Dictionary<string, string> infoRequest, Dictionary<string, string> paramsRequest, Dictionary<string, string> headersRequest, string bodyRequest,
             Dictionary<string, string> responseHeader, int responseStatusCode, string responseBody)
         {
             //Lưu ở SQL các thông tin
@@ -35,7 +35,7 @@ namespace Business
                 { "body", bodyRequest }
             };
             string jsonRequest = Newtonsoft.Json.JsonConvert.SerializeObject(request);
-            string metadataRequest = jsonRequest.Length > 4000 ? jsonRequest.Substring(0, 3999) : jsonRequest;
+            // LogRepository tự cắt theo độ dài cột
 
             Dictionary<string, object> response = new()
             {
@@ -44,17 +44,16 @@ namespace Business
                 { "body", responseBody }
             };
             string jsonResponse = Newtonsoft.Json.JsonConvert.SerializeObject(response);
-            string metadataResponse = jsonResponse.Length > 4000 ? jsonResponse.Substring(0, 3999) : jsonResponse;
 
             LogRepository logRepository = new(appConfig);
-            logRepository.InsertLogData(guid, durationMs, infoRequest["ip"], infoRequest["userName"], infoRequest["method"], infoRequest["path"], metadataRequest, metadataResponse, jsonRequest, jsonResponse);
+            await logRepository.InsertLogDataAsync(guid, durationMs, infoRequest["ip"], infoRequest["userName"], infoRequest["method"], infoRequest["path"], jsonRequest, jsonResponse);
         }
 
         //LogError(action, errorMessage, stackTrace)
-        public void WriteLogError(string path, string errorMessage, string stackTrace)
+        public async Task WriteLogErrorAsync(string path, string errorMessage, string stackTrace)
         {
             LogRepository logRepository = new(appConfig);
-            logRepository.InsertLogError(path, errorMessage, stackTrace);
+            await logRepository.InsertLogErrorAsync(path, errorMessage, stackTrace);
         }
 
         //LogTransfer(userName, form, key, message, status)

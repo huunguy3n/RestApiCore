@@ -10,12 +10,11 @@ namespace DataAccess
         public ServerRepository(AppConfig appConfig)
         {
             _appConfig = appConfig;
-            Provider.Provider.CommandTimeout = _appConfig.commandTimeout;
         }
 
-        public bool CheckIPAddress(string clientIP, string userName)
+        public async Task<bool> CheckIPAddressAsync(string clientIP, string userName, CancellationToken cancellationToken = default)
         {
-            var ds = Provider.Provider.Retrieve(_appConfig.appConnectionString, "exec restApi_CheckIPAddress @ip, @userName",
+            var ds = await Provider.Provider.RetrieveAsync(_appConfig.appConnectionString, "exec restApi_CheckIPAddress @ip, @userName", cancellationToken,
                 new SqlParameter { ParameterName = "@ip", Value = clientIP },
                 new SqlParameter { ParameterName = "@userName", Value = userName }
                 );
