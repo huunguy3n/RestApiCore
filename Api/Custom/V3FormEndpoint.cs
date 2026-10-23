@@ -63,8 +63,10 @@ namespace Web.Custom
                     return Error(context, "METHOD_NOT_ALLOWED");
             }
 
+            context.Items[RequestLogMiddleware.FormItem] = form!.Name;
+
             // Bước 6: quyền form (mặc định từ chối), rồi đơn vị
-            if (!signer.CanAccessForm(form!.Name))
+            if (!signer.CanAccessForm(form.Name))
             {
                 return Error(context, "FORBIDDEN");
             }

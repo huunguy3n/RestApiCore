@@ -54,11 +54,13 @@ namespace Web.Custom
                 : await GetJwtSignerAsync(context);
             if (signer == null || !signer.IsActive)
             {
+                context.Items[RequestLogMiddleware.SignatureResultItem] = "UNAUTHORIZED";
                 await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("UNAUTHORIZED"));
                 return;
             }
             if (!signer.HasKey)
             {
+                context.Items[RequestLogMiddleware.SignatureResultItem] = "KEY_NOT_ISSUED";
                 await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("KEY_NOT_ISSUED"));
                 return;
             }
@@ -75,6 +77,9 @@ namespace Web.Custom
                 IResponse? error = isTokenRequest && lockout.IsLocked(signer.UId)
                     ? responseManager.GetResponse("ACCOUNT_LOCKED")
                     : await VerifyAsync(context, signer, requestNonce);
+
+                // Kết quả kiểm chữ ký cho log (5.2)
+                context.Items[RequestLogMiddleware.SignatureResultItem] = error?.code ?? "VALID";
 
                 if (isTokenRequest && error?.code == "INVALID_SIGNATURE")
                 {

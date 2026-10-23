@@ -69,6 +69,11 @@ builder.Services.AddSingleton<Business.V3.IUnitRightsChecker, Business.V3.UnitRi
 builder.Services.AddSingleton<Business.V3.IFormExecutor, Business.V3.FormExecutor>();
 builder.Services.AddSingleton<Business.V3.IIdempotencyStore, Business.V3.IdempotencyStore>();
 builder.Services.AddSingleton<Business.V3.ICursorStore, Business.V3.CursorStore>();
+// Log v3: request chỉ đẩy vào hàng đợi, LogWorker ghi SQL theo lô, SQL lỗi thì spool ra logDirectory/spool
+builder.Services.AddSingleton<Business.Logging.RequestLogQueue>();
+builder.Services.AddSingleton<Business.Logging.IRequestLogSink, Business.Logging.SqlRequestLogSink>();
+builder.Services.AddSingleton(new Business.Logging.RequestLogSpool(Path.Combine(appConfig.logDirectory, "spool")));
+builder.Services.AddHostedService<LogWorker>();
 // Form v3: nạp App_Data/Form lúc khởi động, gắn kiểu theo cột thật; file đổi thì V3FormReloader nạp lại
 builder.Services.AddSingleton<V3FormLoader>();
 builder.Services.AddSingleton(services =>
@@ -140,7 +145,7 @@ app.UseSerilogRequestLogging();
 static bool IsBusinessRequest(HttpContext context) => !context.Request.Path.StartsWithSegments("/health");
 
 // Log đặt trước xác thực để ghi cả response 401
-app.UseWhen(IsBusinessRequest, branch => branch.UseMiddleware<LogMiddleware>());
+app.UseWhen(IsBusinessRequest, branch => branch.UseMiddleware<RequestLogMiddleware>());
 
 app.UseAuthentication();
 

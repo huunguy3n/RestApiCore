@@ -103,6 +103,46 @@
             get; set;
         }
 
+        /// <summary>
+        /// Log v3: số mục tối đa chờ ghi trong bộ nhớ (đầy thì bỏ mục mới, không làm chậm request)
+        /// </summary>
+        public int logQueueCapacity
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Log v3: số request ghi SQL mỗi lô
+        /// </summary>
+        public int logBatchSize
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Log v3: body lớn hơn thì chỉ lưu SHA256, không lưu nội dung
+        /// </summary>
+        public int logMaxBodyBytes
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Số ngày giữ log chi tiết (restApiLogReq, restApiLogBody); quá hạn thì đổ vào restApiLogAgg rồi xoá
+        /// </summary>
+        public int logRetentionDays
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Số ngày giữ restApiLogAttack
+        /// </summary>
+        public int attackLogRetentionDays
+        {
+            get; set;
+        }
+
         public int expiryToken
         {
             get; set;
@@ -197,6 +237,11 @@
             idempotencyHours = 24;
             cursorTtlMinutes = 30;
             maxRowsWithoutPaging = 10000;
+            logQueueCapacity = 10000;
+            logBatchSize = 200;
+            logMaxBodyBytes = 1024 * 1024;
+            logRetentionDays = 30;
+            attackLogRetentionDays = 90;
             loginMaxFailures = 5;
             loginLockMinutes = 15;
             expiryToken = 0;
