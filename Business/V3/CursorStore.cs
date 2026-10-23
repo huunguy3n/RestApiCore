@@ -21,6 +21,8 @@ namespace Business.V3
         Task<CursorInfo?> GetInfoAsync(int uId, string cursor, CancellationToken cancellationToken = default);
         /// <summary>JSON object { tên bảng: [dòng…] } của trang; null nếu hết hạn</summary>
         Task<string?> GetPageJsonAsync(int uId, string cursor, int page, CancellationToken cancellationToken = default);
+        /// <summary>Giá trị key của trang (đánh dấu Transfer); null nếu hết hạn</summary>
+        Task<IReadOnlyList<string>?> GetPageKeysAsync(int uId, string cursor, int page, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -45,6 +47,7 @@ namespace Business.V3
             for (int page = 0; page < paged.Pages.Count; page++)
             {
                 await cache.SetAsync(PageKey(uId, cursor, page), Compress(ToJson(paged.Pages[page])), options, [CacheTag], cancellationToken);
+                await cache.SetAsync(PageKey(uId, cursor, page) + ":keys", Compress(JsonConvert.SerializeObject(paged.Pages[page].Keys)), options, [CacheTag], cancellationToken);
             }
             // Ghi info sau cùng: có info là đủ trang
             await cache.SetAsync(InfoKey(uId, cursor), new CursorInfo(form, unit, paged.Pages.Count, paged.PageSize, paged.TotalRowCount, paged.KeyCount), options, [CacheTag], cancellationToken);
@@ -61,6 +64,12 @@ namespace Business.V3
             byte[]? data = await cache.GetOrCreateAsync<byte[]?>(PageKey(uId, cursor, page), _ => ValueTask.FromResult<byte[]?>(null), ReadOnly, cancellationToken: cancellationToken);
             // Đọc trượt HybridCache trả mảng rỗng thay vì null
             return data is null or { Length: 0 } ? null : Decompress(data);
+        }
+
+        public async Task<IReadOnlyList<string>?> GetPageKeysAsync(int uId, string cursor, int page, CancellationToken cancellationToken = default)
+        {
+            byte[]? data = await cache.GetOrCreateAsync<byte[]?>(PageKey(uId, cursor, page) + ":keys", _ => ValueTask.FromResult<byte[]?>(null), ReadOnly, cancellationToken: cancellationToken);
+            return data is null or { Length: 0 } ? null : JsonConvert.DeserializeObject<List<string>>(Decompress(data));
         }
 
         /// <summary>{ tên bảng: [dòng…] }, cùng dạng với data của response</summary>

@@ -27,6 +27,11 @@ namespace Business.V3
     public interface IFormExecutor
     {
         Task<FormExecutionResult> ExecuteAsync(ImportForm form, MappedBody body, FormCallContext call, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Form Transfer: chạy query transferred với #transferred([key]) = key của trang vừa trả. Trả code (SUCCESS hoặc mã lỗi của query)
+        /// </summary>
+        Task<string> MarkTransferredAsync(ImportForm form, IReadOnlyList<string> keys, FormCallContext call, CancellationToken cancellationToken = default);
     }
 
     /// <summary>
@@ -80,6 +85,46 @@ namespace Business.V3
 
                 await Provider.Provider.ExecuteAsync(connection, "IF @@TRANCOUNT > 0 COMMIT TRANSACTION", cancellationToken);
                 return new FormExecutionResult { Data = data };
+            }
+            catch
+            {
+                await RollbackAsync(connection);
+                throw;
+            }
+        }
+
+        public async Task<string> MarkTransferredAsync(ImportForm form, IReadOnlyList<string> keys, FormCallContext call, CancellationToken cancellationToken = default)
+        {
+            if (keys.Count == 0 || form.Paging == null)
+            {
+                return "SUCCESS";
+            }
+
+            string column = form.Paging.Key;
+            DataTable table = new("#transferred");
+            table.Columns.Add(column, typeof(string));
+            foreach (string key in keys)
+            {
+                table.Rows.Add(key);
+            }
+
+            await using SqlConnection connection = await Provider.Provider.OpenConnAsync(appConfig.appConnectionString, cancellationToken);
+            await Provider.Provider.ExecuteAsync(connection,
+                $"SET XACT_ABORT ON; CREATE TABLE #transferred ([{column}] NVARCHAR(400) COLLATE DATABASE_DEFAULT NOT NULL PRIMARY KEY)", cancellationToken);
+            await Provider.Provider.BulkAsync(connection, table, "#transferred", cancellationToken);
+
+            await Provider.Provider.ExecuteAsync(connection, "BEGIN TRANSACTION", cancellationToken);
+            try
+            {
+                DataSet result = await Provider.Provider.RetrieveAsync(connection, FormVariables.Replace(form.TransferredQuery, form, call, appConfig), cancellationToken);
+                string code = ResultCode(result);
+                if (code != "SUCCESS")
+                {
+                    await RollbackAsync(connection);
+                    return code;
+                }
+                await Provider.Provider.ExecuteAsync(connection, "IF @@TRANCOUNT > 0 COMMIT TRANSACTION", cancellationToken);
+                return code;
             }
             catch
             {

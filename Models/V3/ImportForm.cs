@@ -30,6 +30,10 @@ namespace Models.V3
         /// <summary>Query checking đã thay @@checking / @@checking(n); rỗng nếu không khai</summary>
         public string CheckingQuery { get; init; } = string.Empty;
         public string ProcessingQuery { get; init; } = string.Empty;
+        /// <summary>
+        /// Chỉ form Transfer: chạy mỗi khi trả một trang, #transferred chứa key của trang đó (KE_HOACH_V3 4.4 #5)
+        /// </summary>
+        public string TransferredQuery { get; init; } = string.Empty;
 
         public ImportPaging? Paging { get; init; }
 

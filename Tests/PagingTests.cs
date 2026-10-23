@@ -108,6 +108,21 @@ namespace Tests
         }
 
         [Fact]
+        public void KeyTungTrang_TheoThuTu_BoKeyNull()
+        {
+            var tables = new Dictionary<string, DataTable>
+            {
+                ["master"] = Table("master", [["B", "x"], ["A", "y"], [DBNull.Value, "z"], ["C", "w"]], "stt_rec", "ma_kh")
+            };
+
+            PagedResult paged = DataSetPager.Paginate(tables, "stt_rec", 2);
+
+            Assert.Equal(["B", "A"], paged.Pages[0].Keys);
+            Assert.Equal(["C"], paged.Pages[1].Keys);
+            Assert.Equal(2, paged.Pages[1].Tables["master"].Rows.Count);
+        }
+
+        [Fact]
         public void KhongCoDong_MotTrangRong()
         {
             var tables = new Dictionary<string, DataTable> { ["master"] = Table("master", [], "stt_rec") };

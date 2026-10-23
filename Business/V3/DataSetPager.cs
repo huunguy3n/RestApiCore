@@ -2,8 +2,8 @@ using System.Data;
 
 namespace Business.V3
 {
-    /// <summary>Một trang: bảng theo tên, cùng thứ tự với dataset gốc</summary>
-    public sealed record DataPage(IReadOnlyDictionary<string, DataTable> Tables);
+    /// <summary>Một trang: bảng theo tên, cùng thứ tự với dataset gốc; Keys = giá trị key (chứng từ) của trang, theo thứ tự</summary>
+    public sealed record DataPage(IReadOnlyDictionary<string, DataTable> Tables, IReadOnlyList<string> Keys);
 
     public sealed record PagedResult(IReadOnlyList<DataPage> Pages, int PageSize, int TotalRowCount, int KeyCount);
 
@@ -23,7 +23,7 @@ namespace Business.V3
             if (first == null || !first.Columns.Contains(key))
             {
                 // Không cắt được theo key: trả một trang (người khai form sửa key)
-                return new PagedResult([new DataPage(tables)], pageSize, totalRows, first?.Rows.Count ?? 0);
+                return new PagedResult([new DataPage(tables, [])], pageSize, totalRows, first?.Rows.Count ?? 0);
             }
 
             // Giá trị key theo thứ tự xuất hiện ở bảng đầu
@@ -68,9 +68,14 @@ namespace Business.V3
                 }
             }
 
-            return new PagedResult(pages.Select(p => new DataPage(p)).ToList(), pageSize, totalRows, keys.Count);
+            return new PagedResult(
+                pages.Select((p, i) => new DataPage(p, keys.Skip(i * pageSize).Take(pageSize).Where(k => k != NullKey).ToList())).ToList(),
+                pageSize, totalRows, keys.Count);
         }
 
-        private static string KeyOf(DataRow row, string key) => row[key] is DBNull ? "\0null" : row[key].ToString()!;
+        /// <summary>Key NULL gom một nhóm nhưng không đưa vào Keys (không đánh dấu được)</summary>
+        private const string NullKey = "\0null";
+
+        private static string KeyOf(DataRow row, string key) => row[key] is DBNull ? NullKey : row[key].ToString()!;
     }
 }

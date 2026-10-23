@@ -44,6 +44,7 @@
 	<message code="CURSOR_EXPIRED" success="0" httpStatusCode="404" httpMessage="Cursor has expired or does not belong to this request, send the first request again"/>
 	<message code="PAGE_OUT_OF_RANGE" success="0" httpStatusCode="400" httpMessage="page is out of range"/>
 	<message code="RESULT_TOO_LARGE" success="0" httpStatusCode="500" httpMessage="Result is too large, the form must declare paging"/>
+	<message code="TRANSFER_MARK_FAILED" success="0" httpStatusCode="500" httpMessage="Could not mark the page as transferred, request the page again"/>
 	<!-- Mã nghiệp vụ dùng trong errorCode của form mẫu -->
 	<message code="CUSTOMER_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Customer does not exist or is inactive"/>
 	<message code="ITEM_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Item does not exist or is inactive"/>

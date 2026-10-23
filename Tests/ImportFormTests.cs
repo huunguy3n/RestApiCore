@@ -233,6 +233,29 @@ namespace Tests
             Assert.Contains("<import", ex.Message);
         }
 
+        [Theory]
+        [InlineData("type=\"Transfer\"", "", "", "phải khai <paging")]
+        [InlineData("type=\"Transfer\"", "<paging pageSize=\"10\" key=\"id\"/>", "", "phải khai <paging")]
+        [InlineData("type=\"List\"", "<paging pageSize=\"10\" key=\"id\"/>", "<query action=\"transferred\"><text>select 1</text></query>", "chỉ dùng cho form")]
+        [InlineData("type=\"List\"", "<paging pageSize=\"10\" key=\"id; drop\"/>", "", "tên cột hợp lệ")]
+        public void TransferVaPaging_KiemLucNap(string attributes, string paging, string transferred, string message)
+        {
+            var ex = Assert.Throws<ImportFormException>(() => Parse("transferInvoice",
+                Minimal("<fields name=\"master\"><field name=\"A\" fastName=\"a\"/></fields>", paging + transferred, attributes)));
+            Assert.Contains(message, ex.Message);
+        }
+
+        [Fact]
+        public void Transfer_DocQueryTransferred()
+        {
+            ImportForm form = Parse("transferInvoice", Minimal("<fields name=\"master\"><field name=\"A\" fastName=\"a\"/></fields>",
+                "<paging pageSize=\"10\" key=\"id\"/><query action=\"transferred\"><text>update x set y = 1</text></query>", "type=\"Transfer\""));
+
+            Assert.Equal(ImportFormType.Transfer, form.Type);
+            Assert.Equal("update x set y = 1", form.TransferredQuery);
+            Assert.Equal("/api/v3/invoice/transfer", form.Route);
+        }
+
         [Fact]
         public void Paging_DocDung()
         {

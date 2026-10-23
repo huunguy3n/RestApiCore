@@ -143,7 +143,7 @@ Khối `detail` không cần khai `YourID`: khóa `key` của khối gốc đư�
 | | `description`, `example` | Hiện trên portal |
 | | `check`, `condition`, `tag`, `errorCode` | **Như Upload FBO**: 4 danh sách song song ngăn bằng `&And;`. `check` là mệnh đề SQL trên `#<khối>`, **đúng = lỗi**. `condition`/`tag` là SQL mở/đóng bọc quanh mệnh đề cùng vị trí. `errorCode` là mã trong `Message.xml`. Số phần tử 4 danh sách phải bằng nhau, lệch thì lỗi lúc nạp XML |
 | | `category` | `@@checking(N)` chỉ chạy field có `category="N"`; `@@checking` không số chạy mọi field. Đã dùng `@@checking(N)` mà field không khai `category` thì nạp XML cảnh báo |
-| `query` | `action` | `checking` (có lỗi thì dừng) rồi `processing`. Không khai `action` = `processing` |
+| `query` | `action` | `checking` (có lỗi thì dừng) rồi `processing`. Không khai `action` = `processing`. `transferred`: chỉ form `Transfer`, đánh dấu đã chuyển theo trang (4.4 #5) |
 | `paging` | `pageSize`, `key` | Mục 4.4 |
 
 ### 2.3. Kiểu dữ liệu và độ rộng
@@ -380,7 +380,7 @@ Quy ước dataset do query `processing` trả về:
 2. Bảng không có cột `key` chỉ trả ở trang 0.
 3. Kết quả nén lưu HybridCache theo trang, cache key có `u_id` + `form` + `unitCode` + `SHA256(canonicalQuery)` + SHA256(body). TTL `CursorTtlMinutes`. Recycle → `CURSOR_EXPIRED`.
 4. Không khai `<paging>` thì trả hết, có trần `MaxRowsWithoutPaging`.
-5. `Transfer`: chỉ đánh dấu đã chuyển các dòng của trang đã trả.
+5. `Transfer`: chỉ đánh dấu đã chuyển các dòng của trang đã trả. Form khai `<query action="transferred">`, chạy mỗi lần trả một trang với `#transferred(<key>)` = key của trang đó (7.3e).
 
 Mã mới trong `Message.xml`: `METHOD_NOT_ALLOWED` (405), `NOT_FOUND` (404), `UNIT_REQUIRED` (400), `UNIT_NOT_FOUND` (400), `UNIT_DENIED` (403), `INVALID_SHAPE` (400), `CHECKSUM_MISMATCH` (400), `INVALID_SIGNATURE` (401), `TIMESTAMP_EXPIRED` (401), `NONCE_REUSED` (401), `IDEMPOTENCY_CONFLICT` (409), `CURSOR_EXPIRED` (404), cùng các mã nghiệp vụ dùng trong `errorCode` của `check`.
 
@@ -650,7 +650,8 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | Endpoint: request đầu chạy processing → trang 0 + `paging { cursor, page_index, page_count, page_size, total_row_count }` (một trang thì `cursor = null`). Trang sau: `?cursor=…&page=n` (từ 0), vẫn kiểm chữ ký, quyền form, `unitCode`; không chạy lại query. Cursor hết hạn / của user, form, đơn vị khác → 404 `CURSOR_EXPIRED`; `page` sai → 400 `PAGE_OUT_OF_RANGE`. Form không khai `<paging>` mà vượt `maxRowsWithoutPaging` (10.000) → 500 `RESULT_TOO_LARGE` (lỗi khai form, không cắt im lặng) | Xong 23/10/2026 |
 | 14 test mới (228/228), gồm 3 bảng × 10.000 dòng không tách chứng từ | Xong 23/10/2026 |
 | *Nghiệm thu pha 4* trên DB dev: processing sinh 3 bảng × 10.000 dòng (407 ms), cắt 100 trang × 100 chứng từ (50 ms), lưu cursor (255 ms), đọc lại đủ 10.000/10.000/10.000 dòng, 0 chứng từ bị tách, 1,3 MB JSON | **Đạt** (23/10/2026) |
-| Quy tắc 4.4 #5 (`Transfer`: chỉ đánh dấu đã chuyển các dòng của trang đã trả) | Chưa: cần quy ước proc đánh dấu của form `Transfer` |
+| Quy tắc 4.4 #5 (`Transfer`): form `type="Transfer"` **bắt buộc** `<paging key>` và `<query action="transferred">` (lỗi nạp nếu thiếu; `transferred` ở form khác cũng là lỗi; `paging key` phải là tên cột hợp lệ). Mỗi lần trả một trang (trang 0 lẫn trang theo cursor), engine tạo `#transferred([key] NVARCHAR(400) PRIMARY KEY)` chứa đúng key của trang, chạy `transferred` trong transaction, **rồi mới trả dữ liệu**; query trả `code` ≠ `SUCCESS` hoặc lỗi SQL → rollback, 500 `TRANSFER_MARK_FAILED`, không trả dữ liệu trang đó (chưa đánh dấu thì lần lấy sau ra lại, không mất). Key mỗi trang lưu cùng cursor. Lấy lại cùng trang thì đánh dấu lại: query `transferred` phải chạy lại không lỗi. `paging.transferred_count` = số chứng từ đã đánh dấu. Key NULL không đánh dấu được (bỏ khỏi danh sách). 10 test mới (238/238); thử trên DB dev với bảng `##` (`char(13)` nối được với `#transferred`, rollback khi trả mã lỗi / lỗi SQL) | Xong 23/10/2026 |
+| Giới hạn: đánh dấu lúc server trả trang, không đợi client xác nhận. Mất kết nối giữa chừng thì trang đó đã đánh dấu mà client chưa nhận; client lấy lại trang qua cursor (còn hạn `cursorTtlMinutes`) | Lưu ý |
 
 ### 7.4. Ngoài giai đoạn này
 - **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.

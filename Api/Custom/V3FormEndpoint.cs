@@ -191,7 +191,34 @@ namespace Web.Custom
                 return Error(context, "CURSOR_EXPIRED");
             }
 
-            return PagedResponse(context, "SUCCESS", "", json, cursor, page, info.PageCount, info.PageSize, info.TotalRowCount);
+            int? transferred = null;
+            if (form.Type == ImportFormType.Transfer)
+            {
+                IReadOnlyList<string>? keys = await store.GetPageKeysAsync(signer.UId, cursor, page, context.RequestAborted);
+                if (keys == null)
+                {
+                    return Error(context, "CURSOR_EXPIRED");
+                }
+                var call = new FormCallContext(signer.UId, signer.Name, signer.UserId!.Value, signer.NameErp, signer.ErpAdmin, info.Unit, false);
+                if (await MarkTransferredAsync(context, form, keys, call) is FormResponse failed)
+                {
+                    return failed;
+                }
+                transferred = keys.Count;
+            }
+
+            return PagedResponse(context, "SUCCESS", "", json, cursor, page, info.PageCount, info.PageSize, info.TotalRowCount, transferred);
+        }
+
+        /// <summary>
+        /// Transfer (4.4 #5): đánh dấu đã chuyển đúng các key của trang sắp trả, trước khi trả dữ liệu.
+        /// Đánh dấu lỗi thì không trả dữ liệu trang đó (dữ liệu chưa đánh dấu sẽ ra lại ở lần lấy sau, không mất).
+        /// Gọi lại cùng trang thì đánh dấu lại: query transferred phải chạy lại không lỗi
+        /// </summary>
+        private static async Task<FormResponse?> MarkTransferredAsync(HttpContext context, ImportForm form, IReadOnlyList<string> keys, FormCallContext call)
+        {
+            string code = await context.RequestServices.GetRequiredService<IFormExecutor>().MarkTransferredAsync(form, keys, call, context.RequestAborted);
+            return code == "SUCCESS" ? null : Error(context, "TRANSFER_MARK_FAILED", $"Query transferred trả {code}");
         }
 
         /// <summary>
@@ -231,7 +258,17 @@ namespace Web.Custom
                 string? cursor = paged.Pages.Count > 1
                     ? await context.RequestServices.GetRequiredService<ICursorStore>().SaveAsync(call.UId, form.Name, call.Unit, paged, context.RequestAborted)
                     : null;
-                return PagedResponse(context, code, message, CursorStore.ToJson(paged.Pages[0]), cursor, 0, paged.Pages.Count, paged.PageSize, paged.TotalRowCount);
+
+                int? transferred = null;
+                if (form.Type == ImportFormType.Transfer)
+                {
+                    if (await MarkTransferredAsync(context, form, paged.Pages[0].Keys, call) is FormResponse failed)
+                    {
+                        return failed;
+                    }
+                    transferred = paged.Pages[0].Keys.Count;
+                }
+                return PagedResponse(context, code, message, CursorStore.ToJson(paged.Pages[0]), cursor, 0, paged.Pages.Count, paged.PageSize, paged.TotalRowCount, transferred);
             }
 
             int rowCount = tables.Values.Sum(t => t.Rows.Count);
@@ -254,7 +291,7 @@ namespace Web.Custom
         /// Response có phân trang (4.4): data là JSON đã dựng sẵn của trang, paging cho biết cursor và số trang
         /// </summary>
         private static FormResponse PagedResponse(HttpContext context, string code, string message, string dataJson, string? cursor,
-            int pageIndex, int pageCount, int pageSize, int totalRowCount)
+            int pageIndex, int pageCount, int pageSize, int totalRowCount, int? transferredCount = null)
         {
             var response = new Newtonsoft.Json.Linq.JObject
             {
@@ -272,6 +309,11 @@ namespace Web.Custom
                     ["total_row_count"] = totalRowCount
                 }
             };
+            if (transferredCount != null)
+            {
+                // Form Transfer: số chứng từ của trang này đã được đánh dấu đã chuyển
+                ((Newtonsoft.Json.Linq.JObject)response["paging"]!)["transferred_count"] = transferredCount;
+            }
             return new FormResponse(200, response.ToString(Formatting.None));
         }
 

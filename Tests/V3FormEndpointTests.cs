@@ -44,6 +44,15 @@ namespace Tests
             </import>
             """;
 
+        private const string TransferInvoice = """
+            <import xmlns="urn:schemas-fast-com:fast-api" type="Transfer">
+              <fields name="filter"><field name="Year" fastName="nam" type="int"/></fields>
+              <paging pageSize="2" key="id"/>
+              <query><text>select 1</text></query>
+              <query action="transferred"><text>update x set transfer_yn = 1 from x join #transferred b on b.id = x.id</text></query>
+            </import>
+            """;
+
         private const string GetCustomer = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="List">
               <fields name="filter"><field name="Keyword" fastName="tu_khoa"/></fields>
@@ -54,14 +63,14 @@ namespace Tests
         private readonly FakeExecutor _executor = new();
         private readonly FakeUnitRights _units = new();
         private readonly FakeIdempotency _idempotency = new();
-        private SignerKeys _signer = new(7, "DOITAC", true, new byte[32], new byte[32], 1, "ADMIN") { AllowForms = new HashSet<string>(["setSaleInvoice", "getCustomer", "getInvoice"], StringComparer.OrdinalIgnoreCase) };
+        private SignerKeys _signer = new(7, "DOITAC", true, new byte[32], new byte[32], 1, "ADMIN") { AllowForms = new HashSet<string>(["setSaleInvoice", "getCustomer", "getInvoice", "transferInvoice"], StringComparer.OrdinalIgnoreCase) };
         private IHost _host = null!;
         private HttpClient _http = null!;
 
         public async Task InitializeAsync()
         {
             ImportForm Load(string name, string xml) => ColumnTypeResolver.Resolve(ImportFormLoader.Parse(name, XDocument.Parse(xml)), _ => null);
-            var catalog = ImportFormCatalog.Build([Load("setSaleInvoice", SaleInvoice), Load("getCustomer", GetCustomer), Load("getInvoice", GetInvoice)]);
+            var catalog = ImportFormCatalog.Build([Load("setSaleInvoice", SaleInvoice), Load("getCustomer", GetCustomer), Load("getInvoice", GetInvoice), Load("transferInvoice", TransferInvoice)]);
 
             _host = await new HostBuilder()
                 .ConfigureWebHost(web => web.UseTestServer()
@@ -489,6 +498,63 @@ namespace Tests
             Assert.Contains("getCustomer", json.GetProperty("message").GetString());
         }
 
+        [Fact]
+        public async Task Transfer_DanhDauDungKeyCuaTrangDaTra()
+        {
+            _executor.Next = new FormExecutionResult { Data = Invoices() };
+
+            var (_, first, _) = await PostAsync("/api/v3/invoice/transfer?unitCode=CTY", "{}");
+            string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
+            Assert.Equal(2, first.GetProperty("paging").GetProperty("transferred_count").GetInt32());
+            Assert.Equal(["HD0", "HD1"], _executor.Marked.Single().Keys);
+            Assert.Equal("CTY", _executor.Marked.Single().Unit);
+
+            var (_, last, _) = await PostAsync($"/api/v3/invoice/transfer?unitCode=CTY&cursor={cursor}&page=2", "");
+
+            Assert.Equal(["HD4"], _executor.Marked[1].Keys);
+            Assert.Equal("CTY", _executor.Marked[1].Unit);
+            Assert.Equal(1, last.GetProperty("paging").GetProperty("transferred_count").GetInt32());
+            Assert.Equal(2, _executor.Marked.Count);
+        }
+
+        [Fact]
+        public async Task Transfer_LayLaiTrang_DanhDauLai()
+        {
+            _executor.Next = new FormExecutionResult { Data = Invoices() };
+            var (_, first, _) = await PostAsync("/api/v3/invoice/transfer?unitCode=CTY", "{}");
+            string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
+
+            await PostAsync($"/api/v3/invoice/transfer?unitCode=CTY&cursor={cursor}&page=1", "");
+            await PostAsync($"/api/v3/invoice/transfer?unitCode=CTY&cursor={cursor}&page=1", "");
+
+            Assert.Equal([["HD0", "HD1"], ["HD2", "HD3"], ["HD2", "HD3"]], _executor.Marked.Select(m => m.Keys.ToArray()));
+        }
+
+        [Fact]
+        public async Task Transfer_DanhDauLoi_KhongTraDuLieu()
+        {
+            _executor.Next = new FormExecutionResult { Data = Invoices() };
+            _executor.MarkCode = "LOCKED";
+
+            var (status, json, _) = await PostAsync("/api/v3/invoice/transfer?unitCode=CTY", "{}");
+
+            Assert.Equal(HttpStatusCode.InternalServerError, status);
+            Assert.Equal("TRANSFER_MARK_FAILED", json.GetProperty("code").GetString());
+            Assert.Contains("LOCKED", json.GetProperty("message").GetString());
+            Assert.False(json.TryGetProperty("data", out _));
+        }
+
+        [Fact]
+        public async Task KhongPhaiTransfer_KhongDanhDau()
+        {
+            _executor.Next = new FormExecutionResult { Data = Invoices() };
+
+            var (_, json, _) = await PostAsync("/api/v3/invoice/get?unitCode=CTY", "{}");
+
+            Assert.Empty(_executor.Marked);
+            Assert.False(json.GetProperty("paging").TryGetProperty("transferred_count", out _));
+        }
+
         private static DataSet DataSetOf((string Code, string Message, string? Tables) head, int dataTables)
         {
             DataSet data = new();
@@ -532,6 +598,14 @@ namespace Tests
             public MappedBody? LastBody { get; private set; }
             public int Calls { get; private set; }
             public bool Throw { get; set; }
+            public List<(IReadOnlyList<string> Keys, string Unit)> Marked { get; } = [];
+            public string MarkCode { get; set; } = "SUCCESS";
+
+            public Task<string> MarkTransferredAsync(ImportForm form, IReadOnlyList<string> keys, FormCallContext call, CancellationToken cancellationToken = default)
+            {
+                Marked.Add((keys, call.Unit));
+                return Task.FromResult(MarkCode);
+            }
 
             public Task<FormExecutionResult> ExecuteAsync(ImportForm form, MappedBody body, FormCallContext call, CancellationToken cancellationToken = default)
             {

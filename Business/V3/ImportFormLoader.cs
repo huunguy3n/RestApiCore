@@ -121,9 +121,9 @@ namespace Business.V3
             foreach (XElement query in root.Elements(Ns + "query"))
             {
                 string queryAction = Attr(query, "action") is { Length: > 0 } a ? a.ToLowerInvariant() : "processing";
-                if (queryAction is not ("checking" or "processing"))
+                if (queryAction is not ("checking" or "processing" or "transferred"))
                 {
-                    throw new ImportFormException(name, $"query action '{queryAction}' phải là checking hoặc processing");
+                    throw new ImportFormException(name, $"query action '{queryAction}' phải là checking, processing hoặc transferred");
                 }
                 if (!queries.TryAdd(queryAction, query.Element(Ns + "text")?.Value ?? query.Value))
                 {
@@ -142,11 +142,22 @@ namespace Business.V3
             {
                 int pageSize = ParseInt(name, pagingElement, "pageSize") ?? throw new ImportFormException(name, "paging thiếu pageSize");
                 string pagingKey = Attr(pagingElement, "key");
-                if (pageSize <= 0 || pagingKey.Length == 0)
+                if (pageSize <= 0 || !Identifier().IsMatch(pagingKey))
                 {
-                    throw new ImportFormException(name, "paging cần pageSize > 0 và key");
+                    throw new ImportFormException(name, "paging cần pageSize > 0 và key là tên cột hợp lệ");
                 }
                 paging = new ImportPaging(pageSize, pagingKey);
+            }
+
+            // Transfer đánh dấu theo key của trang đã trả: cần paging (key) và query transferred
+            bool hasTransferred = queries.ContainsKey("transferred");
+            if (type == ImportFormType.Transfer && (paging == null || !hasTransferred))
+            {
+                throw new ImportFormException(name, "form Transfer phải khai <paging key=…> và <query action=\"transferred\">");
+            }
+            if (type != ImportFormType.Transfer && hasTransferred)
+            {
+                throw new ImportFormException(name, "query transferred chỉ dùng cho form type=\"Transfer\"");
             }
 
             return new ImportForm
@@ -164,6 +175,7 @@ namespace Business.V3
                 Blocks = blocks,
                 CheckingQuery = checking,
                 ProcessingQuery = queries["processing"],
+                TransferredQuery = queries.GetValueOrDefault("transferred", string.Empty),
                 Paging = paging,
                 Warnings = warnings
             };
