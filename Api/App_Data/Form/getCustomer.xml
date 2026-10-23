@@ -4,7 +4,7 @@
 ]>
 
 <!--
-  Mẫu form v3: POST /api/v3/customer/get
+  Mẫu form v3: POST /api/customer/get
   Body (dạng phẳng, form một khối): { "Keyword": "huy", "CustomerID": "KH001" }, cả hai đều không bắt buộc
 -->
 <import xmlns="urn:schemas-fast-com:fast-api" type="List" description="Danh mục khách hàng">

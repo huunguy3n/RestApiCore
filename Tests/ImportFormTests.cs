@@ -1,6 +1,6 @@
 using System.Xml.Linq;
-using Business.V3;
-using Models.V3;
+using Business;
+using Models;
 
 namespace Tests
 {
@@ -47,14 +47,14 @@ namespace Tests
             """;
 
         [Theory]
-        [InlineData("setSaleInvoice", "set", "sale-invoice", "/api/v3/sale-invoice")]
-        [InlineData("getCustomer", "get", "customer", "/api/v3/customer/get")]
-        [InlineData("cancelInvoice", "cancel", "invoice", "/api/v3/invoice/cancel")]
-        [InlineData("approveInvoice", "approve", "invoice", "/api/v3/invoice/approve")]
-        [InlineData("deleteSaleInvoice", "delete", "sale-invoice", "/api/v3/sale-invoice/delete")]
-        [InlineData("getVATInvoice", "get", "vat-invoice", "/api/v3/vat-invoice/get")]
-        [InlineData("getInvoice2", "get", "invoice2", "/api/v3/invoice2/get")]
-        [InlineData("setCustomers", "set", "customers", "/api/v3/customers")]
+        [InlineData("setSaleInvoice", "set", "sale-invoice", "/api/sale-invoice")]
+        [InlineData("getCustomer", "get", "customer", "/api/customer/get")]
+        [InlineData("cancelInvoice", "cancel", "invoice", "/api/invoice/cancel")]
+        [InlineData("approveInvoice", "approve", "invoice", "/api/invoice/approve")]
+        [InlineData("deleteSaleInvoice", "delete", "sale-invoice", "/api/sale-invoice/delete")]
+        [InlineData("getVATInvoice", "get", "vat-invoice", "/api/vat-invoice/get")]
+        [InlineData("getInvoice2", "get", "invoice2", "/api/invoice2/get")]
+        [InlineData("setCustomers", "set", "customers", "/api/customers")]
         public void TachTenFile_RaDongTuVaRoute(string name, string verb, string resource, string route)
         {
             Assert.True(ImportFormLoader.TrySplitName(name, out string actualVerb, out string actualResource));
@@ -93,7 +93,7 @@ namespace Tests
             Assert.Equal("HDA", form.VoucherCode);
             Assert.True(form.UnitRequired);
             Assert.Equal("New", form.UnitAction);
-            Assert.Equal("/api/v3/sale-invoice", form.Route);
+            Assert.Equal("/api/sale-invoice", form.Route);
             Assert.Equal(["master", "detail"], form.Blocks.Select(b => b.Name));
             Assert.True(form.Root.IsRoot);
             Assert.Equal("YourID", form.Root.Key);
@@ -253,7 +253,7 @@ namespace Tests
 
             Assert.Equal(ImportFormType.Transfer, form.Type);
             Assert.Equal("update x set y = 1", form.TransferredQuery);
-            Assert.Equal("/api/v3/invoice/transfer", form.Route);
+            Assert.Equal("/api/invoice/transfer", form.Route);
         }
 
         [Fact]
@@ -318,18 +318,18 @@ namespace Tests
         }
 
         [Theory]
-        [InlineData("POST", "/api/v3/sale-invoice", RouteMatch.Found, "setSaleInvoice")]
-        [InlineData("post", "/API/v3/Sale-Invoice/", RouteMatch.Found, "setSaleInvoice")]
-        [InlineData("POST", "/api/v3/customer/get", RouteMatch.Found, "getCustomer")]
-        [InlineData("POST", "/api/v3/invoice/approve", RouteMatch.Found, "approveInvoice")]
-        [InlineData("GET", "/api/v3/customer/get", RouteMatch.MethodNotAllowed, null)]
-        [InlineData("DELETE", "/api/v3/sale-invoice", RouteMatch.MethodNotAllowed, null)]
-        [InlineData("POST", "/api/v3/customer", RouteMatch.NotFound, null)]
-        [InlineData("POST", "/api/v3/customer/set", RouteMatch.NotFound, null)]
-        [InlineData("POST", "/api/v3/customer/delete", RouteMatch.NotFound, null)]
-        [InlineData("POST", "/api/v3/sale_invoice", RouteMatch.NotFound, null)]
-        [InlineData("POST", "/api/v3/sale-invoice/get/x", RouteMatch.NotFound, null)]
-        [InlineData("POST", "/api/v3/report", RouteMatch.NotFound, null)]
+        [InlineData("POST", "/api/sale-invoice", RouteMatch.Found, "setSaleInvoice")]
+        [InlineData("post", "/API/Sale-Invoice/", RouteMatch.Found, "setSaleInvoice")]
+        [InlineData("POST", "/api/customer/get", RouteMatch.Found, "getCustomer")]
+        [InlineData("POST", "/api/invoice/approve", RouteMatch.Found, "approveInvoice")]
+        [InlineData("GET", "/api/customer/get", RouteMatch.MethodNotAllowed, null)]
+        [InlineData("DELETE", "/api/sale-invoice", RouteMatch.MethodNotAllowed, null)]
+        [InlineData("POST", "/api/customer", RouteMatch.NotFound, null)]
+        [InlineData("POST", "/api/customer/set", RouteMatch.NotFound, null)]
+        [InlineData("POST", "/api/customer/delete", RouteMatch.NotFound, null)]
+        [InlineData("POST", "/api/sale_invoice", RouteMatch.NotFound, null)]
+        [InlineData("POST", "/api/sale-invoice/get/x", RouteMatch.NotFound, null)]
+        [InlineData("POST", "/api/report", RouteMatch.NotFound, null)]
         public void Resolve(string method, string path, RouteMatch expected, string? formName)
         {
             var catalog = ImportFormCatalog.Build([Form("setSaleInvoice"), Form("getCustomer"), Form("approveInvoice"), Form("setReport", enable: false)]);
@@ -341,10 +341,10 @@ namespace Tests
         [Fact]
         public void TrungRoute_BoCaHai()
         {
-            // setSALEInvoice và setSaleInvoice cùng ra /api/v3/sale-invoice
+            // setSALEInvoice và setSaleInvoice cùng ra /api/sale-invoice
             var catalog = ImportFormCatalog.Build([Form("setSaleInvoice"), Form("setSALEInvoice"), Form("getCustomer")]);
 
-            Assert.Equal(RouteMatch.NotFound, catalog.Resolve("POST", "/api/v3/sale-invoice", out _));
+            Assert.Equal(RouteMatch.NotFound, catalog.Resolve("POST", "/api/sale-invoice", out _));
             Assert.Contains("setSaleInvoice", catalog.Errors.Keys);
             Assert.Contains("setSALEInvoice", catalog.Errors.Keys);
             Assert.Single(catalog.Forms);
@@ -367,7 +367,7 @@ namespace Tests
 
                 var catalog = ImportFormCatalog.LoadDirectory(dir);
 
-                Assert.Equal(RouteMatch.Found, catalog.Resolve("POST", "/api/v3/customer/get", out _));
+                Assert.Equal(RouteMatch.Found, catalog.Resolve("POST", "/api/customer/get", out _));
                 Assert.Equal(["setBroken", "setTemplate"], catalog.Errors.Keys.Order());
             }
             finally

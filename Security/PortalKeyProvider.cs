@@ -5,7 +5,7 @@ using System.Text;
 namespace Security
 {
     /// <summary>
-    /// Cặp khóa RSA giải mật khẩu đăng nhập portal (KE_HOACH_V3 5.3). Trình duyệt mã hóa bằng khóa công khai (RSA-OAEP SHA-256,
+    /// Cặp khóa RSA giải mật khẩu đăng nhập portal (KE_HOACH 5.3). Trình duyệt mã hóa bằng khóa công khai (RSA-OAEP SHA-256,
     /// công bố qua /_meta/server dạng JWK), server giải bằng khóa riêng. Một cặp cho cả instance.
     /// Nguồn khóa riêng: tệp PFX (Security:PortalKeyPath + PortalKeyPassword) hoặc Windows Certificate Store (Security:PortalKeyThumbprint);
     /// không khai gì thì sinh khóa tạm trong bộ nhớ (chỉ dùng cho máy dev: restart là đổi khóa)

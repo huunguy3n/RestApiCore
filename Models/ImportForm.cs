@@ -1,7 +1,7 @@
-namespace Models.V3
+namespace Models
 {
     /// <summary>
-    /// Form v3 đã nạp và biên dịch từ App_Data/Form/{verb}{Resource}.xml (KE_HOACH_V3 mục 2). Bất biến: request không sửa được
+    /// Form v3 đã nạp và biên dịch từ App_Data/Form/{verb}{Resource}.xml (KE_HOACH mục 2). Bất biến: request không sửa được
     /// form đang cache (sửa lỗi 1.4 #4)
     /// </summary>
     public sealed record ImportForm
@@ -12,7 +12,7 @@ namespace Models.V3
         public required string Verb { get; init; }
         /// <summary>Resource kebab-case, vd sale-invoice</summary>
         public required string Resource { get; init; }
-        /// <summary>Đường dẫn route, vd /api/v3/sale-invoice hoặc /api/v3/sale-invoice/cancel</summary>
+        /// <summary>Đường dẫn route, vd /api/sale-invoice hoặc /api/sale-invoice/cancel</summary>
         public required string Route { get; init; }
 
         public required ImportFormType Type { get; init; }
@@ -31,7 +31,7 @@ namespace Models.V3
         public string CheckingQuery { get; init; } = string.Empty;
         public string ProcessingQuery { get; init; } = string.Empty;
         /// <summary>
-        /// Chỉ form Transfer: chạy mỗi khi trả một trang, #transferred chứa key của trang đó (KE_HOACH_V3 4.4 #5)
+        /// Chỉ form Transfer: chạy mỗi khi trả một trang, #transferred chứa key của trang đó (KE_HOACH 4.4 #5)
         /// </summary>
         public string TransferredQuery { get; init; } = string.Empty;
 

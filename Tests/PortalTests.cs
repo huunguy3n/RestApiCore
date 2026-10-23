@@ -6,7 +6,6 @@ using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 using Business;
-using Business.V3;
 using DataAccess;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -15,7 +14,6 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Models;
-using Models.V3;
 using Security;
 using Tests.Sample;
 using Web.Custom;
@@ -70,7 +68,7 @@ namespace Tests
                         var appConfig = new AppConfig
                         {
                             pathDirectory = ApiDirectory(), clockSkewSeconds = 300, maxRequestBodyBytes = 64 * 1024, secretKey = SecretKey, passwordKey = PasswordKey,
-                            issuerToken = "FastRestApi", v3TokenMinutes = 60, portalTokenMinutes = 30, loginMaxFailures = 3, loginLockMinutes = 15
+                            issuerToken = "FastRestApi", tokenMinutes = 60, portalTokenMinutes = 30, loginMaxFailures = 3, loginLockMinutes = 15
                         };
                         services.AddSingleton(appConfig);
                         services.AddMemoryCache();
@@ -83,7 +81,7 @@ namespace Tests
                         services.AddSingleton<IIpAccessManager, AllowAllIp>();
                         services.AddSingleton<IPortalCredentialStore>(new FakeCredentials());
                         services.AddSingleton(_portalKey);
-                        services.AddSingleton(new V3FormRuntime(catalog, null));
+                        services.AddSingleton(new FormRuntime(catalog, null));
                         services.AddSingleton<TimeProvider>(TimeProvider.System);
                         services.AddRouting();
                     })
@@ -103,10 +101,10 @@ namespace Tests
                         app.UseRouting();
                         app.UseEndpoints(endpoints =>
                         {
-                            endpoints.MapGet("/api/v3/_meta/server", () => Results.Json(new { serverTime = Now, portalKey = _portalKey.PublicJwk() }));
-                            endpoints.MapPost("/api/v3/_meta/ping", () => "{\"code\":\"SUCCESS\"}");
-                            endpoints.MapV3Portal();
-                            endpoints.MapPost("/api/v3/sale-invoice", () => "{\"code\":\"SUCCESS\"}");
+                            endpoints.MapGet("/api/_meta/server", () => Results.Json(new { serverTime = Now, portalKey = _portalKey.PublicJwk() }));
+                            endpoints.MapPost("/api/_meta/ping", () => "{\"code\":\"SUCCESS\"}");
+                            endpoints.MapPortal();
+                            endpoints.MapPost("/api/sale-invoice", () => "{\"code\":\"SUCCESS\"}");
                         });
                     }))
                 .StartAsync();
@@ -124,7 +122,7 @@ namespace Tests
         /// <summary>Như trình duyệt: lấy JWK từ /_meta/server, mã hóa { password, timestamp, nonce } bằng RSA-OAEP SHA-256</summary>
         private async Task<(string Kid, string Credential)> EncryptAsync(string password, long timestamp, string nonce)
         {
-            var jwk = JsonDocument.Parse(await _http.GetStringAsync("http://localhost/api/v3/_meta/server")).RootElement.GetProperty("portalKey");
+            var jwk = JsonDocument.Parse(await _http.GetStringAsync("http://localhost/api/_meta/server")).RootElement.GetProperty("portalKey");
             using RSA rsa = RSA.Create();
             rsa.ImportParameters(new RSAParameters { Modulus = FromBase64Url(jwk.GetProperty("n").GetString()!), Exponent = FromBase64Url(jwk.GetProperty("e").GetString()!) });
             byte[] plain = JsonSerializer.SerializeToUtf8Bytes(new { password, timestamp, nonce });
@@ -135,7 +133,7 @@ namespace Tests
         {
             var (realKid, realCredential) = await EncryptAsync(password, timestamp ?? DateTimeOffset.UtcNow.ToUnixTimeSeconds(), nonce ?? Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)));
             var body = JsonSerializer.Serialize(new { userName = user, kid = kid ?? realKid, credential = credential ?? realCredential });
-            HttpResponseMessage response = await _http.PostAsync("http://localhost/api/v3/auth/portal", new StringContent(body, Encoding.UTF8, "application/json"));
+            HttpResponseMessage response = await _http.PostAsync("http://localhost/api/auth/portal", new StringContent(body, Encoding.UTF8, "application/json"));
             return (response, JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.Clone());
         }
 
@@ -223,7 +221,7 @@ namespace Tests
         public async Task GuiMatKhauRo_KhongDangNhapDuoc()
         {
             var body = JsonSerializer.Serialize(new { userName = "DOITAC", kid = _portalKey.Kid, credential = Convert.ToBase64String(Encoding.UTF8.GetBytes("mat-khau-portal")) });
-            HttpResponseMessage response = await _http.PostAsync("http://localhost/api/v3/auth/portal", new StringContent(body, Encoding.UTF8, "application/json"));
+            HttpResponseMessage response = await _http.PostAsync("http://localhost/api/auth/portal", new StringContent(body, Encoding.UTF8, "application/json"));
 
             Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         }
@@ -233,14 +231,14 @@ namespace Tests
         {
             string token = await PortalTokenAsync();
 
-            var (status, list, response) = await GetAsync("/api/v3/_meta/resources", token);
+            var (status, list, response) = await GetAsync("/api/_meta/resources", token);
             Assert.Equal(HttpStatusCode.OK, status);
             Assert.Equal(["setSaleInvoice"], list.GetProperty("data").EnumerateArray().Select(r => r.GetProperty("form").GetString()));
             Assert.False(response.Headers.Contains("X-Fast-Signature"));
 
-            var (_, detail, _) = await GetAsync("/api/v3/_meta/resources/setsaleinvoice", token);
+            var (_, detail, _) = await GetAsync("/api/_meta/resources/setsaleinvoice", token);
             JsonElement data = detail.GetProperty("data");
-            Assert.Equal("/api/v3/sale-invoice", data.GetProperty("summary").GetProperty("route").GetString());
+            Assert.Equal("/api/sale-invoice", data.GetProperty("summary").GetProperty("route").GetString());
             Assert.True(data.GetProperty("summary").GetProperty("unitRequired").GetBoolean());
             JsonElement master = data.GetProperty("blocks")[0];
             Assert.Equal(["YourID", "VoucherDate", "CustomerID"], master.GetProperty("fields").EnumerateArray().Select(f => f.GetProperty("name").GetString()));
@@ -254,8 +252,8 @@ namespace Tests
         }
 
         [Theory]
-        [InlineData("/api/v3/_meta/resources/getSecret", "FORBIDDEN", HttpStatusCode.Forbidden)]
-        [InlineData("/api/v3/_meta/resources/khongCo", "NOT_FOUND", HttpStatusCode.NotFound)]
+        [InlineData("/api/_meta/resources/getSecret", "FORBIDDEN", HttpStatusCode.Forbidden)]
+        [InlineData("/api/_meta/resources/khongCo", "NOT_FOUND", HttpStatusCode.NotFound)]
         public async Task TokenPortal_DinhNghiaKhongDuocPhep(string path, string code, HttpStatusCode expected)
         {
             var (status, json, _) = await GetAsync(path, await PortalTokenAsync());
@@ -267,15 +265,15 @@ namespace Tests
         [Fact]
         public async Task TokenPortal_DocBangMaLoi()
         {
-            var (_, json, _) = await GetAsync("/api/v3/_meta/errors", await PortalTokenAsync());
+            var (_, json, _) = await GetAsync("/api/_meta/errors", await PortalTokenAsync());
 
             Assert.Contains(json.GetProperty("data").EnumerateArray(), e => e.GetProperty("code").GetString() == "INVALID_SIGNATURE" && e.GetProperty("httpStatus").GetInt32() == 401);
         }
 
         [Theory]
-        [InlineData("POST", "/api/v3/sale-invoice")]
-        [InlineData("POST", "/api/v3/_meta/ping")]
-        [InlineData("POST", "/api/v3/_meta/resources")]
+        [InlineData("POST", "/api/sale-invoice")]
+        [InlineData("POST", "/api/_meta/ping")]
+        [InlineData("POST", "/api/_meta/resources")]
         public async Task TokenPortal_KhongGoiDuocRouteNghiepVu(string method, string path)
         {
             var request = new HttpRequestMessage(new HttpMethod(method), "http://localhost" + path) { Content = new StringContent("{}") };
@@ -290,9 +288,9 @@ namespace Tests
         [Fact]
         public async Task TokenApi_DocMetaCoKy()
         {
-            var request = new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/v3/_meta/resources");
-            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Jwt.GenerateV3Token("DOITAC", 7, 1, "ADMIN", Guid.NewGuid().ToString(), DateTime.UtcNow.AddHours(1)));
-            var signer = new FastApiV3Signer(PrivateKey);
+            var request = new HttpRequestMessage(HttpMethod.Get, "http://localhost/api/_meta/resources");
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Jwt.GenerateToken("DOITAC", 7, 1, "ADMIN", Guid.NewGuid().ToString(), DateTime.UtcNow.AddHours(1)));
+            var signer = new FastApiSigner(PrivateKey);
             string nonce = signer.Sign(request, [], Now);
             request.Content = null;
 

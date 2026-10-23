@@ -8,7 +8,7 @@ using Models;
 namespace Web.Custom
 {
     /// <summary>
-    /// Ghi log mọi request vào hàng đợi (KE_HOACH_V3 5.2), không gọi SQL trên luồng request: LogWorker ghi theo lô.
+    /// Ghi log mọi request vào hàng đợi (KE_HOACH 5.2), không gọi SQL trên luồng request: LogWorker ghi theo lô.
     /// Thay LogMiddleware (ghi restApiLogData đồng bộ). Không ghi header Authorization, X-Fast-Signature; body response
     /// chứa JWT (auth/token, api/auth) không lưu
     /// </summary>
@@ -18,7 +18,7 @@ namespace Web.Custom
         public const string SignatureResultItem = "signatureResult";
 
         /// <summary>Route trả JWT trong body</summary>
-        private static readonly string[] TokenPaths = ["/api/v3/auth/token", V3PortalEndpoints.PortalPath, "/api/auth"];
+        private static readonly string[] TokenPaths = ["/api/auth/token", PortalEndpoints.PortalPath, "/api/auth"];
 
         public async Task Invoke(HttpContext context)
         {
@@ -68,7 +68,7 @@ namespace Web.Custom
 
             string? resultCode = ResultCode(context.Response.ContentType, responseBody);
             // auth/portal: request chứa mật khẩu mã hóa bằng khóa server, không lưu (người giữ khóa riêng giải được)
-            bool isPortalLogin = request.Path.StartsWithSegments(V3PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase);
+            bool isPortalLogin = request.Path.StartsWithSegments(PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase);
             (byte[]? keptRequest, string? requestSha) = isPortalLogin ? (null, null) : Keep(requestBody);
             (byte[]? keptResponse, string? responseSha) = isToken ? (null, null) : Keep(responseBody);
 

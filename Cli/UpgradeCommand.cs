@@ -1,12 +1,12 @@
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
-using Business.V3;
+using Business;
 
 namespace Cli
 {
     /// <summary>
-    /// Chuyển form v2 sang &lt;import&gt; v3 (KE_HOACH_V3 2.5). Không có --out thì in ra màn hình; có --out thì ghi file cùng tên
+    /// Chuyển form v2 sang &lt;import&gt; v3 (KE_HOACH 2.5). Không có --out thì in ra màn hình; có --out thì ghi file cùng tên
     /// </summary>
     public static class UpgradeCommand
     {

@@ -10,7 +10,7 @@ using Models;
 namespace Business.Logging
 {
     /// <summary>
-    /// Một request đã xử lý xong (KE_HOACH_V3 5.2). Không chứa private_key, chữ ký HMAC, JWT, connection string.
+    /// Một request đã xử lý xong (KE_HOACH 5.2). Không chứa private_key, chữ ký HMAC, JWT, connection string.
     /// Body thô giữ tới khi worker băm và nén; body lớn hơn logMaxBodyBytes chỉ giữ SHA256
     /// </summary>
     public sealed record RequestLogEntry

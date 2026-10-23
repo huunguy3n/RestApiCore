@@ -5,7 +5,7 @@ using Security;
 namespace Tests
 {
     /// <summary>
-    /// Vector thử cố định của chữ ký v3 (KE_HOACH_V3 4.2). Giá trị mong đợi tính độc lập bằng Python hmac/hashlib,
+    /// Vector thử cố định của chữ ký v3 (KE_HOACH 4.2). Giá trị mong đợi tính độc lập bằng Python hmac/hashlib,
     /// dùng chung cho code mẫu trên portal: đổi một giá trị ở đây là đổi giao thức với đối tác
     /// </summary>
     public class MessageSignatureTests
@@ -16,7 +16,7 @@ namespace Tests
         internal const string BodySha256 = "534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f";
         internal const string Nonce = "9b2e4c1f0a7d4e3b";
         internal const string IdempotencyKey = "6f1c2d3e-0000-4000-8000-000000000001";
-        internal const string RequestSignature = "6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa54";
+        internal const string RequestSignature = "4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b2";
 
         internal const string ResponseBody = "{\"code\":\"SUCCESS\"}";
         internal const string RequestId = "8c2f0000-0000-4000-8000-000000000002";
@@ -41,7 +41,7 @@ namespace Tests
         [Fact]
         public void RequestSignature_KhopVector()
         {
-            string canonical = MessageSignature.CanonicalRequest("post", "/API/v3/Sale-Invoice", MessageSignature.CanonicalQuery("?unitCode=CTY&dryRun=false"),
+            string canonical = MessageSignature.CanonicalRequest("post", "/API/Sale-Invoice", MessageSignature.CanonicalQuery("?unitCode=CTY&dryRun=false"),
                 1792574400, Nonce, IdempotencyKey, BodySha256);
 
             Assert.Equal(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), canonical));
@@ -85,7 +85,7 @@ namespace Tests
         public void SuaMotByteBody_ChuKySai()
         {
             byte[] tampered = Encoding.UTF8.GetBytes(Body.Replace("\"Quantity\":2", "\"Quantity\":3"));
-            string canonical = MessageSignature.CanonicalRequest("POST", "/api/v3/sale-invoice", "dryRun=false&unitCode=CTY",
+            string canonical = MessageSignature.CanonicalRequest("POST", "/api/sale-invoice", "dryRun=false&unitCode=CTY",
                 1792574400, Nonce, IdempotencyKey, MessageSignature.Sha256Hex(tampered));
 
             Assert.False(MessageSignature.SignatureEquals(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), canonical)));
@@ -94,7 +94,7 @@ namespace Tests
         [Fact]
         public void DoiQuery_ChuKySai()
         {
-            string canonical = MessageSignature.CanonicalRequest("POST", "/api/v3/sale-invoice", MessageSignature.CanonicalQuery("unitCode=CTY&dryRun=true"),
+            string canonical = MessageSignature.CanonicalRequest("POST", "/api/sale-invoice", MessageSignature.CanonicalQuery("unitCode=CTY&dryRun=true"),
                 1792574400, Nonce, IdempotencyKey, BodySha256);
 
             Assert.False(MessageSignature.SignatureEquals(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), canonical)));
@@ -102,9 +102,9 @@ namespace Tests
 
         [Theory]
         [InlineData(RequestSignature, true)]
-        [InlineData("6728C67BB7EDED95A6B13B56C3BCB13378C521FE55B0F23B97A3581918ADFA54", true)]
-        [InlineData("6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa55", false)]
-        [InlineData("6728c67b", false)]
+        [InlineData("4588C91A82467E239600B66FD21E08E18F626037CC91FF4197AA9CF137DC81B2", true)]
+        [InlineData("4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b3", false)]
+        [InlineData("4588c91a", false)]
         [InlineData(null, false)]
         public void SignatureEquals_ThoiGianHang(string? actual, bool expected)
         {

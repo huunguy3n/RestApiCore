@@ -2,9 +2,9 @@ using System.Data;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Models.V3;
+using Models;
 
-namespace Business.V3
+namespace Business
 {
     /// <summary>Lỗi giá trị một field, vị trí dạng [0].detail[2].ItemID</summary>
     public sealed record FieldError(string Position, string Block, string Field, string Code);
@@ -20,7 +20,7 @@ namespace Business.V3
     }
 
     /// <summary>
-    /// JSON object → bảng theo khối (KE_HOACH_V3 4.3). Body là một chứng từ { "master": {…}, "detail": […] } hoặc mảng chứng từ.
+    /// JSON object → bảng theo khối (KE_HOACH 4.3). Body là một chứng từ { "master": {…}, "detail": […] } hoặc mảng chứng từ.
     /// Form chỉ có một khối thì nhận thêm dạng phẳng { "Field": … } (body tham số của get). Thuộc tính không khai bị bỏ qua.
     /// Lỗi giá trị gom đủ, có vị trí; lỗi dạng dừng ngay
     /// </summary>

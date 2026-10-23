@@ -1,12 +1,11 @@
 using Microsoft.Data.SqlClient;
 using Models;
-using Models.V3;
 using System.Data;
 
 namespace DataAccess
 {
     /// <summary>
-    /// Đọc cấu trúc cột bảng FBO cho form v3 (KE_HOACH_V3 2.3). Kiểu do người dùng định nghĩa quy về kiểu gốc
+    /// Đọc cấu trúc cột bảng FBO cho form v3 (KE_HOACH 2.3). Kiểu do người dùng định nghĩa quy về kiểu gốc
     /// </summary>
     public class ColumnSchemaRepository(AppConfig appConfig)
     {

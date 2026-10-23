@@ -35,19 +35,19 @@ namespace Tests
                         app.UseRouting();
                         app.UseEndpoints(endpoints =>
                         {
-                            endpoints.MapPost("/api/v3/customer/get", async context =>
+                            endpoints.MapPost("/api/customer/get", async context =>
                             {
                                 context.Items[RequestLogMiddleware.SignatureResultItem] = "VALID";
                                 context.Items[RequestLogMiddleware.FormItem] = "getCustomer";
                                 context.Response.ContentType = "application/json";
                                 await context.Response.WriteAsync("""{"code":"SUCCESS","data":{"code":"bên trong"}}""");
                             });
-                            endpoints.MapPost("/api/v3/auth/token", async context =>
+                            endpoints.MapPost("/api/auth/token", async context =>
                             {
                                 context.Response.ContentType = "application/json";
                                 await context.Response.WriteAsync("""{"code":"SUCCESS","accessToken":"eyJ.bi-mat.xyz"}""");
                             });
-                            endpoints.MapPost("/api/v3/sale-invoice", async context =>
+                            endpoints.MapPost("/api/sale-invoice", async context =>
                             {
                                 context.Response.StatusCode = 401;
                                 context.Response.ContentType = "application/json; charset=utf-8";
@@ -85,7 +85,7 @@ namespace Tests
         [Fact]
         public async Task GhiDuThongTin_KhongGhiHeaderBiMat()
         {
-            var (response, entry) = await PostAsync("/api/v3/customer/get?unitCode=CTY", "{}", request =>
+            var (response, entry) = await PostAsync("/api/customer/get?unitCode=CTY", "{}", request =>
             {
                 request.Headers.Add("X-Fast-Nonce", "nonce-0123456789ab");
                 request.Headers.Add("X-Fast-Timestamp", "1792574400");
@@ -96,7 +96,7 @@ namespace Tests
             });
 
             Assert.Equal(Guid.Parse(response.Headers.GetValues("X-Request-ID").Single()), entry.ReqId);
-            Assert.Equal(("POST", "/api/v3/customer/get", "?unitCode=CTY"), (entry.Method, entry.Path, entry.QueryString));
+            Assert.Equal(("POST", "/api/customer/get", "?unitCode=CTY"), (entry.Method, entry.Path, entry.QueryString));
             Assert.Equal((200, "SUCCESS", "getCustomer", "VALID"), (entry.StatusCode, entry.ResultCode, entry.Form, entry.SignatureResult));
             Assert.Equal(("nonce-0123456789ab", 1792574400L, "abc", "key-1"), (entry.Nonce, entry.ClientTimestamp, entry.ContentSha256, entry.IdempotencyKey));
             Assert.Equal("{}", Encoding.UTF8.GetString(entry.RequestBody!));
@@ -110,7 +110,7 @@ namespace Tests
         [Fact]
         public async Task AuthToken_KhongLuuBodyResponseChuaJwt()
         {
-            var (_, entry) = await PostAsync("/api/v3/auth/token", """{"userName":"DOITAC"}""", request => request.Headers.Add("X-Fast-User", "DOITAC"));
+            var (_, entry) = await PostAsync("/api/auth/token", """{"userName":"DOITAC"}""", request => request.Headers.Add("X-Fast-User", "DOITAC"));
 
             Assert.Null(entry.ResponseBody);
             Assert.Null(entry.ResponseSha256);
@@ -122,7 +122,7 @@ namespace Tests
         [Fact]
         public async Task MaTanCong_DanhDauAttack()
         {
-            var (_, entry) = await PostAsync("/api/v3/sale-invoice", "{}");
+            var (_, entry) = await PostAsync("/api/sale-invoice", "{}");
 
             Assert.Equal((401, "INVALID_SIGNATURE"), (entry.StatusCode, entry.ResultCode));
             Assert.True(entry.IsAttack);
@@ -159,7 +159,7 @@ namespace Tests
             ReqId = Guid.NewGuid(),
             CreatedAt = DateTime.Now,
             Method = "POST",
-            Path = $"/api/v3/x{i}",
+            Path = $"/api/x{i}",
             StatusCode = 200,
             DurationMs = i,
             RequestBody = Encoding.UTF8.GetBytes($"{{\"i\":{i}}}")
@@ -244,7 +244,7 @@ namespace Tests
                 queue.Enqueue(Entry(99));
 
                 Assert.True(await WaitUntil(() => sink.Count == 6 && spool.Pending().Count == 0), "SQL lên → đẩy lại spool, xoá file");
-                Assert.Equal(Enumerable.Range(0, 5).Select(i => $"/api/v3/x{i}").Append("/api/v3/x99").Order(),
+                Assert.Equal(Enumerable.Range(0, 5).Select(i => $"/api/x{i}").Append("/api/x99").Order(),
                     sink.Batches.SelectMany(b => b).Select(e => e.Path).Order());
                 await worker.StopAsync(CancellationToken.None);
             }

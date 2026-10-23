@@ -3,9 +3,9 @@ using System.Text.RegularExpressions;
 using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Logging;
 using Models;
-using Models.V3;
+using Models;
 
-namespace Business.V3
+namespace Business
 {
     /// <summary>
     /// Thông tin request đã qua xác thực và kiểm quyền, dùng để thay biến @@ trong query
@@ -37,7 +37,7 @@ namespace Business.V3
     /// <summary>
     /// Chạy form trên SQL: tạo #errors và #khối, bulk dữ liệu, rồi trong một transaction chạy checking, processing.
     /// #errors có dòng → rollback, trả lỗi. dryRun → chạy hết checking rồi rollback, không chạy processing.
-    /// Processing trả bảng 0 code khác SUCCESS → rollback (KE_HOACH_V3 4.4)
+    /// Processing trả bảng 0 code khác SUCCESS → rollback (KE_HOACH 4.4)
     /// </summary>
     public class FormExecutor(AppConfig appConfig, ILogger<FormExecutor> logger) : IFormExecutor
     {
@@ -168,7 +168,7 @@ namespace Business.V3
     }
 
     /// <summary>
-    /// Thay biến @@ trong query (KE_HOACH_V3 2.6). Chuỗi thành literal N'…' đã escape, số giữ nguyên, tên DB thành [tên].
+    /// Thay biến @@ trong query (KE_HOACH 2.6). Chuỗi thành literal N'…' đã escape, số giữ nguyên, tên DB thành [tên].
     /// @@unit chỉ có giá trị sau khi unitCode đã qua restApi_CheckUnitRights
     /// </summary>
     public static partial class FormVariables

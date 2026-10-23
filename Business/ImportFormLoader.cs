@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
-using Models.V3;
+using Models;
 
-namespace Business.V3
+namespace Business
 {
     /// <summary>
     /// Lỗi nạp form: file bị bỏ qua, ghi log, các form khác vẫn chạy
@@ -16,7 +16,7 @@ namespace Business.V3
     }
 
     /// <summary>
-    /// Đọc và biên dịch {verb}{Resource}.xml dạng &lt;import&gt; (KE_HOACH_V3 mục 2). Danh sách check/condition/tag/errorCode
+    /// Đọc và biên dịch {verb}{Resource}.xml dạng &lt;import&gt; (KE_HOACH mục 2). Danh sách check/condition/tag/errorCode
     /// ngăn bằng ký tự CR: khai &lt;!ENTITY And "&amp;#38;#13;"&gt; (khai "&amp;#13;" thì CR bị chuẩn hóa thành dấu cách)
     /// </summary>
     public static partial class ImportFormLoader
@@ -77,8 +77,8 @@ namespace Business.V3
             return true;
         }
 
-        /// <summary>set → POST /api/v3/{resource}; động từ khác → POST /api/v3/{resource}/{verb}</summary>
-        public static string RouteOf(string verb, string resource) => verb == "set" ? $"/api/v3/{resource}" : $"/api/v3/{resource}/{verb}";
+        /// <summary>set → POST /api/{resource}; động từ khác → POST /api/{resource}/{verb}</summary>
+        public static string RouteOf(string verb, string resource) => verb == "set" ? $"/api/{resource}" : $"/api/{resource}/{verb}";
 
         /// <summary>Quyền đơn vị mặc định theo động từ (mục 3.2)</summary>
         public static string DefaultUnitAction(string verb) => verb switch

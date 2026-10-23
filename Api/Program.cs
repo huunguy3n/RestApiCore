@@ -72,31 +72,31 @@ builder.Services.AddSingleton<IIpAccessManager, IpAccessManager>();
 builder.Services.AddSingleton(privateKeyProtector);
 builder.Services.AddSingleton(portalKey);
 builder.Services.AddPortalCors(appConfig.portalOrigins);
-builder.Services.AddSingleton<Business.V3.IPortalCredentialStore, Business.V3.PortalCredentialStore>();
+builder.Services.AddSingleton<Business.IPortalCredentialStore, Business.PortalCredentialStore>();
 builder.Services.AddSingleton<ISignerKeyStore, SignerKeyStore>();
 builder.Services.AddSingleton<NonceStore>();
 builder.Services.AddSingleton<IRevokedTokenStore, RevokedTokenStore>();
 builder.Services.AddSingleton<LoginLockout>();
-builder.Services.AddSingleton<Business.V3.IUnitRightsChecker, Business.V3.UnitRightsChecker>();
-builder.Services.AddSingleton<Business.V3.IFormExecutor, Business.V3.FormExecutor>();
-builder.Services.AddSingleton<Business.V3.IIdempotencyStore, Business.V3.IdempotencyStore>();
-builder.Services.AddSingleton<Business.V3.ICursorStore, Business.V3.CursorStore>();
+builder.Services.AddSingleton<Business.IUnitRightsChecker, Business.UnitRightsChecker>();
+builder.Services.AddSingleton<Business.IFormExecutor, Business.FormExecutor>();
+builder.Services.AddSingleton<Business.IIdempotencyStore, Business.IdempotencyStore>();
+builder.Services.AddSingleton<Business.ICursorStore, Business.CursorStore>();
 // Log v3: request chỉ đẩy vào hàng đợi, LogWorker ghi SQL theo lô, SQL lỗi thì spool ra logDirectory/spool
 builder.Services.AddSingleton<Business.Logging.RequestLogQueue>();
 builder.Services.AddSingleton<Business.Logging.IRequestLogSink, Business.Logging.SqlRequestLogSink>();
 builder.Services.AddSingleton(new Business.Logging.RequestLogSpool(Path.Combine(appConfig.logDirectory, "spool")));
 builder.Services.AddHostedService<LogWorker>();
-// Form v3: nạp App_Data/Form lúc khởi động, gắn kiểu theo cột thật; file đổi thì V3FormReloader nạp lại
-builder.Services.AddSingleton<V3FormLoader>();
+// Form v3: nạp App_Data/Form lúc khởi động, gắn kiểu theo cột thật; file đổi thì FormReloader nạp lại
+builder.Services.AddSingleton<FormLoader>();
 builder.Services.AddSingleton(services =>
 {
     string irregular = services.GetRequiredService<Options>().Irregular.Trim();
-    return new V3FormRuntime(services.GetRequiredService<V3FormLoader>().Load(), irregular.Length > 0 ? new System.Text.RegularExpressions.Regex(irregular) : null);
+    return new FormRuntime(services.GetRequiredService<FormLoader>().Load(), irregular.Length > 0 ? new System.Text.RegularExpressions.Regex(irregular) : null);
 });
 builder.Services.AddHostedService(services =>
 {
-    var loader = services.GetRequiredService<V3FormLoader>();
-    return new V3FormReloader(services.GetRequiredService<V3FormRuntime>(), loader.Load, loader.Directory, services.GetRequiredService<ILogger<V3FormReloader>>());
+    var loader = services.GetRequiredService<FormLoader>();
+    return new FormReloader(services.GetRequiredService<FormRuntime>(), loader.Load, loader.Directory, services.GetRequiredService<ILogger<FormReloader>>());
 });
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -175,7 +175,7 @@ app.UseWhen(IsBusinessRequest, branch =>
     branch.UseMiddleware<IpAccessMiddleware>();
 });
 
-// /api/v3: kiểm chữ ký request, ký response. Đặt ngoài UseExceptionHandler để response lỗi 500 cũng được ký
+// /api: kiểm chữ ký request, ký response. Đặt ngoài UseExceptionHandler để response lỗi 500 cũng được ký
 app.UseMiddleware<SignatureMiddleware>();
 
 app.UseAuthorization();
@@ -207,7 +207,7 @@ app.MapHealthChecks("/health/live", new() { Predicate = _ => false, ResponseWrit
 app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready"), ResponseWriter = HealthCheckResponse.Writer(appConfig) });
 
 // v3 meta: server không cần token, không ký (đồng bộ giờ). ping cần JWT + chữ ký, để đối tác thử ký hai chiều
-app.MapGet("/api/v3/_meta/server", (TimeProvider time) => Results.Json(new
+app.MapGet("/api/_meta/server", (TimeProvider time) => Results.Json(new
 {
     serverTime = time.GetUtcNow().ToUnixTimeSeconds(),
     signatureVersion = Security.MessageSignature.RequestAlgorithm,
@@ -215,9 +215,9 @@ app.MapGet("/api/v3/_meta/server", (TimeProvider time) => Results.Json(new
     // Khóa công khai RSA-OAEP-256 để trình duyệt mã hóa mật khẩu đăng nhập portal (5.3)
     portalKey = portalKey.PublicJwk()
 }));
-app.MapV3Auth();
-app.MapV3Portal();
-app.MapPost("/api/v3/_meta/ping", (HttpContext context, TimeProvider time) =>
+app.MapAuth();
+app.MapPortal();
+app.MapPost("/api/_meta/ping", (HttpContext context, TimeProvider time) =>
 {
     var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;
     return Results.Json(new
@@ -230,10 +230,10 @@ app.MapPost("/api/v3/_meta/ping", (HttpContext context, TimeProvider time) =>
     });
 });
 // Route nghiệp vụ v3 từ App_Data/Form (route literal ở trên được ưu tiên)
-app.MapV3Forms();
+app.MapForms();
 app.MapControllers();
 
 // Nạp form ngay lúc khởi động để lỗi XML hiện trong log, không đợi request đầu
-app.Services.GetRequiredService<V3FormRuntime>();
+app.Services.GetRequiredService<FormRuntime>();
 
 app.Run();

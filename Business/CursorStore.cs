@@ -7,7 +7,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Models;
 using Newtonsoft.Json;
 
-namespace Business.V3
+namespace Business
 {
     /// <summary>Thông tin cursor: thuộc form và đơn vị nào, bao nhiêu trang</summary>
     [ImmutableObject(true)]

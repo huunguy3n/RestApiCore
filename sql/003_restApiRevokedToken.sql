@@ -1,4 +1,4 @@
--- JWT đã thu hồi (POST /api/v3/auth/revoke). Dọn theo expires_at: hết hạn thì token tự vô hiệu, không cần giữ
+-- JWT đã thu hồi (POST /api/auth/revoke). Dọn theo expires_at: hết hạn thì token tự vô hiệu, không cần giữ
 -- Tương thích SQL Server 2008, chạy lại được
 --C--NGUYENTDH 23/10/2026
 

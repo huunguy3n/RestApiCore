@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 
-namespace Business.V3
+namespace Business
 {
     /// <summary>Bảng và cột mã của một controller trong Update.xml v2, vd Customer → dmkh.ma_kh</summary>
     public sealed record ControllerLookup(string Table, string Column);
@@ -12,14 +12,14 @@ namespace Business.V3
     public sealed record UpgradeResult(string Xml, IReadOnlyList<string> Notes, bool Valid);
 
     /// <summary>
-    /// Chuyển form v2 (&lt;form xmlns="urn:schemas-fast-com:rest-api"&gt;) sang &lt;import&gt; v3 (KE_HOACH_V3 2.5).
+    /// Chuyển form v2 (&lt;form xmlns="urn:schemas-fast-com:rest-api"&gt;) sang &lt;import&gt; v3 (KE_HOACH 2.5).
     /// Giữ tên file; khối đầu là khối gốc; &lt;reference&gt; thành check tồn tại mã (đối tác gửi mã FBO thay mã của họ);
     /// bỏ @@update; đổi tên biến v2. Kết quả là bản gợi ý, người xem lại rồi mới dùng
     /// </summary>
     public static partial class V2FormUpgrader
     {
         public static readonly XNamespace V2 = "urn:schemas-fast-com:rest-api";
-        private static readonly XNamespace V3 = ImportFormLoader.Ns;
+        private static readonly XNamespace ImportNs = ImportFormLoader.Ns;
 
         [GeneratedRegex(@"set\s+@@reference\s*=\s*b\.(\w+)\s+from\s+@@table\s+a\s+join\s+([\w$]+)\s+b", RegexOptions.IgnoreCase)]
         private static partial Regex UpdateScript();
@@ -62,7 +62,7 @@ namespace Business.V3
             List<string> notes = [];
             List<XElement> structs = form.Elements(V2 + "struct").ToList();
 
-            XElement import = new(V3 + "import", new XAttribute("type", form.Attribute("type")?.Value ?? "List"));
+            XElement import = new(ImportNs + "import", new XAttribute("type", form.Attribute("type")?.Value ?? "List"));
             if (form.Attribute("id")?.Value is { Length: > 0 } voucherCode)
             {
                 import.Add(new XAttribute("voucherCode", voucherCode));
@@ -81,7 +81,7 @@ namespace Business.V3
             {
                 string action = (query.Attribute("action")?.Value ?? "processing").ToLowerInvariant();
                 string text = ConvertQuery(query.Element(V2 + "text")?.Value ?? query.Value, notes);
-                import.Add(new XElement(V3 + "query", new XAttribute("action", action), new XElement(V3 + "text", new XCData(text))));
+                import.Add(new XElement(ImportNs + "query", new XAttribute("action", action), new XElement(ImportNs + "text", new XCData(text))));
             }
 
             var document = new XDocument(
@@ -137,7 +137,7 @@ namespace Business.V3
             IReadOnlyDictionary<string, ControllerLookup> controllers, List<string> notes)
         {
             string blockName = source.Attribute("name")?.Value ?? "";
-            XElement block = new(V3 + "fields", new XAttribute("name", blockName));
+            XElement block = new(ImportNs + "fields", new XAttribute("name", blockName));
             if (source.Attribute("baseTable")?.Value is { Length: > 0 } table)
             {
                 block.Add(new XAttribute("table", table));
@@ -182,7 +182,7 @@ namespace Business.V3
         {
             string fieldName = field.Attribute("name")?.Value ?? "";
             string mapping = field.Attribute("mapping")?.Value ?? "";
-            XElement result = new(V3 + "field", new XAttribute("name", fieldName));
+            XElement result = new(ImportNs + "field", new XAttribute("name", fieldName));
 
             List<(string Check, string ErrorCode, int Index)> checks = [];
             XElement? reference = field.Element(V2 + "reference");

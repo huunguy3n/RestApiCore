@@ -2,8 +2,8 @@ using System.Data;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
-using Business.V3;
-using Models.V3;
+using Business;
+using Models;
 
 namespace Tests
 {

@@ -1,9 +1,8 @@
 using System.Text.RegularExpressions;
 using System.Threading.Channels;
-using Business.V3;
+using Business;
 using DataAccess;
 using Models;
-using Models.V3;
 
 namespace Web.Custom
 {
@@ -11,7 +10,7 @@ namespace Web.Custom
     /// Bảng route form v3 đang dùng và mẫu ký tự đặc biệt. Catalog thay nguyên khối khi nạp lại (catalog bất biến),
     /// request đang chạy giữ catalog cũ tới khi xong
     /// </summary>
-    public sealed class V3FormRuntime(ImportFormCatalog catalog, Regex? irregular)
+    public sealed class FormRuntime(ImportFormCatalog catalog, Regex? irregular)
     {
         private ImportFormCatalog _catalog = catalog;
 
@@ -24,7 +23,7 @@ namespace Web.Custom
     /// <summary>
     /// Nạp App_Data/Form và gắn kiểu theo cột thật. Mỗi lần nạp đọc lại cấu trúc bảng (bảng có thể đã thêm cột)
     /// </summary>
-    public sealed class V3FormLoader(AppConfig appConfig, ILogger<ImportFormCatalog> logger)
+    public sealed class FormLoader(AppConfig appConfig, ILogger<ImportFormCatalog> logger)
     {
         public string Directory => Path.Combine(appConfig.pathDirectory, "App_Data", "Form");
 
@@ -49,7 +48,7 @@ namespace Web.Custom
     /// Theo dõi App_Data/Form/*.xml, file đổi thì nạp lại toàn bộ catalog sau một khoảng gom sự kiện.
     /// Nạp lỗi ngoài lỗi XML (vd mất kết nối SQL) thì giữ catalog cũ
     /// </summary>
-    public sealed class V3FormReloader(V3FormRuntime runtime, Func<ImportFormCatalog> load, string directory, ILogger<V3FormReloader> logger) : BackgroundService
+    public sealed class FormReloader(FormRuntime runtime, Func<ImportFormCatalog> load, string directory, ILogger<FormReloader> logger) : BackgroundService
     {
         /// <summary>Gom các sự kiện liên tiếp (trình soạn thảo ghi file nhiều lần) thành một lần nạp</summary>
         public TimeSpan Debounce { get; init; } = TimeSpan.FromMilliseconds(500);

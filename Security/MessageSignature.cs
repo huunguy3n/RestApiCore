@@ -4,7 +4,7 @@ using System.Text;
 namespace Security
 {
     /// <summary>
-    /// Ký và kiểm thông điệp v3 (KE_HOACH_V3 mục 4.2): SHA-256 checksum body, HMAC-SHA256 hai chiều.
+    /// Ký và kiểm thông điệp v3 (KE_HOACH mục 4.2): SHA-256 checksum body, HMAC-SHA256 hai chiều.
     /// Phần thuần, không phụ thuộc ASP.NET, dùng chung cho server, client mẫu và vector thử
     /// </summary>
     public static class MessageSignature

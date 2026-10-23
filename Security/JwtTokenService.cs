@@ -48,12 +48,12 @@ namespace Security
         /// <summary>
         /// Audience của JWT v3. Token v3 không gắn IP (đối tác hay đổi IP); IP kiểm riêng theo restApiAllowIp
         /// </summary>
-        public const string V3Audience = "fast-api-v3";
+        public const string Audience = "fast-api";
 
         /// <summary>
-        /// JWT v3 (KE_HOACH_V3 4.2.5): sub = restApiUser.name, u_id = restApiUser.id, user_id = userinfo2.id, name_erp, jti
+        /// JWT v3 (KE_HOACH 4.2.5): sub = restApiUser.name, u_id = restApiUser.id, user_id = userinfo2.id, name_erp, jti
         /// </summary>
-        public string GenerateV3Token(string userName, int uId, int userId, string nameErp, string jti, DateTime expiresUtc, string scope = "api")
+        public string GenerateToken(string userName, int uId, int userId, string nameErp, string jti, DateTime expiresUtc, string scope = "api")
         {
             var claims = new[]
             {
@@ -67,7 +67,7 @@ namespace Security
 
             var token = new JwtSecurityToken(
                 issuer: _issuer,
-                audience: V3Audience,
+                audience: Audience,
                 claims: claims,
                 notBefore: DateTime.UtcNow,
                 expires: expiresUtc,
@@ -78,7 +78,7 @@ namespace Security
         }
 
         /// <summary>
-        /// Nhận token kiểu cũ (audience = IP) và token v3 (audience = fast-api-v3). Route v3 tự đòi claim u_id
+        /// Nhận token kiểu cũ (audience = IP) và token v3 (audience = fast-api). Route v3 tự đòi claim u_id
         /// </summary>
         public ClaimsPrincipal ValidateJWTToken(string token, string ipAddress)
         {
@@ -94,7 +94,7 @@ namespace Security
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     ValidIssuer = _issuer,
-                    ValidAudiences = [ipAddress, V3Audience],
+                    ValidAudiences = [ipAddress, Audience],
                     IssuerSigningKey = new SymmetricSecurityKey(key)
                 };
 

@@ -8,7 +8,7 @@ namespace Tests.Sample
     /// Client mẫu C# cho đối tác: ký request và kiểm chữ ký response FastAPI v3 (HMAC-SHA256 hai chiều).
     /// Tự chứa, chỉ dùng System.Security.Cryptography; không tham chiếu code server để test là một bản cài đặt độc lập
     /// </summary>
-    public sealed class FastApiV3Signer(byte[] privateKey)
+    public sealed class FastApiSigner(byte[] privateKey)
     {
         private readonly byte[] _requestKey = HMACSHA256.HashData(privateKey, Encoding.ASCII.GetBytes("FAST-API-V3-REQUEST"));
         private readonly byte[] _responseKey = HMACSHA256.HashData(privateKey, Encoding.ASCII.GetBytes("FAST-API-V3-RESPONSE"));

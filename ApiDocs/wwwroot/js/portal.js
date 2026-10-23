@@ -1,4 +1,4 @@
-// Portal đối tác Fast API v3 (KE_HOACH_V3 5.3). Trang một màn, định tuyến bằng hash.
+// Portal đối tác Fast API (KE_HOACH 5.3). Trang một màn, định tuyến bằng hash.
 // JWT portal giữ trong sessionStorage (chỉ đọc _meta); private_key và JWT API chỉ nằm trong biến của trang, tải lại là mất.
 import * as sign from "./fast-sign.js";
 
@@ -83,7 +83,7 @@ function logout() {
 const serverNow = () => Math.floor(Date.now() / 1000) + state.clockOffset;
 
 async function fetchServer() {
-    const response = await fetch(apiBase + "/api/v3/_meta/server");
+    const response = await fetch(apiBase + "/api/_meta/server");
     if (!response.ok) throw new Error(`/_meta/server trả ${response.status}`);
     const server = await response.json();
     state.clockOffset = server.serverTime - Math.floor(Date.now() / 1000);
@@ -149,7 +149,7 @@ async function login(userName, password) {
     const plain = new TextEncoder().encode(JSON.stringify({ password, timestamp: server.serverTime, nonce: sign.newNonce() }));
     const credential = sign.toBase64(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, plain));
 
-    const response = await fetch(apiBase + "/api/v3/auth/portal", {
+    const response = await fetch(apiBase + "/api/auth/portal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ userName, kid: jwk.kid, credential })
@@ -161,7 +161,7 @@ async function login(userName, password) {
 
 // ---------- Danh sách tài nguyên ----------
 async function resourcesView() {
-    state.resources ??= await portalGet("/api/v3/_meta/resources");
+    state.resources ??= await portalGet("/api/_meta/resources");
     const filter = h("input", { class: "form-control", placeholder: "Lọc theo tên, route, mô tả", type: "search" });
     const body = h("tbody");
     const fill = () => {
@@ -190,7 +190,7 @@ async function resourcesView() {
 
 // ---------- Chi tiết tài nguyên + gọi thử ----------
 async function resourceView(form) {
-    const detail = await portalGet(`/api/v3/_meta/resources/${encodeURIComponent(form)}`);
+    const detail = await portalGet(`/api/_meta/resources/${encodeURIComponent(form)}`);
     const s = detail.summary;
     const sampleText = JSON.stringify(detail.sample, null, 2);
 
@@ -296,7 +296,7 @@ function tryItPanel(summary, sampleText) {
         h("h2", { class: "h5" }, "Gọi thử"),
         h("p", { class: "small text-secondary" },
             "private_key chỉ dùng để tính HMAC ngay trên trình duyệt, không gửi lên server và mất khi tải lại trang. ",
-            "Portal lấy JWT API bằng /api/v3/auth/token (ký bằng khóa này) rồi ký từng request như code mẫu."),
+            "Portal lấy JWT API bằng /api/auth/token (ký bằng khóa này) rồi ký từng request như code mẫu."),
         h("div", { class: "row g-2 align-items-center" },
             h("div", { class: "col-md-8" }, privateKey),
             h("div", { class: "col-md-4 d-flex gap-2 align-items-center" },
@@ -328,7 +328,7 @@ async function ensureApiToken(output) {
     if (tryIt.apiToken && tryIt.apiTokenExpires > Date.now()) return;
     await fetchServer();
     const userName = state.session.userName;
-    const result = await signedCall("POST", "/api/v3/auth/token", JSON.stringify({ userName }), "", { "X-Fast-User": userName }, false);
+    const result = await signedCall("POST", "/api/auth/token", JSON.stringify({ userName }), "", { "X-Fast-User": userName }, false);
     if (!result.json?.accessToken) {
         output.replaceChildren(callResult(result));
         throw new Error(`Không lấy được JWT API: ${result.json?.code || result.status} ${result.json?.message || ""}`);
@@ -387,7 +387,7 @@ function callResult(r) {
 
 // ---------- Bảng mã lỗi ----------
 async function errorsView() {
-    state.errors ??= await portalGet("/api/v3/_meta/errors");
+    state.errors ??= await portalGet("/api/_meta/errors");
     const filter = h("input", { class: "form-control", type: "search", placeholder: "Lọc theo mã hoặc nội dung" });
     const body = h("tbody");
     const fill = () => {
@@ -451,16 +451,16 @@ async function samplesView() {
         ["Response body", v.responseBody],
         ["X-Fast-Signature (response)", v.responseSignature]
     ];
-    const canonical = sign.canonicalRequest(v.method, "/api/v3/sale-invoice", sign.canonicalQuery("unitCode=CTY&dryRun=false"), v.timestamp, v.nonce, v.idempotencyKey, v.bodySha256);
+    const canonical = sign.canonicalRequest(v.method, "/api/sale-invoice", sign.canonicalQuery("unitCode=CTY&dryRun=false"), v.timestamp, v.nonce, v.idempotencyKey, v.bodySha256);
 
     render(
         h("h1", { class: "h4" }, "Ký request và kiểm chữ ký response"),
         h("ol", { class: "small" },
-            h("li", {}, "Lấy giờ server: GET /api/v3/_meta/server (serverTime) để tránh lệch giờ."),
+            h("li", {}, "Lấy giờ server: GET /api/_meta/server (serverTime) để tránh lệch giờ."),
             h("li", {}, "Dẫn xuất K_request, K_response từ private_key (HMAC-SHA256 với hai nhãn cố định)."),
             h("li", {}, "Băm SHA-256 đúng các byte body gửi đi (body rỗng vẫn băm chuỗi rỗng)."),
             h("li", {}, "Dựng canonicalRequest: thuật toán, METHOD, path chữ thường, query chuẩn hóa RFC 3986 và sắp xếp, timestamp, nonce, Idempotency-Key, SHA-256 body — nối bằng \\n."),
-            h("li", {}, "X-Fast-Signature = hex(HMAC-SHA256(K_request, canonicalRequest)). Lấy JWT ở POST /api/v3/auth/token (header X-Fast-User), các request sau gửi kèm Authorization: Bearer."),
+            h("li", {}, "X-Fast-Signature = hex(HMAC-SHA256(K_request, canonicalRequest)). Lấy JWT ở POST /api/auth/token (header X-Fast-User), các request sau gửi kèm Authorization: Bearer."),
             h("li", {}, "Kiểm response: HMAC-SHA256(K_response, canonicalResponse) với status, X-Request-ID, nonce của request, X-Fast-Timestamp, SHA-256 body. Sai thì không tin nội dung.")),
         h("h2", { class: "h5 mt-4" }, "Vector thử cố định"),
         h("p", { class: "small text-secondary" }, "Mọi code mẫu đều tự kiểm bằng vector này khi chạy không tham số. Code của bạn ra đúng các giá trị dưới đây là ký đúng."),

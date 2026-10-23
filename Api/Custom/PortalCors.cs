@@ -3,9 +3,9 @@ using Microsoft.AspNetCore.Cors.Infrastructure;
 namespace Web.Custom
 {
     /// <summary>
-    /// CORS cho portal ApiDocs (KE_HOACH_V3 5.3) chạy ở origin khác Api: trình duyệt tự ký request bằng WebCrypto,
+    /// CORS cho portal ApiDocs (KE_HOACH 5.3) chạy ở origin khác Api: trình duyệt tự ký request bằng WebCrypto,
     /// nên phải gửi được các header X-Fast-* và đọc được header chữ ký của response.
-    /// Chỉ áp cho /api/v3; không khai portalOrigins thì không mở CORS
+    /// Chỉ áp cho /api; không khai portalOrigins thì không mở CORS
     /// </summary>
     public static class PortalCors
     {
@@ -39,7 +39,7 @@ namespace Web.Custom
             {
                 return app;
             }
-            return app.UseWhen(context => context.Request.Path.StartsWithSegments("/api/v3"), branch => branch.UseCors(PolicyName));
+            return app.UseWhen(context => context.Request.Path.StartsWithSegments("/api"), branch => branch.UseCors(PolicyName));
         }
 
         private static void Configure(CorsPolicyBuilder policy, string[] origins)

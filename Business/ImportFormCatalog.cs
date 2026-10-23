@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
-using Models.V3;
+using Models;
 
-namespace Business.V3
+namespace Business
 {
     public enum RouteMatch
     {
@@ -12,7 +12,7 @@ namespace Business.V3
     }
 
     /// <summary>
-    /// Bảng route v3 dựng lúc khởi động từ App_Data/Form/*.xml (KE_HOACH_V3 4.1). File lỗi hoặc trùng route bị bỏ qua và ghi log,
+    /// Bảng route v3 dựng lúc khởi động từ App_Data/Form/*.xml (KE_HOACH 4.1). File lỗi hoặc trùng route bị bỏ qua và ghi log,
     /// form khác vẫn chạy. Bất biến sau khi dựng
     /// </summary>
     public sealed partial class ImportFormCatalog
@@ -24,7 +24,7 @@ namespace Business.V3
         /// <summary>Lỗi nạp theo tên file, để /health hoặc CLI báo lại</summary>
         public IReadOnlyDictionary<string, string> Errors { get; }
 
-        [GeneratedRegex("^/api/v3(/[a-z0-9-]+){1,2}$")]
+        [GeneratedRegex("^/api(/[a-z0-9-]+){1,2}$")]
         private static partial Regex RoutePattern();
 
         private ImportFormCatalog(Dictionary<string, ImportForm> routes, Dictionary<string, string> errors)

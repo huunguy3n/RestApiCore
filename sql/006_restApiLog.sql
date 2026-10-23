@@ -1,4 +1,4 @@
--- Log v3 (KE_HOACH_V3 5.2): request, body nén loại trùng theo SHA256, tổng hợp ngày, sự kiện tấn công
+-- Log v3 (KE_HOACH 5.2): request, body nén loại trùng theo SHA256, tổng hợp ngày, sự kiện tấn công
 -- Tương thích SQL Server 2008, chạy lại được. Thay restApiLogData (giữ nguyên, không xoá)
 --C--NGUYENTDH 23/10/2026
 

@@ -3,7 +3,7 @@ using Microsoft.Extensions.Caching.Hybrid;
 using Models;
 using System.Data;
 
-namespace Business.V3
+namespace Business
 {
     public interface IUnitRightsChecker
     {

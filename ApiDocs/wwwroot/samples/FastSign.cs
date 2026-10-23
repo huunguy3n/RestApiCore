@@ -1,4 +1,4 @@
-// Fast API v3 - ký request, kiểm chữ ký response (.NET 6+, không cần package ngoài)
+// Fast API - ký request, kiểm chữ ký response (.NET 6+, không cần package ngoài)
 // Chạy: dotnet run                                  -> kiểm vector thử
 //       dotnet run -- <base_url> <user> <private_key> -> lấy token rồi gọi _meta/ping
 using System.Net.Http.Json;
@@ -11,8 +11,8 @@ if (args.Length == 3)
 {
     var client = new FastSign(args[0].TrimEnd('/'), args[2]);
     string user = args[1];
-    var token = await client.SendAsync(HttpMethod.Post, "/api/v3/auth/token", JsonSerializer.Serialize(new { userName = user }), extra: ("X-Fast-User", user));
-    Console.WriteLine(await client.SendAsync(HttpMethod.Post, "/api/v3/_meta/ping", "", token.GetProperty("accessToken").GetString()));
+    var token = await client.SendAsync(HttpMethod.Post, "/api/auth/token", JsonSerializer.Serialize(new { userName = user }), extra: ("X-Fast-User", user));
+    Console.WriteLine(await client.SendAsync(HttpMethod.Post, "/api/_meta/ping", "", token.GetProperty("accessToken").GetString()));
 }
 
 public class FastSign(string baseUrl, string privateKeyBase64)
@@ -81,7 +81,7 @@ public class FastSign(string baseUrl, string privateKeyBase64)
 
     public async Task<JsonElement> SendAsync(HttpMethod method, string pathAndQuery, string body, string? token = null, (string Name, string Value)? extra = null)
     {
-        long serverTime = (await _http.GetFromJsonAsync<JsonElement>(baseUrl + "/api/v3/_meta/server")).GetProperty("serverTime").GetInt64();
+        long serverTime = (await _http.GetFromJsonAsync<JsonElement>(baseUrl + "/api/_meta/server")).GetProperty("serverTime").GetInt64();
         string nonce = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)).ToLowerInvariant();
         byte[] bytes = Encoding.UTF8.GetBytes(body);
 
@@ -110,9 +110,9 @@ public class FastSign(string baseUrl, string privateKeyBase64)
         Check(Convert.ToHexString(responseKey).ToLowerInvariant() == "62ed65120ef56ee55f108c4966a34cf71c10b004191f83cef00532c54b8993dd", "K_response");
 
         byte[] body = Encoding.UTF8.GetBytes("{\"master\":{\"YourID\":\"HD001\"},\"detail\":[{\"ItemID\":\"VT01\",\"Quantity\":2}]}");
-        var headers = SignRequest(requestKey, "POST", "/api/v3/sale-invoice?unitCode=CTY&dryRun=false", body, 1792574400, "9b2e4c1f0a7d4e3b", "6f1c2d3e-0000-4000-8000-000000000001");
+        var headers = SignRequest(requestKey, "POST", "/api/sale-invoice?unitCode=CTY&dryRun=false", body, 1792574400, "9b2e4c1f0a7d4e3b", "6f1c2d3e-0000-4000-8000-000000000001");
         Check(headers["X-Fast-Content-SHA256"] == "534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f", "SHA-256 body");
-        Check(headers["X-Fast-Signature"] == "6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa54", "Chữ ký request");
+        Check(headers["X-Fast-Signature"] == "4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b2", "Chữ ký request");
 
         byte[] response = Encoding.UTF8.GetBytes("{\"code\":\"SUCCESS\"}");
         Check(VerifyResponse(responseKey, 200, "8c2f0000-0000-4000-8000-000000000002", "9b2e4c1f0a7d4e3b", "1792574401", Sha256Hex(response),

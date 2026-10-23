@@ -24,14 +24,14 @@ namespace Tests
         // Giờ thật (làm tròn giây): JWT do endpoint cấp được kiểm hạn theo đồng hồ thật
         private static readonly long Now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         private const string SecretKey = "khoa-ky-jwt-chi-dung-cho-test-0123456789";
-        private const string Path = "http://localhost/api/v3/_meta/ping?unitCode=CTY&dryRun=false";
+        private const string Path = "http://localhost/api/_meta/ping?unitCode=CTY&dryRun=false";
         private static readonly byte[] PrivateKey = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
         private static readonly byte[] Body = Encoding.UTF8.GetBytes("{\"master\":{\"YourID\":\"HD001\"}}");
 
         private readonly FakeTime _time = new(Now);
         private readonly FakeKeyStore _keys = new();
         private readonly FakeRevokedStore _revoked = new();
-        private readonly FastApiV3Signer _client = new(PrivateKey);
+        private readonly FastApiSigner _client = new(PrivateKey);
         private IHost _host = null!;
         private HttpClient _http = null!;
 
@@ -50,7 +50,7 @@ namespace Tests
                         var appConfig = new AppConfig
                         {
                             pathDirectory = ApiDirectory(), clockSkewSeconds = 300, maxRequestBodyBytes = 1024,
-                            secretKey = SecretKey, issuerToken = "FastRestApi", v3TokenMinutes = 60, loginMaxFailures = 3, loginLockMinutes = 15
+                            secretKey = SecretKey, issuerToken = "FastRestApi", tokenMinutes = 60, loginMaxFailures = 3, loginLockMinutes = 15
                         };
                         services.AddSingleton(appConfig);
                         services.AddMemoryCache();
@@ -85,13 +85,13 @@ namespace Tests
                         app.UseRouting();
                         app.UseEndpoints(endpoints =>
                         {
-                            endpoints.MapPost("/api/v3/_meta/ping", async context =>
+                            endpoints.MapPost("/api/_meta/ping", async context =>
                             {
                                 using var reader = new StreamReader(context.Request.Body);
                                 await context.Response.WriteAsync("{\"code\":\"SUCCESS\",\"echo\":" + await reader.ReadToEndAsync() + "}");
                             });
-                            endpoints.MapGet("/api/v3/_meta/server", () => "server");
-                            endpoints.MapV3Auth();
+                            endpoints.MapGet("/api/_meta/server", () => "server");
+                            endpoints.MapAuth();
                         });
                     }))
                 .StartAsync();
@@ -111,14 +111,14 @@ namespace Tests
         private HttpRequestMessage NewRequest(string user = "DOITAC", string path = Path, int? uId = null, string? token = null)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, path);
-            token ??= Jwt.GenerateV3Token(user, uId ?? _keys.UId(user), 1, user, Guid.NewGuid().ToString(), DateTime.UtcNow.AddHours(1));
+            token ??= Jwt.GenerateToken(user, uId ?? _keys.UId(user), 1, user, Guid.NewGuid().ToString(), DateTime.UtcNow.AddHours(1));
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             return request;
         }
 
-        private HttpRequestMessage TokenRequest(string headerUser, string bodyUser, FastApiV3Signer? signer, out string nonce)
+        private HttpRequestMessage TokenRequest(string headerUser, string bodyUser, FastApiSigner? signer, out string nonce)
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, "http://localhost/api/v3/auth/token");
+            var request = new HttpRequestMessage(HttpMethod.Post, "http://localhost/api/auth/token");
             request.Headers.Add("X-Fast-User", headerUser);
             nonce = (signer ?? _client).Sign(request, Encoding.UTF8.GetBytes("{\"userName\":\"" + bodyUser + "\"}"), Now);
             return request;
@@ -175,7 +175,7 @@ namespace Tests
         {
             var request = NewRequest();
             string nonce = _client.Sign(request, Body, Now);
-            request.RequestUri = new Uri("http://localhost/api/v3/_meta/ping?unitCode=CTY&dryRun=true");
+            request.RequestUri = new Uri("http://localhost/api/_meta/ping?unitCode=CTY&dryRun=true");
 
             var (response, code, _) = await SendAsync(request, nonce);
 
@@ -200,7 +200,7 @@ namespace Tests
         public async Task KhoaKhac_InvalidSignature()
         {
             var request = NewRequest();
-            string nonce = new FastApiV3Signer(new byte[32]).Sign(request, Body, Now);
+            string nonce = new FastApiSigner(new byte[32]).Sign(request, Body, Now);
 
             var (_, code, verified) = await SendAsync(request, nonce);
 
@@ -240,7 +240,7 @@ namespace Tests
         public async Task ChuKySai_KhongDotNonce()
         {
             var forged = NewRequest();
-            new FastApiV3Signer(new byte[32]).Sign(forged, Body, Now, nonce: "nonce-bi-gia-mao-01");
+            new FastApiSigner(new byte[32]).Sign(forged, Body, Now, nonce: "nonce-bi-gia-mao-01");
             Assert.Equal("INVALID_SIGNATURE", (await SendAsync(forged, "nonce-bi-gia-mao-01")).Code);
 
             var genuine = NewRequest();
@@ -315,7 +315,7 @@ namespace Tests
         [Fact]
         public async Task MetaServer_KhongCanKy()
         {
-            HttpResponseMessage response = await _http.GetAsync("/api/v3/_meta/server");
+            HttpResponseMessage response = await _http.GetAsync("/api/_meta/server");
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.False(response.Headers.Contains("X-Fast-Signature"));
@@ -360,7 +360,7 @@ namespace Tests
             Assert.Equal("1", jwt.Claims.First(c => c.Type == "user_id").Value);
             Assert.Equal("ADMIN", jwt.Claims.First(c => c.Type == "name_erp").Value);
             Assert.Contains(jwt.Claims, c => c.Type == "jti");
-            Assert.Contains(Security.JwtTokenService.V3Audience, jwt.Audiences);
+            Assert.Contains(Security.JwtTokenService.Audience, jwt.Audiences);
 
             var ping = NewRequest(token: json.GetProperty("accessToken").GetString());
             string pingNonce = _client.Sign(ping, Body, Now);
@@ -400,7 +400,7 @@ namespace Tests
         [Fact]
         public async Task AuthToken_SaiChuKyNhieuLan_KhoaDangNhap()
         {
-            var forger = new FastApiV3Signer(new byte[32]);
+            var forger = new FastApiSigner(new byte[32]);
             for (int i = 0; i < 3; i++)
             {
                 Assert.Equal("INVALID_SIGNATURE", (await SendAsync(TokenRequest("DOITAC", "DOITAC", forger, out string forgedNonce), forgedNonce)).Code);
@@ -418,7 +418,7 @@ namespace Tests
         {
             string token = await GetTokenAsync();
 
-            var revoke = NewRequest(path: "http://localhost/api/v3/auth/revoke", token: token);
+            var revoke = NewRequest(path: "http://localhost/api/auth/revoke", token: token);
             string nonce = _client.Sign(revoke, [], Now);
             var (_, code, verified) = await SendAsync(revoke, nonce);
             Assert.Equal("SUCCESS", code);

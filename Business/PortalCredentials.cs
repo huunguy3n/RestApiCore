@@ -1,7 +1,7 @@
 using DataAccess;
 using Models;
 
-namespace Business.V3
+namespace Business
 {
     public interface IPortalCredentialStore
     {

@@ -34,7 +34,7 @@ namespace Web.Custom
                 // Validate the token
                 var principal = authManager.AuthenticateToken(token, ipAddress);
                 // Không tự ghi response ở đây: request vẫn đi tiếp, ghi ở đây sẽ bị ghi đè hoặc ghi hai lần.
-                // Route [Authorize] trả 401 qua HandleChallengeAsync, /api/v3 trả 401 ở SignatureMiddleware
+                // Route [Authorize] trả 401 qua HandleChallengeAsync, /api trả 401 ở SignatureMiddleware
                 if (principal == null)
                 {
                     return AuthenticateResult.Fail("Invalid token");

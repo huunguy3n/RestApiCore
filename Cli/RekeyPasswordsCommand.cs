@@ -5,7 +5,7 @@ using Security;
 namespace Cli
 {
     /// <summary>
-    /// Mã hóa lại restApiUser.password sang passwordKey (KE_HOACH_V3 mục 8.1). Chạy lại nhiều lần không lỗi:
+    /// Mã hóa lại restApiUser.password sang passwordKey (KE_HOACH mục 8.1). Chạy lại nhiều lần không lỗi:
     /// dòng đã theo khóa mới thì bỏ qua
     /// </summary>
     public static class RekeyPasswordsCommand

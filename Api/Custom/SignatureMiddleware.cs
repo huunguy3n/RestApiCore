@@ -7,14 +7,14 @@ using System.Text.RegularExpressions;
 namespace Web.Custom
 {
     /// <summary>
-    /// Kiểm chữ ký request và ký response cho /api/v3 (KE_HOACH_V3 4.2.3, 4.2.4).
+    /// Kiểm chữ ký request và ký response cho /api (KE_HOACH 4.2.3, 4.2.4).
     /// Lỗi trước khi biết khóa của user thì trả không ký; từ khi có khóa, mọi response (kể cả lỗi) đều ký
     /// </summary>
     public partial class SignatureMiddleware(RequestDelegate next, AppConfig appConfig, ISignerKeyStore keyStore, NonceStore nonceStore,
         IRevokedTokenStore revokedTokens, LoginLockout lockout, ResponseManager responseManager, TimeProvider timeProvider)
     {
         public const string UserHeader = "X-Fast-User";
-        public const string TokenPath = "/api/v3/auth/token";
+        public const string TokenPath = "/api/auth/token";
         public const string TimestampHeader = "X-Fast-Timestamp";
         public const string NonceHeader = "X-Fast-Nonce";
         public const string ContentSha256Header = "X-Fast-Content-SHA256";
@@ -28,25 +28,31 @@ namespace Web.Custom
         [GeneratedRegex("^[A-Za-z0-9_-]{16,64}$")]
         private static partial Regex NonceFormat();
 
-        /// <summary>Route v3 cần ký</summary>
+        /// <summary>Controller kiểu cũ (AuthController, QueryController...) dùng JWT theo IP, không ký HMAC</summary>
+        private static bool IsLegacyController(PathString path) =>
+            path.StartsWithSegments("/api/query") || path.StartsWithSegments("/api/cpanel") || path.StartsWithSegments("/api/document")
+            || path.StartsWithSegments("/api/auth") && !path.Equals(TokenPath, StringComparison.OrdinalIgnoreCase)
+                && !path.Equals("/api/auth/revoke", StringComparison.OrdinalIgnoreCase) && !path.Equals(PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>Route cần ký</summary>
         public static bool RequiresSignature(HttpContext context)
         {
-            if (!context.Request.Path.StartsWithSegments("/api/v3"))
+            if (!context.Request.Path.StartsWithSegments("/api") || IsLegacyController(context.Request.Path))
             {
                 return false;
             }
             // Không cần token, không ký: giờ server + khóa công khai portal; đăng nhập portal (mật khẩu mã hóa RSA, không có private_key)
-            return !(HttpMethods.IsGet(context.Request.Method) && context.Request.Path.Equals("/api/v3/_meta/server", StringComparison.OrdinalIgnoreCase)
-                || HttpMethods.IsPost(context.Request.Method) && context.Request.Path.Equals(V3PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase));
+            return !(HttpMethods.IsGet(context.Request.Method) && context.Request.Path.Equals("/api/_meta/server", StringComparison.OrdinalIgnoreCase)
+                || HttpMethods.IsPost(context.Request.Method) && context.Request.Path.Equals(PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>
-        /// JWT scope=portal chỉ đọc GET /api/v3/_meta/* (trừ ping, dùng để thử ký); không ký request/response vì trình duyệt không giữ private_key
+        /// JWT scope=portal chỉ đọc GET /api/_meta/* (trừ ping, dùng để thử ký); không ký request/response vì trình duyệt không giữ private_key
         /// </summary>
         public static bool PortalMayCall(HttpContext context) =>
             HttpMethods.IsGet(context.Request.Method)
-            && context.Request.Path.StartsWithSegments("/api/v3/_meta", StringComparison.OrdinalIgnoreCase)
-            && !context.Request.Path.StartsWithSegments("/api/v3/_meta/ping", StringComparison.OrdinalIgnoreCase);
+            && context.Request.Path.StartsWithSegments("/api/_meta", StringComparison.OrdinalIgnoreCase)
+            && !context.Request.Path.StartsWithSegments("/api/_meta/ping", StringComparison.OrdinalIgnoreCase);
 
         public async Task Invoke(HttpContext context)
         {

@@ -4,7 +4,6 @@ using System.Text;
 using System.Text.Json;
 using System.Xml.Linq;
 using Business;
-using Business.V3;
 using DataAccess;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -13,15 +12,14 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Models;
-using Models.V3;
 using Web.Custom;
 
 namespace Tests
 {
     /// <summary>
-    /// V3FormEndpoint qua TestServer: chữ ký coi như đã kiểm (middleware giả gắn signer + rawBody), executor và kiểm đơn vị là giả
+    /// FormEndpoint qua TestServer: chữ ký coi như đã kiểm (middleware giả gắn signer + rawBody), executor và kiểm đơn vị là giả
     /// </summary>
-    public sealed class V3FormEndpointTests : IAsyncLifetime
+    public sealed class FormEndpointTests : IAsyncLifetime
     {
         private const string SaleInvoice = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="Voucher" voucherCode="HDA" unitRequired="true">
@@ -81,7 +79,7 @@ namespace Tests
                         services.AddMemoryCache();
                         services.AddSingleton<Models.Options.Options>(new OptionsRepository(appConfig));
                         services.AddSingleton<ResponseManager>();
-                        services.AddSingleton(new V3FormRuntime(catalog, null));
+                        services.AddSingleton(new FormRuntime(catalog, null));
                         services.AddSingleton<IFormExecutor>(_executor);
                         services.AddSingleton<IUnitRightsChecker>(_units);
                         services.AddSingleton<IIdempotencyStore>(_idempotency);
@@ -102,7 +100,7 @@ namespace Tests
                             await next(context);
                         });
                         app.UseRouting();
-                        app.UseEndpoints(endpoints => endpoints.MapV3Forms());
+                        app.UseEndpoints(endpoints => endpoints.MapForms());
                     }))
                 .StartAsync();
             _http = _host.GetTestClient();
@@ -132,7 +130,7 @@ namespace Tests
         [Fact]
         public async Task KhongCoRoute_404()
         {
-            var (status, json, _) = await PostAsync("/api/v3/khong-co", "{}");
+            var (status, json, _) = await PostAsync("/api/khong-co", "{}");
 
             Assert.Equal(HttpStatusCode.NotFound, status);
             Assert.Equal("NOT_FOUND", json.GetProperty("code").GetString());
@@ -141,7 +139,7 @@ namespace Tests
         [Fact]
         public async Task SaiMethod_405_CoAllow()
         {
-            var (status, json, response) = await PostAsync("/api/v3/customer/get", "{}", HttpMethod.Get);
+            var (status, json, response) = await PostAsync("/api/customer/get", "{}", HttpMethod.Get);
 
             Assert.Equal(HttpStatusCode.MethodNotAllowed, status);
             Assert.Equal("METHOD_NOT_ALLOWED", json.GetProperty("code").GetString());
@@ -153,7 +151,7 @@ namespace Tests
         {
             _signer = _signer with { AllowForms = new HashSet<string>(["getCustomer"]) };
 
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice);
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice);
 
             Assert.Equal(HttpStatusCode.Forbidden, status);
             Assert.Equal("FORBIDDEN", json.GetProperty("code").GetString());
@@ -163,7 +161,7 @@ namespace Tests
         [Fact]
         public async Task UnitRequiredThieuUnitCode_UnitRequired()
         {
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice", ValidInvoice);
+            var (status, json, _) = await PostAsync("/api/sale-invoice", ValidInvoice);
 
             Assert.Equal(HttpStatusCode.BadRequest, status);
             Assert.Equal("UNIT_REQUIRED", json.GetProperty("code").GetString());
@@ -174,7 +172,7 @@ namespace Tests
         [InlineData("KHONGCO", "UNIT_NOT_FOUND", HttpStatusCode.BadRequest)]
         public async Task UnitCodeKhongHopLe(string unit, string code, HttpStatusCode expected)
         {
-            var (status, json, _) = await PostAsync($"/api/v3/sale-invoice?unitCode={unit}", ValidInvoice);
+            var (status, json, _) = await PostAsync($"/api/sale-invoice?unitCode={unit}", ValidInvoice);
 
             Assert.Equal(expected, status);
             Assert.Equal(code, json.GetProperty("code").GetString());
@@ -184,7 +182,7 @@ namespace Tests
         [Fact]
         public async Task UnitCodeKhongBatBuocNhungCoGui_VanKiem()
         {
-            var (_, json, _) = await PostAsync("/api/v3/customer/get?unitCode=KHAC", "{}");
+            var (_, json, _) = await PostAsync("/api/customer/get?unitCode=KHAC", "{}");
 
             Assert.Equal("UNIT_DENIED", json.GetProperty("code").GetString());
             Assert.Equal("Acc", _units.LastAction);
@@ -193,7 +191,7 @@ namespace Tests
         [Fact]
         public async Task BodySaiDang_InvalidShape()
         {
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", """{ "YourID": "HD001" }""");
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", """{ "YourID": "HD001" }""");
 
             Assert.Equal(HttpStatusCode.BadRequest, status);
             Assert.Equal("INVALID_SHAPE", json.GetProperty("code").GetString());
@@ -203,7 +201,7 @@ namespace Tests
         [Fact]
         public async Task LoiGiaTri_ValidationFailed_CoViTriVaMessage()
         {
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", """{ "master": { "YourID": "QUA_DAI_HON_10" }, "detail": [ {} ] }""");
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", """{ "master": { "YourID": "QUA_DAI_HON_10" }, "detail": [ {} ] }""");
 
             Assert.Equal(HttpStatusCode.BadRequest, status);
             Assert.Equal("VALIDATION_FAILED", json.GetProperty("code").GetString());
@@ -218,7 +216,7 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { CheckingErrors = [new CheckingError("[0].detail[0].ItemID", "detail", "ItemID", "ITEM_NOT_FOUND")], RolledBack = true };
 
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice);
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice);
 
             Assert.Equal(HttpStatusCode.BadRequest, status);
             Assert.Equal("ITEM_NOT_FOUND", json.GetProperty("errors")[0].GetProperty("code").GetString());
@@ -230,7 +228,7 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { RolledBack = true };
 
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY&dryRun=true", ValidInvoice);
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY&dryRun=true", ValidInvoice);
 
             Assert.Equal(HttpStatusCode.OK, status);
             Assert.True(json.GetProperty("dryRun").GetBoolean());
@@ -245,7 +243,7 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { Data = DataSetOf(("SUCCESS", "", "master,detail"), 2) };
 
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice);
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice);
 
             Assert.Equal(HttpStatusCode.OK, status);
             Assert.True(json.GetProperty("success").GetBoolean());
@@ -261,7 +259,7 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { Data = DataSetOf(("SUCCESS", "", null), tableCount) };
 
-            var (_, json, _) = await PostAsync("/api/v3/customer/get", "{}");
+            var (_, json, _) = await PostAsync("/api/customer/get", "{}");
 
             Assert.True(json.GetProperty("data").TryGetProperty(name, out _));
         }
@@ -273,7 +271,7 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { Data = DataSetOf((code, code == "DUPLICATE_VOUCHER" ? message : "", null), 0), RolledBack = true };
 
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice);
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice);
 
             Assert.Equal(expected, status);
             Assert.False(json.GetProperty("success").GetBoolean());
@@ -285,18 +283,18 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { Data = DataSetOf(("SUCCESS", "", "master"), 1) };
 
-            var first = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-001");
+            var first = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-001");
             Assert.Equal(HttpStatusCode.OK, first.Status);
             Assert.Equal(1, _executor.Calls);
             Assert.Equal(200, _idempotency.Saved["key-001"].Status);
 
-            var second = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-001");
+            var second = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-001");
 
             Assert.Equal(HttpStatusCode.OK, second.Status);
             Assert.Equal(1, _executor.Calls);
             Assert.Equal(first.Json.GetRawText(), second.Json.GetRawText());
-            Assert.Equal("true", second.Response.Headers.GetValues(V3FormEndpoint.ReplayedHeader).Single());
-            Assert.False(first.Response.Headers.Contains(V3FormEndpoint.ReplayedHeader));
+            Assert.Equal("true", second.Response.Headers.GetValues(FormEndpoint.ReplayedHeader).Single());
+            Assert.False(first.Response.Headers.Contains(FormEndpoint.ReplayedHeader));
         }
 
         [Fact]
@@ -304,8 +302,8 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { CheckingErrors = [new CheckingError("[0].master.CustomerID", "master", "CustomerID", "CUSTOMER_NOT_FOUND")], RolledBack = true };
 
-            await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-002");
-            var replay = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-002");
+            await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-002");
+            var replay = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-002");
 
             Assert.Equal(HttpStatusCode.BadRequest, replay.Status);
             Assert.Equal("VALIDATION_FAILED", replay.Json.GetProperty("code").GetString());
@@ -318,9 +316,9 @@ namespace Tests
         public async Task Idempotency_CungKeyKhacBodyHoacQuery_Conflict(string query, string? body)
         {
             _units.Allow("KHAC2");
-            await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-003");
+            await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-003");
 
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice" + query, body ?? ValidInvoice, idempotencyKey: "key-003");
+            var (status, json, _) = await PostAsync("/api/sale-invoice" + query, body ?? ValidInvoice, idempotencyKey: "key-003");
 
             Assert.Equal(HttpStatusCode.Conflict, status);
             Assert.Equal("IDEMPOTENCY_CONFLICT", json.GetProperty("code").GetString());
@@ -332,7 +330,7 @@ namespace Tests
         {
             _idempotency.Pending("key-004");
 
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-004");
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-004");
 
             Assert.Equal(HttpStatusCode.Conflict, status);
             Assert.Equal("IDEMPOTENCY_IN_PROGRESS", json.GetProperty("code").GetString());
@@ -343,7 +341,7 @@ namespace Tests
         {
             _executor.Throw = true;
 
-            await Assert.ThrowsAnyAsync<Exception>(() => PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-005"));
+            await Assert.ThrowsAnyAsync<Exception>(() => PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-005"));
 
             Assert.Contains("key-005", _idempotency.Released);
             Assert.False(_idempotency.Saved.ContainsKey("key-005"));
@@ -352,7 +350,7 @@ namespace Tests
         [Fact]
         public async Task Idempotency_DryRun_KhongDung()
         {
-            await PostAsync("/api/v3/sale-invoice?unitCode=CTY&dryRun=true", ValidInvoice, idempotencyKey: "key-006");
+            await PostAsync("/api/sale-invoice?unitCode=CTY&dryRun=true", ValidInvoice, idempotencyKey: "key-006");
 
             Assert.Empty(_idempotency.Reserved);
         }
@@ -360,7 +358,7 @@ namespace Tests
         [Fact]
         public async Task Idempotency_KeySaiDang_Invalid()
         {
-            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: new string('k', 129));
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: new string('k', 129));
 
             Assert.Equal(HttpStatusCode.BadRequest, status);
             Assert.Equal("INVALID_IDEMPOTENCY_KEY", json.GetProperty("code").GetString());
@@ -374,12 +372,12 @@ namespace Tests
             ImportForm sale = ImportFormLoader.Load(Path.Combine(formDirectory, "setSaleInvoice.xml"));
             ImportForm customer = ImportFormLoader.Load(Path.Combine(formDirectory, "getCustomer.xml"));
 
-            Assert.Equal("/api/v3/sale-invoice", sale.Route);
+            Assert.Equal("/api/sale-invoice", sale.Route);
             Assert.True(sale.UnitRequired);
             Assert.Equal(["CUSTOMER_NOT_FOUND", "ITEM_NOT_FOUND", "INVALID_FIELD", "INVALID_QUANTITY"],
                 sale.Blocks.SelectMany(b => b.Fields).SelectMany(f => f.Checks).Select(c => c.ErrorCode));
             Assert.Empty(sale.Warnings);
-            Assert.Equal("/api/v3/customer/get", customer.Route);
+            Assert.Equal("/api/customer/get", customer.Route);
             Assert.False(customer.UnitRequired);
         }
 
@@ -408,7 +406,7 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { Data = Invoices() };
 
-            var (status, first, _) = await PostAsync("/api/v3/invoice/get?unitCode=CTY", "{}");
+            var (status, first, _) = await PostAsync("/api/invoice/get?unitCode=CTY", "{}");
 
             Assert.Equal(HttpStatusCode.OK, status);
             JsonElement paging = first.GetProperty("paging");
@@ -420,7 +418,7 @@ namespace Tests
             Assert.Equal(1, first.GetProperty("data").GetProperty("summary").GetArrayLength());
             string cursor = paging.GetProperty("cursor").GetString()!;
 
-            var (_, last, _) = await PostAsync($"/api/v3/invoice/get?unitCode=CTY&cursor={cursor}&page=2", "");
+            var (_, last, _) = await PostAsync($"/api/invoice/get?unitCode=CTY&cursor={cursor}&page=2", "");
 
             Assert.Equal(1, _executor.Calls);
             Assert.Equal(["HD4"], last.GetProperty("data").GetProperty("master").EnumerateArray().Select(r => r.GetProperty("id").GetString()));
@@ -438,10 +436,10 @@ namespace Tests
         {
             _units.Allow("KHAC2");
             _executor.Next = new FormExecutionResult { Data = Invoices() };
-            var (_, first, _) = await PostAsync("/api/v3/invoice/get?unitCode=CTY", "{}");
+            var (_, first, _) = await PostAsync("/api/invoice/get?unitCode=CTY", "{}");
             string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
 
-            string path = query.Contains("unitCode") ? $"/api/v3/invoice/get?cursor={cursor}&{query}" : $"/api/v3/invoice/get?unitCode=CTY&cursor={cursor}&{query}";
+            string path = query.Contains("unitCode") ? $"/api/invoice/get?cursor={cursor}&{query}" : $"/api/invoice/get?unitCode=CTY&cursor={cursor}&{query}";
             var (status, json, _) = await PostAsync(path, "");
 
             Assert.Equal(expected, status);
@@ -451,14 +449,14 @@ namespace Tests
         [Fact]
         public async Task PhanTrang_CursorKhongCo_HoacKhacForm_Expired()
         {
-            var (status, json, _) = await PostAsync("/api/v3/invoice/get?cursor=khongco&page=1", "");
+            var (status, json, _) = await PostAsync("/api/invoice/get?cursor=khongco&page=1", "");
             Assert.Equal(HttpStatusCode.NotFound, status);
             Assert.Equal("CURSOR_EXPIRED", json.GetProperty("code").GetString());
 
             _executor.Next = new FormExecutionResult { Data = Invoices() };
-            var (_, first, _) = await PostAsync("/api/v3/invoice/get", "{}");
+            var (_, first, _) = await PostAsync("/api/invoice/get", "{}");
             string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
-            var (_, other, _) = await PostAsync($"/api/v3/customer/get?cursor={cursor}&page=1", "");
+            var (_, other, _) = await PostAsync($"/api/customer/get?cursor={cursor}&page=1", "");
             Assert.Equal("CURSOR_EXPIRED", other.GetProperty("code").GetString());
         }
 
@@ -472,7 +470,7 @@ namespace Tests
             data.Tables.Add(master);
             _executor.Next = new FormExecutionResult { Data = data };
 
-            var (_, json, _) = await PostAsync("/api/v3/invoice/get", "{}");
+            var (_, json, _) = await PostAsync("/api/invoice/get", "{}");
 
             Assert.Equal(JsonValueKind.Null, json.GetProperty("paging").GetProperty("cursor").ValueKind);
             Assert.Equal(1, json.GetProperty("paging").GetProperty("page_count").GetInt32());
@@ -491,7 +489,7 @@ namespace Tests
             data.Tables.Add(rows);
             _executor.Next = new FormExecutionResult { Data = data };
 
-            var (status, json, _) = await PostAsync("/api/v3/customer/get", "{}");
+            var (status, json, _) = await PostAsync("/api/customer/get", "{}");
 
             Assert.Equal(HttpStatusCode.InternalServerError, status);
             Assert.Equal("RESULT_TOO_LARGE", json.GetProperty("code").GetString());
@@ -503,13 +501,13 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { Data = Invoices() };
 
-            var (_, first, _) = await PostAsync("/api/v3/invoice/transfer?unitCode=CTY", "{}");
+            var (_, first, _) = await PostAsync("/api/invoice/transfer?unitCode=CTY", "{}");
             string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
             Assert.Equal(2, first.GetProperty("paging").GetProperty("transferred_count").GetInt32());
             Assert.Equal(["HD0", "HD1"], _executor.Marked.Single().Keys);
             Assert.Equal("CTY", _executor.Marked.Single().Unit);
 
-            var (_, last, _) = await PostAsync($"/api/v3/invoice/transfer?unitCode=CTY&cursor={cursor}&page=2", "");
+            var (_, last, _) = await PostAsync($"/api/invoice/transfer?unitCode=CTY&cursor={cursor}&page=2", "");
 
             Assert.Equal(["HD4"], _executor.Marked[1].Keys);
             Assert.Equal("CTY", _executor.Marked[1].Unit);
@@ -521,11 +519,11 @@ namespace Tests
         public async Task Transfer_LayLaiTrang_DanhDauLai()
         {
             _executor.Next = new FormExecutionResult { Data = Invoices() };
-            var (_, first, _) = await PostAsync("/api/v3/invoice/transfer?unitCode=CTY", "{}");
+            var (_, first, _) = await PostAsync("/api/invoice/transfer?unitCode=CTY", "{}");
             string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
 
-            await PostAsync($"/api/v3/invoice/transfer?unitCode=CTY&cursor={cursor}&page=1", "");
-            await PostAsync($"/api/v3/invoice/transfer?unitCode=CTY&cursor={cursor}&page=1", "");
+            await PostAsync($"/api/invoice/transfer?unitCode=CTY&cursor={cursor}&page=1", "");
+            await PostAsync($"/api/invoice/transfer?unitCode=CTY&cursor={cursor}&page=1", "");
 
             Assert.Equal([["HD0", "HD1"], ["HD2", "HD3"], ["HD2", "HD3"]], _executor.Marked.Select(m => m.Keys.ToArray()));
         }
@@ -536,7 +534,7 @@ namespace Tests
             _executor.Next = new FormExecutionResult { Data = Invoices() };
             _executor.MarkCode = "LOCKED";
 
-            var (status, json, _) = await PostAsync("/api/v3/invoice/transfer?unitCode=CTY", "{}");
+            var (status, json, _) = await PostAsync("/api/invoice/transfer?unitCode=CTY", "{}");
 
             Assert.Equal(HttpStatusCode.InternalServerError, status);
             Assert.Equal("TRANSFER_MARK_FAILED", json.GetProperty("code").GetString());
@@ -549,7 +547,7 @@ namespace Tests
         {
             _executor.Next = new FormExecutionResult { Data = Invoices() };
 
-            var (_, json, _) = await PostAsync("/api/v3/invoice/get?unitCode=CTY", "{}");
+            var (_, json, _) = await PostAsync("/api/invoice/get?unitCode=CTY", "{}");
 
             Assert.Empty(_executor.Marked);
             Assert.False(json.GetProperty("paging").TryGetProperty("transferred_count", out _));

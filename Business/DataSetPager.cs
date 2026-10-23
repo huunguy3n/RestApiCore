@@ -1,6 +1,6 @@
 using System.Data;
 
-namespace Business.V3
+namespace Business
 {
     /// <summary>Một trang: bảng theo tên, cùng thứ tự với dataset gốc; Keys = giá trị key (chứng từ) của trang, theo thứ tự</summary>
     public sealed record DataPage(IReadOnlyDictionary<string, DataTable> Tables, IReadOnlyList<string> Keys);
@@ -8,7 +8,7 @@ namespace Business.V3
     public sealed record PagedResult(IReadOnlyList<DataPage> Pages, int PageSize, int TotalRowCount, int KeyCount);
 
     /// <summary>
-    /// Phân trang dataset nhiều bảng (KE_HOACH_V3 4.4): cắt theo giá trị key của bảng dữ liệu đầu tiên, mỗi trang tối đa pageSize
+    /// Phân trang dataset nhiều bảng (KE_HOACH 4.4): cắt theo giá trị key của bảng dữ liệu đầu tiên, mỗi trang tối đa pageSize
     /// giá trị key; mỗi trang kèm mọi dòng cùng key ở các bảng khác nên một chứng từ không bị tách sang hai trang.
     /// Bảng không có cột key chỉ trả ở trang 0
     /// </summary>

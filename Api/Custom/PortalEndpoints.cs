@@ -3,32 +3,30 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Business;
-using Business.V3;
 using Models;
 using Models.Options;
-using Models.V3;
 using Newtonsoft.Json;
 using Security;
 
 namespace Web.Custom
 {
     /// <summary>
-    /// Portal đối tác (KE_HOACH_V3 5.3): đăng nhập POST /api/v3/auth/portal bằng restApiUser.name + password mã hóa RSA-OAEP tại trình duyệt,
-    /// và các route _meta đọc định nghĩa tài nguyên. JWT scope=portal chỉ gọi được GET /api/v3/_meta/* (SignatureMiddleware chặn route khác)
+    /// Portal đối tác (KE_HOACH 5.3): đăng nhập POST /api/auth/portal bằng restApiUser.name + password mã hóa RSA-OAEP tại trình duyệt,
+    /// và các route _meta đọc định nghĩa tài nguyên. JWT scope=portal chỉ gọi được GET /api/_meta/* (SignatureMiddleware chặn route khác)
     /// </summary>
-    public static partial class V3PortalEndpoints
+    public static partial class PortalEndpoints
     {
-        public const string PortalPath = "/api/v3/auth/portal";
+        public const string PortalPath = "/api/auth/portal";
 
         [GeneratedRegex("^[A-Za-z0-9_-]{16,64}$")]
         private static partial Regex NonceFormat();
 
-        public static void MapV3Portal(this IEndpointRouteBuilder endpoints)
+        public static void MapPortal(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost(PortalPath, LoginAsync);
-            endpoints.MapGet("/api/v3/_meta/resources", ListResources);
-            endpoints.MapGet("/api/v3/_meta/resources/{form}", DescribeResource);
-            endpoints.MapGet("/api/v3/_meta/errors", ListErrors);
+            endpoints.MapGet("/api/_meta/resources", ListResources);
+            endpoints.MapGet("/api/_meta/resources/{form}", DescribeResource);
+            endpoints.MapGet("/api/_meta/errors", ListErrors);
         }
 
         private sealed record PortalLogin(string? userName, string? kid, string? credential);
@@ -106,7 +104,7 @@ namespace Web.Custom
             lockout.Reset(account.UId);
             DateTime expires = time.GetUtcNow().UtcDateTime.AddMinutes(appConfig.portalTokenMinutes);
             string accessToken = new JwtTokenService(appConfig.secretKey, appConfig.expiryToken, appConfig.issuerToken)
-                .GenerateV3Token(account.Name, account.UId, account.UserId!.Value, account.NameErp, Guid.NewGuid().ToString(), expires, scope: "portal");
+                .GenerateToken(account.Name, account.UId, account.UserId!.Value, account.NameErp, Guid.NewGuid().ToString(), expires, scope: "portal");
 
             await WriteAsync(context, 200, new
             {
@@ -144,7 +142,7 @@ namespace Web.Custom
         }
 
         /// <summary>Tài nguyên user được cấp quyền (restApiAllowForm)</summary>
-        private static IResult ListResources(HttpContext context, V3FormRuntime runtime)
+        private static IResult ListResources(HttpContext context, FormRuntime runtime)
         {
             var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;
             var resources = runtime.Catalog.Forms
@@ -156,7 +154,7 @@ namespace Web.Custom
         }
 
         /// <summary>Định nghĩa một tài nguyên: khối, field, mẫu JSON (5.3)</summary>
-        private static IResult DescribeResource(HttpContext context, string form, V3FormRuntime runtime, ResponseManager responseManager)
+        private static IResult DescribeResource(HttpContext context, string form, FormRuntime runtime, ResponseManager responseManager)
         {
             var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;
             ImportForm? found = runtime.Catalog.Forms.FirstOrDefault(f => f.Enable && string.Equals(f.Name, form, StringComparison.OrdinalIgnoreCase));

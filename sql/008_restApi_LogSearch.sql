@@ -8,7 +8,7 @@ CREATE PROCEDURE dbo.restApi_LogSearch
 	@FromDate DATETIME,
 	@ToDate DATETIME,
 	@UserName VARCHAR(32) = NULL,
-	@Path NVARCHAR(256) = NULL, -- tiền tố, vd /api/v3/sale-invoice
+	@Path NVARCHAR(256) = NULL, -- tiền tố, vd /api/sale-invoice
 	@StatusCode INT = NULL,
 	@ReqId UNIQUEIDENTIFIER = NULL,
 	@WithBody BIT = 0, -- 1: kèm body nén GZip (giải nén phía client)

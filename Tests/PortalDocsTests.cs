@@ -9,7 +9,7 @@ using Web.Custom;
 namespace Tests
 {
     /// <summary>
-    /// Portal ApiDocs (KE_HOACH_V3 5.3): CORS cho trình duyệt ký request từ origin khác, và code mẫu dùng đúng vector thử
+    /// Portal ApiDocs (KE_HOACH 5.3): CORS cho trình duyệt ký request từ origin khác, và code mẫu dùng đúng vector thử
     /// </summary>
     public class PortalDocsTests
     {
@@ -35,7 +35,7 @@ namespace Tests
                 .StartAsync();
         }
 
-        private static HttpRequestMessage Preflight(string origin, string path = "/api/v3/sale-invoice")
+        private static HttpRequestMessage Preflight(string origin, string path = "/api/sale-invoice")
         {
             var request = new HttpRequestMessage(HttpMethod.Options, path);
             request.Headers.Add("Origin", origin);
@@ -71,7 +71,7 @@ namespace Tests
         public async Task ResponseThat_ChoTrinhDuyetDocHeaderChuKy()
         {
             using var host = await StartAsync([PortalOrigin]);
-            var request = new HttpRequestMessage(HttpMethod.Post, "/api/v3/sale-invoice");
+            var request = new HttpRequestMessage(HttpMethod.Post, "/api/sale-invoice");
             request.Headers.Add("Origin", PortalOrigin);
             var response = await host.GetTestClient().SendAsync(request);
 
@@ -84,9 +84,8 @@ namespace Tests
         }
 
         [Theory]
-        [InlineData(new string[0], "/api/v3/sale-invoice")]
-        [InlineData(new[] { PortalOrigin }, "/api/sale-invoice")]
-        public async Task KhongKhaiOrigin_HoacNgoaiV3_KhongMoCors(string[] origins, string path)
+        [InlineData(new string[0], "/api/sale-invoice")]
+        public async Task KhongKhaiOrigin_KhongMoCors(string[] origins, string path)
         {
             using var host = await StartAsync(origins);
             var response = await host.GetTestClient().SendAsync(Preflight(PortalOrigin, path));

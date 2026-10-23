@@ -20,7 +20,7 @@
 | XML | Gốc là `<import>` của v2, mở rộng cho v3. Không có `<response>`: dữ liệu trả về do backend quyết định qua dataset. Không có chế độ chạy file v2, không có thuộc tính `version` |
 | JSON | **Chỉ dạng object**: `{ "master": { … }, "detail": [ … ] }`, khối gốc là **một object**, khối con là mảng. Bỏ dạng flat |
 | Tên file | **Giữ cách đặt tên v2**: `{động từ}{Resource}.xml` (`getCustomer.xml`, `setCustomer.xml`, `cancelInvoice.xml`) |
-| Method | **Nghiệp vụ chỉ dùng `POST`.** `set` → `POST /api/v3/{resource}`. Động từ khác, kể cả `get` → `POST /api/v3/{resource}/{động từ}`. Không dùng HTTP `GET` cho `get{Resource}.xml` |
+| Method | **Nghiệp vụ chỉ dùng `POST`.** `set` → `POST /api/{resource}`. Động từ khác, kể cả `get` → `POST /api/{resource}/{động từ}`. Không dùng HTTP `GET` cho `get{Resource}.xml` |
 | Kiểm tra field | `check`/`condition`/`tag`/`errorCode`/`category` **giống Upload FBO**. Bỏ `<reference>`, `Update.xml`, `@@update(n)` |
 | Body | `application/json`, là **JSON object dữ liệu**. Tham số điều khiển (`unitCode`, `dryRun`, `cursor`, `page`, `Idempotency-Key`) đi bằng query string / header |
 | Bảo mật thông điệp | **SHA-256** cho checksum body, **HMAC-SHA256** xác thực **hai chiều** (request do client ký, response do server ký), khóa bí mật lưu ở `restApiUser.private_key`. Bắt buộc với mọi request, cả HTTP lẫn HTTPS. Đăng nhập trả **JWT** (mục 4.2) |
@@ -224,15 +224,15 @@ Không có chế độ chạy file v2. Tool `Fast.Api.Cli upgrade` hỗ trợ ch
 
 | Method | Đường dẫn | Việc |
 |---|---|---|
-| `POST` | `/api/v3/auth/token` | Lấy JWT |
-| `POST` | `/api/v3/auth/revoke` | Thu hồi JWT |
-| `POST` | `/api/v3/{resource}` | `set{Resource}.xml` |
-| `POST` | `/api/v3/{resource}/{verb}` | `{verb}{Resource}.xml`: `getCustomer` → `/customer/get`, `deleteInvoice` → `/invoice/delete`, `cancelInvoice` → `/invoice/cancel` |
-| `GET` | `/api/v3/_meta/server` | Giờ server (để client đồng bộ timestamp), phiên bản chữ ký, **khóa công khai RSA dùng cho đăng nhập portal** (JWK + `kid`). Không cần token |
-| `POST` | `/api/v3/auth/portal` | Đăng nhập portal bằng `name` + mật khẩu đã mã hóa (5.3). Trả JWT phạm vi `portal`, chỉ gọi được `_meta` |
-| `GET` | `/api/v3/_meta/resources` | Tài nguyên và động từ user được cấp quyền |
-| `GET` | `/api/v3/_meta/resources/{form}` | Định nghĩa khối, field, mẫu JSON |
-| `GET` | `/api/v3/_meta/errors` | Bảng mã lỗi (`Message.xml`) |
+| `POST` | `/api/auth/token` | Lấy JWT |
+| `POST` | `/api/auth/revoke` | Thu hồi JWT |
+| `POST` | `/api/{resource}` | `set{Resource}.xml` |
+| `POST` | `/api/{resource}/{verb}` | `{verb}{Resource}.xml`: `getCustomer` → `/customer/get`, `deleteInvoice` → `/invoice/delete`, `cancelInvoice` → `/invoice/cancel` |
+| `GET` | `/api/_meta/server` | Giờ server (để client đồng bộ timestamp), phiên bản chữ ký, **khóa công khai RSA dùng cho đăng nhập portal** (JWK + `kid`). Không cần token |
+| `POST` | `/api/auth/portal` | Đăng nhập portal bằng `name` + mật khẩu đã mã hóa (5.3). Trả JWT phạm vi `portal`, chỉ gọi được `_meta` |
+| `GET` | `/api/_meta/resources` | Tài nguyên và động từ user được cấp quyền |
+| `GET` | `/api/_meta/resources/{form}` | Định nghĩa khối, field, mẫu JSON |
+| `GET` | `/api/_meta/errors` | Bảng mã lỗi (`Message.xml`) |
 | `GET` | `/health/live`, `/health/ready` | Giám sát. `ready` kiểm SQL + thư mục log |
 
 Tham số điều khiển:
@@ -285,7 +285,7 @@ K_response = HMAC-SHA256(private_key, "FAST-API-V3-RESPONSE")
 #### 4.2.3. Request
 
 ```
-POST /api/v3/sale-invoice?unitCode=CTY&dryRun=false
+POST /api/sale-invoice?unitCode=CTY&dryRun=false
 Authorization: Bearer <jwt>
 Content-Type: application/json
 Idempotency-Key: 6f1c…
@@ -301,7 +301,7 @@ X-Fast-Signature: 5d41402a…        (hex HMAC-SHA256)
 canonicalRequest =
   "FAST-HMAC-SHA256"  + "\n" +
   METHOD              + "\n" +   // POST
-  PATH                + "\n" +   // /api/v3/sale-invoice, viết thường
+  PATH                + "\n" +   // /api/sale-invoice, viết thường
   canonicalQuery      + "\n" +   // tham số sắp theo tên (rồi theo giá trị), URL-encode RFC 3986, nối bằng &; không có thì rỗng
   TIMESTAMP           + "\n" +
   NONCE               + "\n" +
@@ -345,7 +345,7 @@ canonicalResponse =
 
 #### 4.2.5. Lấy token
 
-`POST /api/v3/auth/token`, không có `Authorization`, có thêm header `X-Fast-User: <restApiUser.name>`. Ký y như 4.2.3, body `{ "userName": "<restApiUser.name>" }` phải khớp `X-Fast-User`. Server kiểm `restApiUser.status`, `name_erp = userinfo2.name` khớp một dòng `status = '1'`, IP, khoá đăng nhập sai nhiều lần (HybridCache). Response ký như 4.2.4, chứa `{ "accessToken": "<jwt>", "expiresIn": 3600 }`. JWT: `sub` = `restApiUser.name`, claim `u_id` = `restApiUser.id`, `user_id` = `sysdb..userinfo2.id`, `name_erp`, `jti`. JWT ký bằng `secretKey` của server (khác `private_key`).
+`POST /api/auth/token`, không có `Authorization`, có thêm header `X-Fast-User: <restApiUser.name>`. Ký y như 4.2.3, body `{ "userName": "<restApiUser.name>" }` phải khớp `X-Fast-User`. Server kiểm `restApiUser.status`, `name_erp = userinfo2.name` khớp một dòng `status = '1'`, IP, khoá đăng nhập sai nhiều lần (HybridCache). Response ký như 4.2.4, chứa `{ "accessToken": "<jwt>", "expiresIn": 3600 }`. JWT: `sub` = `restApiUser.name`, claim `u_id` = `restApiUser.id`, `user_id` = `sysdb..userinfo2.id`, `name_erp`, `jti`. JWT ký bằng `secretKey` của server (khác `private_key`).
 
 #### 4.2.6. Rate limit
 Middleware ASP.NET Core, partition theo `u_id` (sau xác thực) và theo IP (trước xác thực, cho `auth/token`). In-process, phù hợp một instance.
@@ -417,7 +417,7 @@ Middleware đẩy vào `Channel`, `LogWorker` ghi theo lô vào bảng log mới
 **Đăng nhập (mật khẩu mã hóa bất đối xứng tại client):**
 1. Trình duyệt lấy khóa công khai RSA của server (`/_meta/server`, ≥ 2048 bit).
 2. Mã hóa bằng WebCrypto `RSA-OAEP` (SHA-256) gói `{ "password": "…", "timestamp": 1792574400, "nonce": "…" }`. Mật khẩu rõ không bao giờ rời trình duyệt, không nằm trong log.
-3. Gửi `POST /api/v3/auth/portal` với `{ "userName": "<restApiUser.name>", "kid": "…", "credential": "<base64 bản mã>" }`.
+3. Gửi `POST /api/auth/portal` với `{ "userName": "<restApiUser.name>", "kid": "…", "credential": "<base64 bản mã>" }`.
 4. Server giải bằng khóa riêng theo `kid`, kiểm `timestamp` trong `ClockSkewSeconds` và `nonce` chưa dùng (chống phát lại gói đã bắt được), giải `restApiUser.password` (AES) rồi so bằng `CryptographicOperations.FixedTimeEquals`. Kiểm `status`, IP, khoá sau nhiều lần sai (HybridCache), như `auth/token`.
 5. Trả JWT phạm vi `portal` (claim `scope = portal`), thời hạn ngắn. JWT này **chỉ** gọi được `/_meta/*`; route nghiệp vụ từ chối dù chữ ký đúng.
 
@@ -600,16 +600,16 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | `Security/PrivateKeyProtector`: AES-256-GCM, khóa chủ `Security:KeyEncryptionKey` (base64 32 byte), AAD gắn `u_id`, định dạng `v1:` + base64(nonce, tag, bản mã) | Xong 23/10/2026 |
 | `Fast.Api.Cli issue-key --user <name> [--rotate] [--apply]`: cấp/thay `private_key`, in khóa một lần | Xong 23/10/2026, chạy thử (không ghi) trên DB dev |
 | Vector thử cố định (`Tests/MessageSignatureTests.cs`, kết quả mong đợi tính độc lập bằng Python): khóa dẫn xuất, checksum, chữ ký request/response, sửa 1 byte body, đổi query, chữ ký request không dùng làm chữ ký response; 26 test mới | Xong 23/10/2026, 50/50 đạt |
-| `SignatureMiddleware` cho `/api/v3/*` (trừ `GET /_meta/server`): bước 1–4 của 4.2.3. Khóa ký lấy qua `SignerKeyStore` (`restApi_GetUserRights` → giải `private_key` → chỉ giữ `K_request`/`K_response`, HybridCache `userCacheSeconds`). Body đọc một lần, giới hạn `maxRequestBodyBytes` (mặc định 10 MB), giữ ở `HttpContext.Items["rawBody"]`. Nonce `[A-Za-z0-9_-]{16,64}`, **ghi sau khi chữ ký đúng** (request giả không đốt được nonce), kiểm-và-ghi nguyên tử bằng `IMemoryCache` + lock (HybridCache không có thao tác nguyên tử) | Xong 23/10/2026 |
+| `SignatureMiddleware` cho `/api/*` (trừ `GET /_meta/server`): bước 1–4 của 4.2.3. Khóa ký lấy qua `SignerKeyStore` (`restApi_GetUserRights` → giải `private_key` → chỉ giữ `K_request`/`K_response`, HybridCache `userCacheSeconds`). Body đọc một lần, giới hạn `maxRequestBodyBytes` (mặc định 10 MB), giữ ở `HttpContext.Items["rawBody"]`. Nonce `[A-Za-z0-9_-]{16,64}`, **ghi sau khi chữ ký đúng** (request giả không đốt được nonce), kiểm-và-ghi nguyên tử bằng `IMemoryCache` + lock (HybridCache không có thao tác nguyên tử) | Xong 23/10/2026 |
 | Ký response (4.2.4) cho mọi response sau khi biết khóa, kể cả lỗi và 500 (middleware đặt ngoài `UseExceptionHandler`). Chưa xác thực / tài khoản không hiệu lực / chưa cấp khóa → không ký | Xong 23/10/2026 |
 | Mã lỗi mới trong `Message.xml`: `MISSING_SIGNATURE` (401), `TIMESTAMP_EXPIRED`, `NONCE_REUSED`, `CHECKSUM_MISMATCH`, `INVALID_SIGNATURE`, **`KEY_NOT_ISSUED` (403)**, **`PAYLOAD_TOO_LARGE` (413)** (hai mã cuối không có trong 4.4, thêm vì cần) | Xong 23/10/2026 |
-| `GET /api/v3/_meta/server` (giờ server, phiên bản chữ ký; khóa RSA portal để pha 6), `POST /api/v3/_meta/ping` (cần JWT + chữ ký, trả `u_id`, `name`) | Xong 23/10/2026 |
-| Client mẫu C# tự chứa `Tests/Sample/FastApiV3Signer.cs` (chỉ dùng `System.Security.Cryptography`); 17 test TestServer: ký đúng, sửa body, đổi query, đổi `Idempotency-Key`, sai khóa, timestamp ±301 s, nonce dùng lại, chữ ký sai không đốt nonce, nonce sai dạng, thiếu header, body quá lớn, chưa xác thực, chưa cấp khóa, response cũ không khớp request khác | Xong 23/10/2026, 67/67 đạt |
+| `GET /api/_meta/server` (giờ server, phiên bản chữ ký; khóa RSA portal để pha 6), `POST /api/_meta/ping` (cần JWT + chữ ký, trả `u_id`, `name`) | Xong 23/10/2026 |
+| Client mẫu C# tự chứa `Tests/Sample/FastApiSigner.cs` (chỉ dùng `System.Security.Cryptography`); 17 test TestServer: ký đúng, sửa body, đổi query, đổi `Idempotency-Key`, sai khóa, timestamp ±301 s, nonce dùng lại, chữ ký sai không đốt nonce, nonce sai dạng, thiếu header, body quá lớn, chưa xác thực, chưa cấp khóa, response cũ không khớp request khác | Xong 23/10/2026, 67/67 đạt |
 | `CustomJwtAuthenticationHandler` trả `Fail` thay vì tự ghi response (trước đây token sai bị ghi response hai lần) | Xong 23/10/2026 |
 | Api bắt buộc `Security:KeyEncryptionKey` (base64 32 byte) lúc khởi động | Xong 23/10/2026 |
-| `POST /api/v3/auth/token`: user lấy từ `X-Fast-User`, request ký bằng khóa của user đó; body `{ "userName" }` phải khớp (`USER_MISMATCH`); IP theo `restApiAllowIp` của user; khóa đăng nhập sau `loginMaxFailures` (5) lần **chữ ký sai** trong `loginLockMinutes` (15) → `ACCOUNT_LOCKED` (403). Trả `accessToken`, `tokenType`, `expiresIn` (`v3TokenMinutes`, mặc định 60) | Xong 23/10/2026 |
-| JWT v3: `sub`, `u_id`, `user_id`, `name_erp`, `scope = api`, `jti`, audience `fast-api-v3` (**không gắn IP**, khác token cũ). Route v3 đòi claim `u_id` khớp tài khoản và `jti` chưa thu hồi; token cũ (audience = IP) không dùng được cho v3 | Xong 23/10/2026 |
-| `POST /api/v3/auth/revoke`: thu hồi `jti` đang dùng → `restApiRevokedToken` (đồng thời dọn dòng hết hạn), tra qua HybridCache, thu hồi ghi đè cache nên có hiệu lực ngay | Xong 23/10/2026, thử repository trên DB dev |
+| `POST /api/auth/token`: user lấy từ `X-Fast-User`, request ký bằng khóa của user đó; body `{ "userName" }` phải khớp (`USER_MISMATCH`); IP theo `restApiAllowIp` của user; khóa đăng nhập sau `loginMaxFailures` (5) lần **chữ ký sai** trong `loginLockMinutes` (15) → `ACCOUNT_LOCKED` (403). Trả `accessToken`, `tokenType`, `expiresIn` (`tokenMinutes`, mặc định 60) | Xong 23/10/2026 |
+| JWT v3: `sub`, `u_id`, `user_id`, `name_erp`, `scope = api`, `jti`, audience `fast-api` (**không gắn IP**, khác token cũ). Route v3 đòi claim `u_id` khớp tài khoản và `jti` chưa thu hồi; token cũ (audience = IP) không dùng được cho v3 | Xong 23/10/2026 |
+| `POST /api/auth/revoke`: thu hồi `jti` đang dùng → `restApiRevokedToken` (đồng thời dọn dòng hết hạn), tra qua HybridCache, thu hồi ghi đè cache nên có hiệu lực ngay | Xong 23/10/2026, thử repository trên DB dev |
 | Mã lỗi mới: `ACCOUNT_LOCKED` (403), `INVALID_SHAPE` (400), `USER_MISMATCH` (400); `IIpAccessManager` tách interface | Xong 23/10/2026 |
 | 10 test TestServer mới: cấp token rồi dùng, claim JWT, `USER_MISMATCH`, IP bị chặn, user không tồn tại / ngừng / rỗng, khóa sau 3 lần sai, thu hồi rồi bị từ chối, token cũ, `u_id` không khớp | Xong 23/10/2026, 77/77 đạt |
 | Kiểm quyền bước 6 (form `restApiAllowForm`, `unitRequired`/`unitCode`) | Chuyển sang pha 3: cần bảng route và `unitRequired` của form |
@@ -628,7 +628,7 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | Kiểu/độ rộng cột thật (2.3): `ColumnSchemaRepository` đọc `sys.columns` (kiểu người dùng định nghĩa quy về kiểu gốc, độ dài `nchar`/`nvarchar` tính theo ký tự), `ColumnTypeResolver` gắn `SqlType` + độ dài kiểm. Cột chuỗi thêm `COLLATE DATABASE_DEFAULT` để so được với bảng thật khi tempdb khác collation. Field không có cột trong `table` → dùng type XML + cảnh báo; bảng không tồn tại → lỗi nạp | Xong 23/10/2026 |
 | `JsonBodyMapper`: một chứng từ hoặc mảng (tối đa `MaxDocumentsPerRequest`), tên thuộc tính không phân biệt hoa thường, thuộc tính lạ bỏ qua. **Form một khối nhận thêm dạng phẳng** (body tham số của `get`, 4.3). `_row` = chỉ số trong mảng cha, `_parent` = chỉ số chứng từ; khối con nhận khóa khối gốc, gửi khóa khác → `INVALID_SHAPE`. Field: `allowNull` (thiếu / null / chuỗi trắng → `FIELD_REQUIRED`), `defaultValue`, `upperCase`, độ dài (`VALUE_TOO_LONG`), `checkIrregular` (`INVALID_FIELD_IRREGULAR`), kiểu/format (`INVALID_VALUE`; ngày theo `format` hoặc ISO 8601, có múi giờ thì đổi về giờ máy chủ; `unixtime` = giây), `hidden` không nhận từ JSON. Lỗi giá trị gom đủ với vị trí `[0].detail[2].Quantity`. `justContent` chưa xử lý (chưa rõ nghĩa ở v2) | Xong 23/10/2026 |
 | `CREATE TABLE #khối` theo `SqlType`; 38 test mới (176/176). Thử trên DB dev: resolver theo `m81$000000`/`d81$000000`, bulk copy vào `#master`/`#detail`, chạy `@@checking(1) @@checking(2)` ra đúng 4 lỗi có vị trí | Xong 23/10/2026 |
-| Nối route: `Map("/api/v3/{**path}")` sau route literal (`auth`, `_meta`); catalog nạp một lần lúc khởi động, gắn kiểu theo cột thật (mỗi bảng đọc một lần). Thứ tự: route (404 `NOT_FOUND` / 405 `METHOD_NOT_ALLOWED` + `Allow: POST`) → quyền form `restApiAllowForm` (`FORBIDDEN`) → `unitCode` → dạng body → giá trị field → checking → processing. GET vào route nghiệp vụ vẫn phải qua chữ ký trước rồi mới ra 405 (không lộ route cho request chưa xác thực) | Xong 23/10/2026 |
+| Nối route: `Map("/api/{**path}")` sau route literal (`auth`, `_meta`); catalog nạp một lần lúc khởi động, gắn kiểu theo cột thật (mỗi bảng đọc một lần). Thứ tự: route (404 `NOT_FOUND` / 405 `METHOD_NOT_ALLOWED` + `Allow: POST`) → quyền form `restApiAllowForm` (`FORBIDDEN`) → `unitCode` → dạng body → giá trị field → checking → processing. GET vào route nghiệp vụ vẫn phải qua chữ ký trước rồi mới ra 405 (không lộ route cho request chưa xác thực) | Xong 23/10/2026 |
 | `unitCode` (query): `unitRequired` thiếu → `UNIT_REQUIRED`; có gửi thì luôn kiểm qua `restApi_CheckUnitRights` bằng tham số (lỗi 1.4 #2), `unitAction` theo form, cache `userCacheSeconds`; `UNIT_NOT_FOUND` (400) / `UNIT_DENIED` (403) | Xong 23/10/2026 |
 | `FormExecutor`: `SET XACT_ABORT ON`, tạo `#errors` + `#khối`, bulk copy, rồi trong một transaction T-SQL chạy checking → đọc `#errors` → processing. `#errors` có dòng / `dryRun` / processing trả `code` ≠ `SUCCESS` / lỗi SQL → rollback. Thay biến `@@` (2.6): chuỗi → `N'…'` đã escape, số giữ nguyên, tên DB → `[tên]`, `@@unit` chỉ có sau khi kiểm quyền | Xong 23/10/2026. Thử trên DB dev 5 ca: thành công giữ dòng; mã lỗi, dryRun, lỗi checking, chia cho 0 đều rollback |
 | Response: lỗi field và lỗi checking chung một dạng `VALIDATION_FAILED` + `errors[{ position, field, code, message }]` (message từ `Message.xml`, không có thì là code). Thành công: `data` theo cột `tables` của bảng 0, không khai thì `data` / `data1..dataN`. Processing trả code lỗi → HTTP status theo `Message.xml`, không có thì 400. `dryRun` → `{ dryRun: true, documents }`. Lỗi SQL → 500 `ERROR` (có ký) qua `UseExceptionHandler` | Xong 23/10/2026 |
@@ -636,9 +636,9 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | Phân trang (pha 4) chưa có: processing trả bao nhiêu dòng thì trả hết | Lưu ý |
 | `Idempotency-Key` (`IdempotencyStore` trên `restApiIdempotency`, giữ `idempotencyHours` = 24): key 1–128 ký tự ASCII nhìn thấy (`INVALID_IDEMPOTENCY_KEY`); dấu vân tay = SHA256(form + `canonicalQuery` + SHA256 body); giữ chỗ bằng INSERT có điều kiện dưới `UPDLOCK, HOLDLOCK` (không `SET ISOLATION LEVEL`: 2008 R2 không reset khi trả connection về pool). Lần sau cùng key: trả lại đúng response cũ (status + body, kể cả `request_id` cũ), header `Idempotent-Replayed: true`, chữ ký response tính lại cho request mới. Khác form/query/body → 409 `IDEMPOTENCY_CONFLICT`; đang chạy → 409 `IDEMPOTENCY_IN_PROGRESS`; lỗi không lường trước → bỏ giữ chỗ. `dryRun` không dùng key. Giữ chỗ đặt sau kiểm dạng/giá trị nên request sai dạng không chiếm key | Xong 23/10/2026 |
 | Mẫu `App_Data/Form/getCustomer.xml` (form một khối, lọc `Keyword`/`CustomerID`, thoát ký tự đại diện LIKE) và `setSaleInvoice.xml` (ví dụ 2.1: `unitRequired`, check theo category). **Processing của `setSaleInvoice` mẫu chưa ghi chứng từ**, chỉ trả lại dữ liệu đã kiểm: proc ghi HDA là việc của từng dự án. Mã nghiệp vụ `CUSTOMER_NOT_FOUND`, `ITEM_NOT_FOUND`, `INVALID_QUANTITY` thêm vào `Message.xml`. 9 test mới (203/203) | Xong 23/10/2026 |
-| End-to-end trên DB dev (Api thật + client mẫu `FastApiV3Signer`, khóa cấp bằng `issue-key`): `auth/token` → `ping` → `customer/get` (3 dạng lọc) → `unitCode` sai → `sale-invoice` thiếu `unitCode` / `dryRun` / lỗi checking có vị trí / gửi lại key (replay) / key + body khác (409) / lỗi giá trị → route không có (404) → `revoke` → 401. Mọi response ký đúng trừ 401 sau thu hồi. Dữ liệu thử đã dọn (`private_key`, `restApiAllowForm`, `restApiIdempotency`, `restApiRevokedToken` của `ADMIN` về như cũ) | Xong 23/10/2026 |
+| End-to-end trên DB dev (Api thật + client mẫu `FastApiSigner`, khóa cấp bằng `issue-key`): `auth/token` → `ping` → `customer/get` (3 dạng lọc) → `unitCode` sai → `sale-invoice` thiếu `unitCode` / `dryRun` / lỗi checking có vị trí / gửi lại key (replay) / key + body khác (409) / lỗi giá trị → route không có (404) → `revoke` → 401. Mọi response ký đúng trừ 401 sau thu hồi. Dữ liệu thử đã dọn (`private_key`, `restApiAllowForm`, `restApiIdempotency`, `restApiRevokedToken` của `ADMIN` về như cũ) | Xong 23/10/2026 |
 | `setSaleInvoice` thành công trên DB dev: chưa thử được vì `dmvt` dev chỉ có 1 vật tư và không `status = '1'` | Chờ dữ liệu |
-| Nạp lại form khi file đổi: `V3FormReloader` theo dõi `App_Data/Form/*.xml` (không đệ quy), gom sự kiện 500 ms rồi nạp lại **toàn bộ** catalog (đọc lại cấu trúc bảng), thay nguyên khối; request đang chạy giữ catalog cũ. Nạp lỗi ngoài lỗi XML (vd mất SQL) → giữ catalog cũ. Watcher bật trong `StartAsync` (từ .NET 10 `ExecuteAsync` chạy nền, bật muộn sẽ lỡ thay đổi; đã gặp trong test) | Xong 23/10/2026, thử với Api thật: thêm file → 3 form, xoá → 2 form |
+| Nạp lại form khi file đổi: `FormReloader` theo dõi `App_Data/Form/*.xml` (không đệ quy), gom sự kiện 500 ms rồi nạp lại **toàn bộ** catalog (đọc lại cấu trúc bảng), thay nguyên khối; request đang chạy giữ catalog cũ. Nạp lỗi ngoài lỗi XML (vd mất SQL) → giữ catalog cũ. Watcher bật trong `StartAsync` (từ .NET 10 `ExecuteAsync` chạy nền, bật muộn sẽ lỡ thay đổi; đã gặp trong test) | Xong 23/10/2026, thử với Api thật: thêm file → 3 form, xoá → 2 form |
 | `Fast.Api.Cli upgrade <file | thư mục> [--update Update.xml] [--out dir] [--force]` (`Business/V3/V2FormUpgrader`): `<form>` → `<import>`, `id` → `voucherCode`, `struct` → `fields` (khối đầu là gốc, key = `isPrimaryKey` hoặc field có ở mọi khối), `mapping` → `fastName`, `allowNulls` → `allowNull`, `dataFormatString` → `format`, kiểu v2 → v3. `<reference controller>` → field `fastName` = mã FBO + `upperCase` + check tồn tại theo `Update.xml` (`Customer` → `dmkh.ma_kh`…), lỗi `{CONTROLLER}_NOT_FOUND`; field ẩn chứa mã tra bị bỏ; khối con bỏ khóa trùng (v3 tự thêm). `<check>` → danh sách check, `index` → `category`. Query: bỏ `@@update(n)`, `@@userName` v2 → `@@apiUserName` (biến mới, 2.6), `@@userERP` → `@@userName`, `@@id` → `@@voucherCode`. In ghi chú cần xem lại (đối tác phải gửi mã FBO, controller không có trong `Update.xml`, `'@@appDatabaseName'` trong dấu nháy, cảnh báo nạp thử); nạp thử bằng `ImportFormLoader` | Xong 23/10/2026. `setTemplate.xml` chuyển được, nạp được |
 | 11 test mới (214/214) | Xong 23/10/2026 |
 
@@ -670,14 +670,14 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | Việc | Trạng thái |
 |---|---|
 | `Security/PortalKeyProvider`: RSA ≥ 2048 bit từ PFX (`Security:PortalKeyPath` + `PortalKeyPassword`) hoặc `LocalMachine\My` (`Security:PortalKeyThumbprint`); không khai → khóa tạm trong bộ nhớ + cảnh báo log (chỉ máy dev, restart là đổi). `kid` = JWK thumbprint RFC 7638 (kiểm bằng vector của RFC). `/_meta/server` thêm `portalKey` (JWK `RSA-OAEP-256`) | Xong 23/10/2026 |
-| `POST /api/v3/auth/portal` `{ userName, kid, credential }`, không cần chữ ký HMAC (tài khoản chưa cấp `private_key` vẫn vào portal được). Kiểm: tài khoản → khóa đăng nhập → IP → `kid` (`INVALID_KID`) → giải RSA-OAEP SHA-256 → `timestamp` (`TIMESTAMP_EXPIRED`) + `nonce` (`NONCE_REUSED`) → giải `restApiUser.password` bằng `passwordKey`, so theo thời gian hằng (`INVALID_CREDENTIAL`). Sai mật khẩu / bản mã hỏng tính vào khóa đăng nhập. Trả JWT `scope=portal`, `portalTokenMinutes` (30). Log không lưu body request (mật khẩu đã mã hóa) lẫn response (JWT) | Xong 23/10/2026 |
-| JWT `scope=portal` chỉ gọi được `GET /api/v3/_meta/*` trừ `ping`, không ký request/response; route khác → 403 `PORTAL_TOKEN_NOT_ALLOWED`. JWT `scope=api` gọi `_meta` vẫn phải ký như cũ | Xong 23/10/2026 |
+| `POST /api/auth/portal` `{ userName, kid, credential }`, không cần chữ ký HMAC (tài khoản chưa cấp `private_key` vẫn vào portal được). Kiểm: tài khoản → khóa đăng nhập → IP → `kid` (`INVALID_KID`) → giải RSA-OAEP SHA-256 → `timestamp` (`TIMESTAMP_EXPIRED`) + `nonce` (`NONCE_REUSED`) → giải `restApiUser.password` bằng `passwordKey`, so theo thời gian hằng (`INVALID_CREDENTIAL`). Sai mật khẩu / bản mã hỏng tính vào khóa đăng nhập. Trả JWT `scope=portal`, `portalTokenMinutes` (30). Log không lưu body request (mật khẩu đã mã hóa) lẫn response (JWT) | Xong 23/10/2026 |
+| JWT `scope=portal` chỉ gọi được `GET /api/_meta/*` trừ `ping`, không ký request/response; route khác → 403 `PORTAL_TOKEN_NOT_ALLOWED`. JWT `scope=api` gọi `_meta` vẫn phải ký như cũ | Xong 23/10/2026 |
 | `GET /_meta/resources` (form được cấp quyền), `GET /_meta/resources/{form}` (tóm tắt, khối, field hiện được — bỏ `hidden` và khóa tự thêm —, kiểu, độ dài thật, bắt buộc, format, mã lỗi của check, **mẫu body**: nhiều khối có tên khối, một khối dạng phẳng), `GET /_meta/errors` (bảng mã lỗi từ `Message.xml`). Không có quyền → `FORBIDDEN`, không có → `NOT_FOUND` | Xong 23/10/2026 |
 | Mã lỗi mới `INVALID_KID`, `INVALID_CREDENTIAL`, `PORTAL_TOKEN_NOT_ALLOWED`; hai mã sau vào danh sách tấn công của log. 20 test mới (271/271), client test mã hóa bằng JWK lấy từ `/_meta/server` như WebCrypto | Xong 23/10/2026 |
 | End-to-end trên DB dev (Api thật): `_meta/server` → sai mật khẩu 401 → đăng nhập 200 → phát lại gói 401 `NONCE_REUSED` → `_meta/resources`, `_meta/resources/setSaleInvoice`, `_meta/errors` (49 mã) → token portal gọi `sale-invoice` 403 → form không cấp quyền 403. Dữ liệu thử đã trả lại (mật khẩu `ADMIN` về chuỗi rỗng như trước, quyền form, log) | Xong 23/10/2026 |
 | `ApiDocs` viết lại thành trang một màn (bỏ trang dữ liệu giả): đăng nhập (WebCrypto RSA-OAEP với JWK của `/_meta/server`), danh sách/chi tiết tài nguyên (khối, field, mã lỗi, body mẫu), bảng mã lỗi. Mọi lời gọi đi thẳng từ trình duyệt tới Api (`Portal:ApiBaseUrl`, rỗng = cùng origin); site portal không thấy bí mật nào. CSP chỉ cho script của chính site, dựng DOM bằng `textContent`. JWT portal giữ trong `sessionStorage`; `private_key` và JWT API chỉ trong bộ nhớ trang | Xong 23/10/2026 |
 | Gọi thử: dán `private_key` → trình duyệt ký `auth/token` lấy JWT API → ký request form, kiểm chữ ký response, hiện `canonicalRequest`/`canonicalResponse`/header. Form `List`/`Report`: nút "Gọi"; `Voucher`/`Transfer`: "Kiểm tra (dryRun)" và "Gửi thật" (hỏi xác nhận, kèm `Idempotency-Key`); "Trang tiếp" theo `cursor`/`page` | Xong 23/10/2026 |
-| Api: CORS cho portal khác origin, chỉ trên `/api/v3`, theo `appSettings:portalOrigins` (rỗng = không mở): cho phép header `X-Fast-*`, `Idempotency-Key`, `Authorization`; lộ `X-Request-ID`, `X-Fast-Timestamp`, `X-Fast-Content-SHA256`, `X-Fast-Signature`; không cookie. Preflight trả trước log và chữ ký | Xong 23/10/2026 |
+| Api: CORS cho portal khác origin, chỉ trên `/api`, theo `appSettings:portalOrigins` (rỗng = không mở): cho phép header `X-Fast-*`, `Idempotency-Key`, `Authorization`; lộ `X-Request-ID`, `X-Fast-Timestamp`, `X-Fast-Content-SHA256`, `X-Fast-Signature`; không cookie. Preflight trả trước log và chữ ký | Xong 23/10/2026 |
 | Code mẫu `ApiDocs/wwwroot/samples`: cURL (bash + OpenSSL), C#, JavaScript (Node), Python, Java; chạy không tham số tự kiểm vector thử của `MessageSignatureTests`, có tham số thì lấy token rồi gọi `_meta/ping` và kiểm chữ ký response (trừ cURL). Lõi ký trình duyệt `wwwroot/js/fast-sign.js` cũng tự kiểm vector trên trang Code mẫu. Test `PortalDocsTests`: CORS + mọi mẫu chứa đúng vector (282/282) | Xong 23/10/2026 |
 | End-to-end trên DB dev (Api :5299 + ApiDocs :5225 khác origin, khóa tạm qua biến môi trường): sai mật khẩu → lỗi; đăng nhập → 2 form được cấp; gọi thử `getCustomer` 200, chữ ký response hợp lệ; `setSaleInvoice` dryRun ra `VALIDATION_FAILED` đúng field (DB dev không có vật tư hoạt động); mã lỗi, code mẫu, đăng xuất. Mẫu Python/Node/bash/C# gọi thật Api đạt. **Mẫu Java chưa chạy** (máy dev không có JDK). Chưa bấm "Gửi thật" trên giao diện. Dữ liệu thử đã trả lại | Xong 23/10/2026 |
 | Form mẫu `setSaleInvoice`: check `so_luong <= 0` chuyển từ field `Promotion` sang `Quantity` (trước đó lỗi `INVALID_QUANTITY` báo nhầm field). Test `RequestLogTests.GhiTheoLo_GioiHanKichThuocLo` chập chờn (dọn log chạy sau lô cuối) đã sửa | Xong 23/10/2026 |

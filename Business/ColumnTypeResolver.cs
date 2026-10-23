@@ -1,9 +1,9 @@
-using Models.V3;
+using Models;
 
-namespace Business.V3
+namespace Business
 {
     /// <summary>
-    /// Gắn kiểu cột bảng tạm cho từng field (KE_HOACH_V3 2.3): khối có table thì theo cột thật, không thì theo type XML.
+    /// Gắn kiểu cột bảng tạm cho từng field (KE_HOACH 2.3): khối có table thì theo cột thật, không thì theo type XML.
     /// Chạy một lần lúc nạp form; maxLength lớn hơn cột thật thì cảnh báo và kiểm theo cột thật
     /// </summary>
     public static class ColumnTypeResolver

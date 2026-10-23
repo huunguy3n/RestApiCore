@@ -1,4 +1,4 @@
-// Ký và kiểm thông điệp Fast API v3 bằng WebCrypto (KE_HOACH_V3 4.2), cùng thuật toán với Security/MessageSignature.cs.
+// Ký và kiểm thông điệp Fast API bằng WebCrypto (KE_HOACH 4.2), cùng thuật toán với Security/MessageSignature.cs.
 // Dùng được trong trình duyệt và Node 20+ (globalThis.crypto). private_key chỉ nằm trong bộ nhớ, không gửi đi đâu.
 
 export const REQUEST_ALGORITHM = "FAST-HMAC-SHA256";
@@ -138,13 +138,13 @@ export const TEST_VECTOR = {
     requestKeyHex: "97e74368c9f83ca77fc672a8a56e39b9c6f02527fd3e548454aa29aade37172f",
     responseKeyHex: "62ed65120ef56ee55f108c4966a34cf71c10b004191f83cef00532c54b8993dd",
     method: "POST",
-    url: "/api/v3/sale-invoice?unitCode=CTY&dryRun=false",
+    url: "/api/sale-invoice?unitCode=CTY&dryRun=false",
     body: "{\"master\":{\"YourID\":\"HD001\"},\"detail\":[{\"ItemID\":\"VT01\",\"Quantity\":2}]}",
     bodySha256: "534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f",
     timestamp: 1792574400,
     nonce: "9b2e4c1f0a7d4e3b",
     idempotencyKey: "6f1c2d3e-0000-4000-8000-000000000001",
-    requestSignature: "6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa54",
+    requestSignature: "4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b2",
     responseStatus: 200,
     responseRequestId: "8c2f0000-0000-4000-8000-000000000002",
     responseTimestamp: 1792574401,

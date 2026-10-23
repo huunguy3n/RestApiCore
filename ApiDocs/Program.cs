@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.StaticFiles;
 
-// Portal đối tác (KE_HOACH_V3 5.3): trang tĩnh, mọi lời gọi Api đi thẳng từ trình duyệt.
+// Portal đối tác (KE_HOACH 5.3): trang tĩnh, mọi lời gọi Api đi thẳng từ trình duyệt.
 // Mật khẩu mã hóa RSA-OAEP và private_key ký HMAC đều xử lý bằng WebCrypto, site này không thấy bí mật nào
 var builder = WebApplication.CreateBuilder(args);
 

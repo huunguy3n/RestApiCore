@@ -9,15 +9,15 @@ using System.Text.Json;
 namespace Web.Custom
 {
     /// <summary>
-    /// POST /api/v3/auth/token và /api/v3/auth/revoke (KE_HOACH_V3 4.2.5). Chữ ký request đã được SignatureMiddleware kiểm,
+    /// POST /api/auth/token và /api/auth/revoke (KE_HOACH 4.2.5). Chữ ký request đã được SignatureMiddleware kiểm,
     /// response do middleware ký
     /// </summary>
-    public static class V3AuthEndpoints
+    public static class AuthEndpoints
     {
-        public static void MapV3Auth(this IEndpointRouteBuilder endpoints)
+        public static void MapAuth(this IEndpointRouteBuilder endpoints)
         {
             endpoints.MapPost(SignatureMiddleware.TokenPath, IssueTokenAsync);
-            endpoints.MapPost("/api/v3/auth/revoke", RevokeAsync);
+            endpoints.MapPost("/api/auth/revoke", RevokeAsync);
         }
 
         private static async Task IssueTokenAsync(HttpContext context, AppConfig appConfig, ResponseManager responseManager,
@@ -49,9 +49,9 @@ namespace Web.Custom
 
             lockout.Reset(signer.UId);
 
-            DateTime expires = time.GetUtcNow().UtcDateTime.AddMinutes(appConfig.v3TokenMinutes);
+            DateTime expires = time.GetUtcNow().UtcDateTime.AddMinutes(appConfig.tokenMinutes);
             string accessToken = new JwtTokenService(appConfig.secretKey, appConfig.expiryToken, appConfig.issuerToken)
-                .GenerateV3Token(signer.Name, signer.UId, signer.UserId!.Value, signer.NameErp, Guid.NewGuid().ToString(), expires);
+                .GenerateToken(signer.Name, signer.UId, signer.UserId!.Value, signer.NameErp, Guid.NewGuid().ToString(), expires);
 
             await WriteJsonAsync(context, new
             {
@@ -61,7 +61,7 @@ namespace Web.Custom
                 request_id = context.Items["requestID"]?.ToString(),
                 accessToken,
                 tokenType = "Bearer",
-                expiresIn = appConfig.v3TokenMinutes * 60
+                expiresIn = appConfig.tokenMinutes * 60
             });
         }
 

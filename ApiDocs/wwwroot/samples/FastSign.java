@@ -1,4 +1,4 @@
-// Fast API v3 - ký request, kiểm chữ ký response (Java 11+, chỉ dùng thư viện chuẩn)
+// Fast API - ký request, kiểm chữ ký response (Java 11+, chỉ dùng thư viện chuẩn)
 // Chạy: java FastSign.java                                   -> kiểm vector thử
 //       java FastSign.java <base_url> <user> <private_key>   -> lấy token rồi gọi _meta/ping
 import java.net.URI;
@@ -110,9 +110,9 @@ public class FastSign {
         check(hex(responseKey).equals("62ed65120ef56ee55f108c4966a34cf71c10b004191f83cef00532c54b8993dd"), "K_response");
 
         byte[] body = "{\"master\":{\"YourID\":\"HD001\"},\"detail\":[{\"ItemID\":\"VT01\",\"Quantity\":2}]}".getBytes(StandardCharsets.UTF_8);
-        Map<String, String> headers = signRequest(requestKey, "POST", "/api/v3/sale-invoice?unitCode=CTY&dryRun=false", body, 1792574400L, "9b2e4c1f0a7d4e3b", "6f1c2d3e-0000-4000-8000-000000000001");
+        Map<String, String> headers = signRequest(requestKey, "POST", "/api/sale-invoice?unitCode=CTY&dryRun=false", body, 1792574400L, "9b2e4c1f0a7d4e3b", "6f1c2d3e-0000-4000-8000-000000000001");
         check(headers.get("X-Fast-Content-SHA256").equals("534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f"), "SHA-256 body");
-        check(headers.get("X-Fast-Signature").equals("6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa54"), "Chu ky request");
+        check(headers.get("X-Fast-Signature").equals("4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b2"), "Chu ky request");
 
         byte[] response = "{\"code\":\"SUCCESS\"}".getBytes(StandardCharsets.UTF_8);
         check(verifyResponse(responseKey, 200, "8c2f0000-0000-4000-8000-000000000002", "9b2e4c1f0a7d4e3b", "1792574401", sha256Hex(response),
@@ -123,7 +123,7 @@ public class FastSign {
     static final HttpClient HTTP = HttpClient.newHttpClient();
 
     static String send(String baseUrl, String privateKey, String method, String pathAndQuery, String body, String... extraHeaders) throws Exception {
-        String server = HTTP.send(HttpRequest.newBuilder(URI.create(baseUrl + "/api/v3/_meta/server")).build(), HttpResponse.BodyHandlers.ofString()).body();
+        String server = HTTP.send(HttpRequest.newBuilder(URI.create(baseUrl + "/api/_meta/server")).build(), HttpResponse.BodyHandlers.ofString()).body();
         Matcher m = Pattern.compile("\"serverTime\"\\s*:\\s*(\\d+)").matcher(server);
         check(m.find(), "serverTime");
         byte[] random = new byte[16];
@@ -149,10 +149,10 @@ public class FastSign {
         testVector();
         if (args.length == 3) {
             String baseUrl = args[0].replaceAll("/$", ""), user = args[1], privateKey = args[2];
-            String tokenResponse = send(baseUrl, privateKey, "POST", "/api/v3/auth/token", "{\"userName\":\"" + user + "\"}", "X-Fast-User", user);
+            String tokenResponse = send(baseUrl, privateKey, "POST", "/api/auth/token", "{\"userName\":\"" + user + "\"}", "X-Fast-User", user);
             Matcher m = Pattern.compile("\"accessToken\"\\s*:\\s*\"([^\"]+)\"").matcher(tokenResponse);
             check(m.find(), "accessToken: " + tokenResponse);
-            System.out.println(send(baseUrl, privateKey, "POST", "/api/v3/_meta/ping", "", "Authorization", "Bearer " + m.group(1)));
+            System.out.println(send(baseUrl, privateKey, "POST", "/api/_meta/ping", "", "Authorization", "Bearer " + m.group(1)));
         }
     }
 }

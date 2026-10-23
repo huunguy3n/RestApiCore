@@ -4,7 +4,7 @@
 ]>
 
 <!--
-  Mẫu form v3 (KE_HOACH_V3 2.1): POST /api/v3/sale-invoice?unitCode=CTY
+  Mẫu form v3 (KE_HOACH 2.1): POST /api/sale-invoice?unitCode=CTY
   Body: { "master": { "YourID": "HD001", "VoucherDate": "21/10/2026", "CustomerID": "KH001" },
           "detail": [ { "ItemID": "VT01", "Quantity": 2, "Price": 100000 } ] }
   Processing của mẫu CHƯA ghi chứng từ: chỉ trả lại dữ liệu đã kiểm. Mỗi dự án thay bằng proc ghi chứng từ HDA của mình.

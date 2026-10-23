@@ -1,4 +1,4 @@
-// Fast API v3 - ký request, kiểm chữ ký response (Node.js 18+, chỉ dùng node:crypto và fetch)
+// Fast API - ký request, kiểm chữ ký response (Node.js 18+, chỉ dùng node:crypto và fetch)
 // Chạy: node fast-sign.mjs                               -> kiểm vector thử
 //       node fast-sign.mjs <base_url> <user> <private_key> -> lấy token rồi gọi _meta/ping
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
@@ -70,12 +70,12 @@ function testVector() {
     assertEqual(keys.request.toString("hex"), "97e74368c9f83ca77fc672a8a56e39b9c6f02527fd3e548454aa29aade37172f", "K_request");
     assertEqual(keys.response.toString("hex"), "62ed65120ef56ee55f108c4966a34cf71c10b004191f83cef00532c54b8993dd", "K_response");
     const headers = signRequest(keys, {
-        method: "POST", url: "/api/v3/sale-invoice?unitCode=CTY&dryRun=false",
+        method: "POST", url: "/api/sale-invoice?unitCode=CTY&dryRun=false",
         body: "{\"master\":{\"YourID\":\"HD001\"},\"detail\":[{\"ItemID\":\"VT01\",\"Quantity\":2}]}",
         timestamp: 1792574400, nonce: "9b2e4c1f0a7d4e3b", idempotencyKey: "6f1c2d3e-0000-4000-8000-000000000001"
     });
     assertEqual(headers["X-Fast-Content-SHA256"], "534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f", "SHA-256 body");
-    assertEqual(headers["X-Fast-Signature"], "6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa54", "Chu ky request");
+    assertEqual(headers["X-Fast-Signature"], "4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b2", "Chu ky request");
     const response = "{\"code\":\"SUCCESS\"}";
     const ok = verifyResponse(keys, {
         status: 200, requestNonce: "9b2e4c1f0a7d4e3b", body: response,
@@ -89,7 +89,7 @@ function testVector() {
 }
 
 async function send(baseUrl, keys, method, path, body, extraHeaders = {}) {
-    const { serverTime } = await (await fetch(baseUrl + "/api/v3/_meta/server")).json();
+    const { serverTime } = await (await fetch(baseUrl + "/api/_meta/server")).json();
     const nonce = randomBytes(16).toString("hex");
     const headers = { ...signRequest(keys, { method, url: path, body, timestamp: serverTime, nonce }), "Content-Type": "application/json", ...extraHeaders };
     const response = await fetch(baseUrl + path, { method, headers, body });
@@ -104,6 +104,6 @@ testVector();
 const [baseUrl, user, privateKey] = process.argv.slice(2);
 if (privateKey) {
     const keys = deriveKeys(privateKey);
-    const { accessToken } = await send(baseUrl.replace(/\/$/, ""), keys, "POST", "/api/v3/auth/token", JSON.stringify({ userName: user }), { "X-Fast-User": user });
-    console.log(await send(baseUrl.replace(/\/$/, ""), keys, "POST", "/api/v3/_meta/ping", "", { Authorization: "Bearer " + accessToken }));
+    const { accessToken } = await send(baseUrl.replace(/\/$/, ""), keys, "POST", "/api/auth/token", JSON.stringify({ userName: user }), { "X-Fast-User": user });
+    console.log(await send(baseUrl.replace(/\/$/, ""), keys, "POST", "/api/_meta/ping", "", { Authorization: "Bearer " + accessToken }));
 }

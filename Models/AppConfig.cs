@@ -48,9 +48,9 @@
         }
 
         /// <summary>
-        /// Thời hạn (phút) JWT v3 cấp ở /api/v3/auth/token
+        /// Thời hạn (phút) JWT v3 cấp ở /api/auth/token
         /// </summary>
-        public int v3TokenMinutes
+        public int tokenMinutes
         {
             get; set;
         }
@@ -64,7 +64,7 @@
         }
 
         /// <summary>
-        /// Thời hạn (phút) JWT scope=portal cấp ở /api/v3/auth/portal
+        /// Thời hạn (phút) JWT scope=portal cấp ở /api/auth/portal
         /// </summary>
         public int portalTokenMinutes
         {
@@ -72,7 +72,7 @@
         }
 
         /// <summary>
-        /// Origin của portal ApiDocs được gọi /api/v3 từ trình duyệt (CORS), vd "https://docs.congty.vn". Rỗng: không mở CORS
+        /// Origin của portal ApiDocs được gọi /api từ trình duyệt (CORS), vd "https://docs.congty.vn". Rỗng: không mở CORS
         /// </summary>
         public string[] portalOrigins
         {
@@ -248,7 +248,7 @@
             clockSkewSeconds = 300;
             maxRequestBodyBytes = 10 * 1024 * 1024;
             userCacheSeconds = 60;
-            v3TokenMinutes = 60;
+            tokenMinutes = 60;
             maxDocumentsPerRequest = 100;
             idempotencyHours = 24;
             cursorTtlMinutes = 30;

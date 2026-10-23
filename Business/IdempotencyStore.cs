@@ -2,7 +2,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Models;
 
-namespace Business.V3
+namespace Business
 {
     public enum IdempotencyState
     {
@@ -26,7 +26,7 @@ namespace Business.V3
     }
 
     /// <summary>
-    /// Idempotency-Key trên restApiIdempotency (KE_HOACH_V3 4.3): giữ response idempotencyHours giờ.
+    /// Idempotency-Key trên restApiIdempotency (KE_HOACH 4.3): giữ response idempotencyHours giờ.
     /// Giữ chỗ bằng INSERT có điều kiện dưới khóa UPDLOCK + HOLDLOCK nên hai request cùng key chỉ một chạy
     /// </summary>
     public class IdempotencyStore(AppConfig appConfig) : IIdempotencyStore

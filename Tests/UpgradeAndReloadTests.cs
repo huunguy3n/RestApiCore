@@ -1,7 +1,7 @@
 using System.Xml.Linq;
-using Business.V3;
+using Business;
 using Microsoft.Extensions.Logging.Abstractions;
-using Models.V3;
+using Models;
 using Web.Custom;
 
 namespace Tests
@@ -149,7 +149,7 @@ namespace Tests
         }
     }
 
-    public class V3FormReloaderTests
+    public class FormReloaderTests
     {
         private const string Form = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="List">
@@ -165,17 +165,17 @@ namespace Tests
             try
             {
                 ImportFormCatalog Load() => ImportFormCatalog.LoadDirectory(dir);
-                var runtime = new V3FormRuntime(Load(), null);
-                using var reloader = new V3FormReloader(runtime, Load, dir, NullLogger<V3FormReloader>.Instance) { Debounce = TimeSpan.FromMilliseconds(50) };
+                var runtime = new FormRuntime(Load(), null);
+                using var reloader = new FormReloader(runtime, Load, dir, NullLogger<FormReloader>.Instance) { Debounce = TimeSpan.FromMilliseconds(50) };
                 await reloader.StartAsync(CancellationToken.None);
 
-                Assert.Equal(RouteMatch.NotFound, runtime.Catalog.Resolve("POST", "/api/v3/customer/get", out _));
+                Assert.Equal(RouteMatch.NotFound, runtime.Catalog.Resolve("POST", "/api/customer/get", out _));
 
                 File.WriteAllText(Path.Combine(dir, "getCustomer.xml"), Form);
-                Assert.True(await WaitUntil(() => runtime.Catalog.Resolve("POST", "/api/v3/customer/get", out _) == RouteMatch.Found), "thêm file → có route");
+                Assert.True(await WaitUntil(() => runtime.Catalog.Resolve("POST", "/api/customer/get", out _) == RouteMatch.Found), "thêm file → có route");
 
                 File.Delete(Path.Combine(dir, "getCustomer.xml"));
-                Assert.True(await WaitUntil(() => runtime.Catalog.Resolve("POST", "/api/v3/customer/get", out _) == RouteMatch.NotFound), "xoá file → mất route");
+                Assert.True(await WaitUntil(() => runtime.Catalog.Resolve("POST", "/api/customer/get", out _) == RouteMatch.NotFound), "xoá file → mất route");
 
                 await reloader.StopAsync(CancellationToken.None);
             }
@@ -193,7 +193,7 @@ namespace Tests
             {
                 File.WriteAllText(Path.Combine(dir, "getCustomer.xml"), Form);
                 ImportFormCatalog initial = ImportFormCatalog.LoadDirectory(dir);
-                var runtime = new V3FormRuntime(initial, null);
+                var runtime = new FormRuntime(initial, null);
                 int calls = 0;
                 ImportFormCatalog Failing()
                 {
@@ -201,7 +201,7 @@ namespace Tests
                     throw new InvalidOperationException("mất kết nối SQL");
                 }
 
-                using var reloader = new V3FormReloader(runtime, Failing, dir, NullLogger<V3FormReloader>.Instance) { Debounce = TimeSpan.FromMilliseconds(50) };
+                using var reloader = new FormReloader(runtime, Failing, dir, NullLogger<FormReloader>.Instance) { Debounce = TimeSpan.FromMilliseconds(50) };
                 await reloader.StartAsync(CancellationToken.None);
 
                 File.WriteAllText(Path.Combine(dir, "setOther.xml"), Form);

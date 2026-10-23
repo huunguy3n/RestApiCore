@@ -1,12 +1,12 @@
 using System.Text;
 using System.Text.RegularExpressions;
-using Models.V3;
+using Models;
 
-namespace Business.V3
+namespace Business
 {
     /// <summary>
     /// Biên dịch check của field thành SQL ghi #errors, thay vào @@checking / @@checking(n) trong query checking
-    /// (KE_HOACH_V3 2.4). Chạy một lần lúc nạp form
+    /// (KE_HOACH 2.4). Chạy một lần lúc nạp form
     /// </summary>
     public static partial class CheckingCompiler
     {

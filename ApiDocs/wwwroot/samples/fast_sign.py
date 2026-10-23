@@ -1,4 +1,4 @@
-# Fast API v3 - ký request, kiểm chữ ký response (Python 3.8+, chỉ dùng thư viện chuẩn)
+# Fast API - ký request, kiểm chữ ký response (Python 3.8+, chỉ dùng thư viện chuẩn)
 # Chạy: python fast_sign.py            -> kiểm vector thử
 #       python fast_sign.py <base_url> <user> <private_key>   -> lấy token rồi gọi _meta/ping
 import base64, hashlib, hmac, json, secrets, sys, time, urllib.request
@@ -64,10 +64,10 @@ def test_vector():
     assert k_req.hex() == "97e74368c9f83ca77fc672a8a56e39b9c6f02527fd3e548454aa29aade37172f"
     assert k_res.hex() == "62ed65120ef56ee55f108c4966a34cf71c10b004191f83cef00532c54b8993dd"
     body = b'{"master":{"YourID":"HD001"},"detail":[{"ItemID":"VT01","Quantity":2}]}'
-    headers = sign_request(k_req, "POST", "/api/v3/sale-invoice?unitCode=CTY&dryRun=false", body,
+    headers = sign_request(k_req, "POST", "/api/sale-invoice?unitCode=CTY&dryRun=false", body,
                            1792574400, "9b2e4c1f0a7d4e3b", "6f1c2d3e-0000-4000-8000-000000000001")
     assert headers["X-Fast-Content-SHA256"] == "534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f"
-    assert headers["X-Fast-Signature"] == "6728c67bb7eded95a6b13b56c3bcb13378c521fe55b0f23b97a3581918adfa54"
+    assert headers["X-Fast-Signature"] == "4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b2"
     response = b'{"code":"SUCCESS"}'
     assert verify_response(k_res, 200, {
         "X-Request-ID": "8c2f0000-0000-4000-8000-000000000002", "X-Fast-Timestamp": "1792574401",
@@ -77,7 +77,7 @@ def test_vector():
 
 
 def send(base_url, k_req, k_res, method, path, body: bytes, token=None, extra=None):
-    server_time = json.load(urllib.request.urlopen(base_url + "/api/v3/_meta/server"))["serverTime"]
+    server_time = json.load(urllib.request.urlopen(base_url + "/api/_meta/server"))["serverTime"]
     nonce = secrets.token_hex(16)
     headers = sign_request(k_req, method, path, body, server_time, nonce)
     headers["Content-Type"] = "application/json"
@@ -100,5 +100,5 @@ if __name__ == "__main__":
     if len(sys.argv) == 4:
         base_url, user, private_key = sys.argv[1].rstrip("/"), sys.argv[2], sys.argv[3]
         k_req, k_res = derive_keys(private_key)
-        token = send(base_url, k_req, k_res, "POST", "/api/v3/auth/token", json.dumps({"userName": user}).encode(), extra={"X-Fast-User": user})["accessToken"]
-        print(send(base_url, k_req, k_res, "POST", "/api/v3/_meta/ping", b"", token))
+        token = send(base_url, k_req, k_res, "POST", "/api/auth/token", json.dumps({"userName": user}).encode(), extra={"X-Fast-User": user})["accessToken"]
+        print(send(base_url, k_req, k_res, "POST", "/api/_meta/ping", b"", token))

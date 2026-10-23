@@ -2,21 +2,19 @@ using System.Data;
 using System.Text;
 using System.Text.RegularExpressions;
 using Business;
-using Business.V3;
 using Models;
 using Models.Options;
-using Models.V3;
 using Newtonsoft.Json;
 using Security;
 
 namespace Web.Custom
 {
     /// <summary>
-    /// Route nghiệp vụ v3: POST /api/v3/{resource} và /api/v3/{resource}/{verb} (KE_HOACH_V3 4.1).
+    /// Route nghiệp vụ v3: POST /api/{resource} và /api/{resource}/{verb} (KE_HOACH 4.1).
     /// Chữ ký đã kiểm ở SignatureMiddleware. Thứ tự: route → quyền form → unitCode → dạng body → giá trị field
     /// → Idempotency-Key → checking → processing
     /// </summary>
-    public static partial class V3FormEndpoint
+    public static partial class FormEndpoint
     {
         public const string ReplayedHeader = "Idempotent-Replayed";
 
@@ -25,10 +23,10 @@ namespace Web.Custom
 
         private sealed record FormResponse(int Status, string Json, bool Replayed = false);
 
-        public static void MapV3Forms(this IEndpointRouteBuilder endpoints)
+        public static void MapForms(this IEndpointRouteBuilder endpoints)
         {
             // Mọi method: route literal (auth, _meta) được ưu tiên, còn lại vào đây để trả 404/405 thống nhất
-            endpoints.Map("/api/v3/{**path}", HandleAsync);
+            endpoints.Map("/api/{**path}", HandleAsync);
         }
 
         private static async Task HandleAsync(HttpContext context)
@@ -51,7 +49,7 @@ namespace Web.Custom
         private static async Task<FormResponse> BuildAsync(HttpContext context)
         {
             var services = context.RequestServices;
-            var runtime = services.GetRequiredService<V3FormRuntime>();
+            var runtime = services.GetRequiredService<FormRuntime>();
             var appConfig = services.GetRequiredService<AppConfig>();
             var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;
 
