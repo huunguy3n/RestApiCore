@@ -89,7 +89,7 @@ Mọi SQL `restApi*` và câu lệnh v3 tự sinh phải chạy được trên 2
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE import [
-  <!ENTITY And "&#13;">
+  <!ENTITY And "&#38;#13;">
   <!ENTITY IrregularValue SYSTEM "..\Options\Irregular.txt">
 ]>
 
@@ -119,6 +119,8 @@ Mọi SQL `restApi*` và câu lệnh v3 tự sinh phải chạy được trên 2
   <query action="processing"><text><![CDATA[ exec restApi_ProcessDataFor_m81 @@voucherCode, @@unit, @@userId ]]></text></query>
 </import>
 ```
+Entity `And` **phải** khai `"&#38;#13;"`. Khai `"&#13;"` thì ký tự CR bị chuẩn hóa thành dấu cách trong giá trị thuộc tính (quy tắc chuẩn hóa thuộc tính của XML), danh sách `check` không tách được (đã thử 23/10/2026). Entity `SYSTEM` (vd `IrregularValue`) chỉ dùng được trong nội dung phần tử, XML cấm dùng trong thuộc tính.
+
 Khối `detail` không cần khai `YourID`: khóa `key` của khối gốc được tự thêm vào mọi khối con, để query nối `#master` với `#detail`.
 
 Đối tác gửi **mã FBO** (`ma_kh`, `ma_vt`) như khi Upload Excel; API chỉ kiểm mã tồn tại. Đối tác bắt buộc gửi mã của họ (`id_doitac`) thì khai cột riêng và tự tra ra mã FBO trong query `checking`, trước `@@checking(n)`.
@@ -611,6 +613,18 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | 10 test TestServer mới: cấp token rồi dùng, claim JWT, `USER_MISMATCH`, IP bị chặn, user không tồn tại / ngừng / rỗng, khóa sau 3 lần sai, thu hồi rồi bị từ chối, token cũ, `u_id` không khớp | Xong 23/10/2026, 77/77 đạt |
 | Kiểm quyền bước 6 (form `restApiAllowForm`, `unitRequired`/`unitCode`) | Chuyển sang pha 3: cần bảng route và `unitRequired` của form |
 | Chạy end-to-end trên DB dev (cần `KeyEncryptionKey` trong `appsettings.Local.json` + `issue-key --apply`) | Chưa |
+
+### 7.3d. Tiến độ pha 3 (nhánh `v3/phase3`)
+
+| Việc | Trạng thái |
+|---|---|
+| Model form v3 bất biến `Models/V3/ImportForm` (khối, field, 4 danh sách check, paging); engine v2 (`Models/Form`, `FormRepository`) giữ nguyên tới khi thay xong | Xong 23/10/2026 |
+| `Business/V3/ImportFormLoader`: đọc `<import xmlns="urn:schemas-fast-com:fast-api">`, kiểm thuộc tính, tên khối/field (định danh SQL), trùng field, `key` chỉ ở khối gốc và phải là field của khối gốc, khối con tự thêm field khóa, 4 danh sách cùng số phần tử, `unitAction` suy từ động từ, `paging`. Lỗi → `ImportFormException`, bỏ qua file | Xong 23/10/2026 |
+| Tách tên file → động từ + resource kebab-case (`getVATInvoice` → `vat-invoice/get`), route `set` → `/{resource}`, khác → `/{resource}/{verb}`; resource `auth` dành riêng | Xong 23/10/2026 |
+| `Business/V3/CheckingCompiler`: `@@checking(n)` theo giá trị `category`, `@@checking` mọi field; `@@table` → `#khối`; tự loại giá trị rỗng; `condition`/`tag` bọc quanh; cảnh báo field có check mà thiếu/không được gọi category | Xong 23/10/2026 |
+| `Business/V3/ImportFormCatalog`: nạp `App_Data/Form/*.xml` (không đệ quy), file lỗi / trùng route bỏ qua và ghi log (trùng thì bỏ cả hai), phân giải route không phân biệt hoa thường, chỉ `[a-z0-9-]`, method khác POST → 405, form `enable="false"` → 404 | Xong 23/10/2026 |
+| 71 test mới (`Tests/ImportFormTests.cs`) | Xong 23/10/2026, 138/138 đạt |
+| Kiểu/độ rộng cột thật (2.3), JSON object → `#khối` (`_row`, `_parent`), `allowNull`/`upperCase`/`defaultValue`/`format`, `#errors` có vị trí, nối route vào pipeline, kiểm quyền form + `unitCode`, `dryRun`, `Idempotency-Key`, `Fast.Api.Cli upgrade`, mẫu `setSaleInvoice`/`getCustomer` | Chưa |
 
 ### 7.4. Ngoài giai đoạn này
 - **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.
