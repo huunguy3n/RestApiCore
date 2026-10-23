@@ -64,7 +64,8 @@ namespace Business.V3
         /// <summary>
         /// Nạp mọi *.xml trong thư mục (không đệ quy: thư mục con như Include không phải form)
         /// </summary>
-        public static ImportFormCatalog LoadDirectory(string directory, ILogger? logger = null)
+        /// <param name="resolve">Bước sau khi đọc XML (gắn kiểu cột thật); ném ImportFormException thì bỏ qua form</param>
+        public static ImportFormCatalog LoadDirectory(string directory, ILogger? logger = null, Func<ImportForm, ImportForm>? resolve = null)
         {
             List<ImportForm> forms = [];
             Dictionary<string, string> errors = new(StringComparer.Ordinal);
@@ -76,6 +77,10 @@ namespace Business.V3
                     try
                     {
                         ImportForm form = ImportFormLoader.Load(file);
+                        if (resolve != null)
+                        {
+                            form = resolve(form);
+                        }
                         forms.Add(form);
                         foreach (string warning in form.Warnings)
                         {
@@ -84,7 +89,7 @@ namespace Business.V3
                     }
                     catch (ImportFormException ex)
                     {
-                        errors[ex.FileName] = ex.Message;
+                        errors[ex.FileName] = ex.Reason;
                     }
                 }
             }

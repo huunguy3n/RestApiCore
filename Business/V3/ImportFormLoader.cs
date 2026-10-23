@@ -11,6 +11,8 @@ namespace Business.V3
     public class ImportFormException(string fileName, string message) : Exception($"{fileName}: {message}")
     {
         public string FileName { get; } = fileName;
+        /// <summary>Lý do, không kèm tên file</summary>
+        public string Reason { get; } = message;
     }
 
     /// <summary>

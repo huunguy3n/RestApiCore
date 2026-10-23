@@ -16,6 +16,14 @@ namespace Business
     public sealed record SignerKeys(int UId, string Name, bool IsActive, byte[]? RequestKey, byte[]? ResponseKey, int? UserId = null, string NameErp = "")
     {
         public bool HasKey => RequestKey != null && ResponseKey != null;
+
+        /// <summary>userinfo2.admin = 1</summary>
+        public bool ErpAdmin { get; init; }
+
+        /// <summary>Form được phép (restApiAllowForm). Không có dòng = không quyền form nào</summary>
+        public IReadOnlySet<string> AllowForms { get; init; } = new HashSet<string>();
+
+        public bool CanAccessForm(string form) => AllowForms.Contains(form);
     }
 
     public interface ISignerKeyStore
@@ -71,7 +79,11 @@ namespace Business
                 }
             }
 
-            return new SignerKeys(rights.UId, rights.Name, rights.IsActive, requestKey, responseKey, rights.UserId, rights.NameErp);
+            return new SignerKeys(rights.UId, rights.Name, rights.IsActive, requestKey, responseKey, rights.UserId, rights.NameErp)
+            {
+                ErpAdmin = rights.ErpAdmin,
+                AllowForms = new HashSet<string>(rights.AllowForms, StringComparer.OrdinalIgnoreCase)
+            };
         }
     }
 

@@ -65,6 +65,28 @@ builder.Services.AddSingleton<ISignerKeyStore, SignerKeyStore>();
 builder.Services.AddSingleton<NonceStore>();
 builder.Services.AddSingleton<IRevokedTokenStore, RevokedTokenStore>();
 builder.Services.AddSingleton<LoginLockout>();
+builder.Services.AddSingleton<Business.V3.IUnitRightsChecker, Business.V3.UnitRightsChecker>();
+builder.Services.AddSingleton<Business.V3.IFormExecutor, Business.V3.FormExecutor>();
+// Form v3: nạp App_Data/Form một lần, gắn kiểu theo cột thật của bảng FBO (mỗi bảng đọc một lần)
+builder.Services.AddSingleton(services =>
+{
+    var logger = services.GetRequiredService<ILogger<Business.V3.ImportFormCatalog>>();
+    var columns = new DataAccess.ColumnSchemaRepository(appConfig);
+    var schemaCache = new Dictionary<string, IReadOnlyDictionary<string, Models.V3.ColumnInfo>?>(StringComparer.OrdinalIgnoreCase);
+
+    var catalog = Business.V3.ImportFormCatalog.LoadDirectory(Path.Combine(appConfig.pathDirectory, "App_Data", "Form"), logger,
+        form => Business.V3.ColumnTypeResolver.Resolve(form, table =>
+        {
+            if (!schemaCache.TryGetValue(table, out var schema))
+            {
+                schema = schemaCache[table] = columns.GetColumnsAsync(table).GetAwaiter().GetResult();
+            }
+            return schema;
+        }));
+
+    string irregular = services.GetRequiredService<Options>().Irregular.Trim();
+    return new V3FormRuntime(catalog, irregular.Length > 0 ? new System.Text.RegularExpressions.Regex(irregular) : null);
+});
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddControllers(options =>
@@ -182,6 +204,11 @@ app.MapPost("/api/v3/_meta/ping", (HttpContext context, TimeProvider time) =>
         data = new { u_id = signer.UId, name = signer.Name, serverTime = time.GetUtcNow().ToUnixTimeSeconds() }
     });
 });
+// Route nghiệp vụ v3 từ App_Data/Form (route literal ở trên được ưu tiên)
+app.MapV3Forms();
 app.MapControllers();
+
+// Nạp form ngay lúc khởi động để lỗi XML hiện trong log, không đợi request đầu
+app.Services.GetRequiredService<V3FormRuntime>();
 
 app.Run();

@@ -71,6 +71,14 @@
             get; set;
         }
 
+        /// <summary>
+        /// Số chứng từ tối đa trong một body v3 (mảng)
+        /// </summary>
+        public int maxDocumentsPerRequest
+        {
+            get; set;
+        }
+
         public int expiryToken
         {
             get; set;
@@ -161,6 +169,7 @@
             maxRequestBodyBytes = 10 * 1024 * 1024;
             userCacheSeconds = 60;
             v3TokenMinutes = 60;
+            maxDocumentsPerRequest = 100;
             loginMaxFailures = 5;
             loginLockMinutes = 15;
             expiryToken = 0;
