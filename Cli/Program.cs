@@ -15,6 +15,11 @@ if (args.Length == 0 || args[0] is "-h" or "--help")
           Mặc định chỉ kiểm thử (không ghi). --apply mới ghi, trong một transaction.
           --old-key mặc định appSettings:secretKey, --new-key mặc định appSettings:passwordKey.
           Giá trị lấy từ file --config, biến môi trường (vd appSettings__passwordKey) ghi đè.
+
+        Fast.Api.Cli issue-key --config <appsettings.Local.json> --user <restApiUser.name> [--rotate] [--apply]
+
+          Cấp private_key (HMAC-SHA256 v3) cho tài khoản, lưu mã hóa bằng Security:KeyEncryptionKey.
+          Khóa in ra đúng một lần khi --apply. Đã có khóa thì phải thêm --rotate.
         """);
     return 0;
 }
@@ -24,6 +29,7 @@ try
     return args[0] switch
     {
         "rekey-passwords" => await RekeyPasswordsCommand.RunAsync(args[1..]),
+        "issue-key" => await IssueKeyCommand.RunAsync(args[1..]),
         _ => throw new ArgumentException($"Lệnh không hỗ trợ: {args[0]}")
     };
 }

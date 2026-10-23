@@ -589,6 +589,16 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 
 *M1:* `/health/ready` đạt, log ghi file, rate limit trả 429, script DB chạy 2 lần không lỗi → **đạt** (23/10/2026).
 
+### 7.3c. Tiến độ pha 2 (nhánh `v3/phase2`)
+
+| Việc | Trạng thái |
+|---|---|
+| `Security/MessageSignature`: `K_request`/`K_response`, `SHA256` hex, `canonicalQuery` (giải mã rồi encode RFC 3986, `+` = dấu cách, sắp ordinal theo tên rồi giá trị, thiếu giá trị → `ten=`), `canonicalRequest`/`canonicalResponse`, so chữ ký thời gian hằng | Xong 23/10/2026 |
+| `Security/PrivateKeyProtector`: AES-256-GCM, khóa chủ `Security:KeyEncryptionKey` (base64 32 byte), AAD gắn `u_id`, định dạng `v1:` + base64(nonce, tag, bản mã) | Xong 23/10/2026 |
+| `Fast.Api.Cli issue-key --user <name> [--rotate] [--apply]`: cấp/thay `private_key`, in khóa một lần | Xong 23/10/2026, chạy thử (không ghi) trên DB dev |
+| Vector thử cố định (`Tests/MessageSignatureTests.cs`, kết quả mong đợi tính độc lập bằng Python): khóa dẫn xuất, checksum, chữ ký request/response, sửa 1 byte body, đổi query, chữ ký request không dùng làm chữ ký response; 26 test mới | Xong 23/10/2026, 50/50 đạt |
+| Middleware kiểm chữ ký (đọc body một lần, timestamp + nonce), ký response, `auth/token` + `auth/revoke`, nối `restApi_GetUserRights` + HybridCache, `GET /_meta/server`, client mẫu C# | Chưa |
+
 ### 7.4. Ngoài giai đoạn này
 - **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.
 - Callback/notify (`CallbackWorker`).

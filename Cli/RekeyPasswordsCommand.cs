@@ -19,9 +19,9 @@ namespace Cli
             {
                 switch (args[i])
                 {
-                    case "--config": configPath = NextArg(args, ref i); break;
-                    case "--old-key": oldKeyName = NextArg(args, ref i); break;
-                    case "--new-key": newKeyName = NextArg(args, ref i); break;
+                    case "--config": configPath = CliArgs.Next(args, ref i); break;
+                    case "--old-key": oldKeyName = CliArgs.Next(args, ref i); break;
+                    case "--new-key": newKeyName = CliArgs.Next(args, ref i); break;
                     case "--apply": apply = true; break;
                     default: throw new ArgumentException($"Tham số không hỗ trợ: {args[i]}");
                 }
@@ -113,15 +113,6 @@ namespace Cli
             await transaction.CommitAsync();
             Console.WriteLine($"Đã mã hóa lại {toUpdate.Count} tài khoản.");
             return 0;
-        }
-
-        private static string NextArg(string[] args, ref int i)
-        {
-            if (i + 1 >= args.Length)
-            {
-                throw new ArgumentException($"Thiếu giá trị cho {args[i]}");
-            }
-            return args[++i];
         }
     }
 }
