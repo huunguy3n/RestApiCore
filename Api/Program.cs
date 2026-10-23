@@ -68,6 +68,7 @@ builder.Services.AddSingleton<LoginLockout>();
 builder.Services.AddSingleton<Business.V3.IUnitRightsChecker, Business.V3.UnitRightsChecker>();
 builder.Services.AddSingleton<Business.V3.IFormExecutor, Business.V3.FormExecutor>();
 builder.Services.AddSingleton<Business.V3.IIdempotencyStore, Business.V3.IdempotencyStore>();
+builder.Services.AddSingleton<Business.V3.ICursorStore, Business.V3.CursorStore>();
 // Form v3: nạp App_Data/Form lúc khởi động, gắn kiểu theo cột thật; file đổi thì V3FormReloader nạp lại
 builder.Services.AddSingleton<V3FormLoader>();
 builder.Services.AddSingleton(services =>
@@ -88,7 +89,11 @@ builder.Services.AddControllers(options =>
 });
 builder.Services.AddMemoryCache();
 // HybridCache chỉ dùng bộ nhớ: không đăng ký IDistributedCache (không Redis/Garnet)
-builder.Services.AddHybridCache();
+builder.Services.AddHybridCache(options =>
+{
+    // Trang phân trang (JSON nén) có thể vượt mặc định 1 MB; mục quá cỡ HybridCache bỏ qua không báo lỗi
+    options.MaximumPayloadBytes = 16 * 1024 * 1024;
+});
 
 // Rate limit in-process: theo user đã xác thực, chưa xác thực thì theo IP
 builder.Services.AddRateLimiter(options =>

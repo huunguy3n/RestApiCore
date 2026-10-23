@@ -87,6 +87,22 @@
             get; set;
         }
 
+        /// <summary>
+        /// Số phút giữ các trang của một cursor phân trang
+        /// </summary>
+        public int cursorTtlMinutes
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Form không khai &lt;paging&gt;: tổng số dòng tối đa được trả trong một response
+        /// </summary>
+        public int maxRowsWithoutPaging
+        {
+            get; set;
+        }
+
         public int expiryToken
         {
             get; set;
@@ -179,6 +195,8 @@
             v3TokenMinutes = 60;
             maxDocumentsPerRequest = 100;
             idempotencyHours = 24;
+            cursorTtlMinutes = 30;
+            maxRowsWithoutPaging = 10000;
             loginMaxFailures = 5;
             loginLockMinutes = 15;
             expiryToken = 0;

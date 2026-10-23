@@ -83,6 +83,13 @@ namespace Web.Custom
                 }
             }
 
+            // Trang tiếp theo: lấy từ cursor, không chạy lại query (quyền form và đơn vị vẫn kiểm ở trên)
+            string cursor = context.Request.Query["cursor"].ToString().Trim();
+            if (cursor.Length > 0)
+            {
+                return await PageAsync(context, form, signer, unit, cursor);
+            }
+
             byte[] rawBody = (byte[])context.Items[SignatureMiddleware.RawBodyItem]!;
             MappedBody body = JsonBodyMapper.Map(form, rawBody, appConfig.maxDocumentsPerRequest, runtime.Irregular);
             if (body.ShapeError != null)
@@ -157,15 +164,43 @@ namespace Web.Custom
                     documents = body.DocumentCount
                 });
             }
-            return DataSetResponse(context, result.Data!);
+            return await DataSetResponseAsync(context, form, call, result.Data!);
+        }
+
+        /// <summary>
+        /// ?cursor=…&amp;page=n: trang n (từ 0) đã lưu. Cursor phải của chính user, cùng form và cùng unitCode
+        /// </summary>
+        private static async Task<FormResponse> PageAsync(HttpContext context, ImportForm form, SignerKeys signer, string unit, string cursor)
+        {
+            var store = context.RequestServices.GetRequiredService<ICursorStore>();
+            CursorInfo? info = await store.GetInfoAsync(signer.UId, cursor, context.RequestAborted);
+            if (info == null || info.Form != form.Name || !string.Equals(info.Unit, unit, StringComparison.OrdinalIgnoreCase))
+            {
+                return Error(context, "CURSOR_EXPIRED");
+            }
+
+            string pageText = context.Request.Query["page"].ToString().Trim();
+            if (!int.TryParse(pageText.Length == 0 ? "0" : pageText, out int page) || page < 0 || page >= info.PageCount)
+            {
+                return Error(context, "PAGE_OUT_OF_RANGE", $"page phải từ 0 tới {info.PageCount - 1}");
+            }
+
+            string? json = await store.GetPageJsonAsync(signer.UId, cursor, page, context.RequestAborted);
+            if (json == null)
+            {
+                return Error(context, "CURSOR_EXPIRED");
+            }
+
+            return PagedResponse(context, "SUCCESS", "", json, cursor, page, info.PageCount, info.PageSize, info.TotalRowCount);
         }
 
         /// <summary>
         /// Dataset processing (4.4): bảng 0 code, message, tables; bảng 1..N dữ liệu, tên theo tables hoặc data / data1..dataN
         /// </summary>
-        private static FormResponse DataSetResponse(HttpContext context, DataSet data)
+        private static async Task<FormResponse> DataSetResponseAsync(HttpContext context, ImportForm form, FormCallContext call, DataSet data)
         {
             var options = context.RequestServices.GetRequiredService<Options>();
+            var appConfig = context.RequestServices.GetRequiredService<AppConfig>();
 
             string code = FormExecutor.ResultCode(data);
             DataTable? head = data.Tables.Count > 0 ? data.Tables[0] : null;
@@ -189,6 +224,22 @@ namespace Web.Custom
                 message = known.message;
             }
 
+            if (code == "SUCCESS" && form.Paging is ImportPaging paging)
+            {
+                // Cắt theo key, trả trang 0; nhiều trang thì lưu cursor cho các trang sau
+                PagedResult paged = DataSetPager.Paginate(tables, paging.Key, paging.PageSize);
+                string? cursor = paged.Pages.Count > 1
+                    ? await context.RequestServices.GetRequiredService<ICursorStore>().SaveAsync(call.UId, form.Name, call.Unit, paged, context.RequestAborted)
+                    : null;
+                return PagedResponse(context, code, message, CursorStore.ToJson(paged.Pages[0]), cursor, 0, paged.Pages.Count, paged.PageSize, paged.TotalRowCount);
+            }
+
+            int rowCount = tables.Values.Sum(t => t.Rows.Count);
+            if (code == "SUCCESS" && rowCount > appConfig.maxRowsWithoutPaging)
+            {
+                return Error(context, "RESULT_TOO_LARGE", $"{rowCount} dòng vượt {appConfig.maxRowsWithoutPaging}: khai <paging> cho form {form.Name}");
+            }
+
             return Json(status, new
             {
                 code,
@@ -197,6 +248,31 @@ namespace Web.Custom
                 request_id = RequestId(context),
                 data = tables
             });
+        }
+
+        /// <summary>
+        /// Response có phân trang (4.4): data là JSON đã dựng sẵn của trang, paging cho biết cursor và số trang
+        /// </summary>
+        private static FormResponse PagedResponse(HttpContext context, string code, string message, string dataJson, string? cursor,
+            int pageIndex, int pageCount, int pageSize, int totalRowCount)
+        {
+            var response = new Newtonsoft.Json.Linq.JObject
+            {
+                ["code"] = code,
+                ["success"] = code == "SUCCESS",
+                ["message"] = message,
+                ["request_id"] = RequestId(context),
+                ["data"] = Newtonsoft.Json.Linq.JToken.Parse(dataJson),
+                ["paging"] = new Newtonsoft.Json.Linq.JObject
+                {
+                    ["cursor"] = cursor,
+                    ["page_index"] = pageIndex,
+                    ["page_count"] = pageCount,
+                    ["page_size"] = pageSize,
+                    ["total_row_count"] = totalRowCount
+                }
+            };
+            return new FormResponse(200, response.ToString(Formatting.None));
         }
 
         private static FormResponse ValidationErrors(HttpContext context, IEnumerable<(string Position, string Field, string Code)> errors)

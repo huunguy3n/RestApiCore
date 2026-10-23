@@ -641,6 +641,17 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | `Fast.Api.Cli upgrade <file | thư mục> [--update Update.xml] [--out dir] [--force]` (`Business/V3/V2FormUpgrader`): `<form>` → `<import>`, `id` → `voucherCode`, `struct` → `fields` (khối đầu là gốc, key = `isPrimaryKey` hoặc field có ở mọi khối), `mapping` → `fastName`, `allowNulls` → `allowNull`, `dataFormatString` → `format`, kiểu v2 → v3. `<reference controller>` → field `fastName` = mã FBO + `upperCase` + check tồn tại theo `Update.xml` (`Customer` → `dmkh.ma_kh`…), lỗi `{CONTROLLER}_NOT_FOUND`; field ẩn chứa mã tra bị bỏ; khối con bỏ khóa trùng (v3 tự thêm). `<check>` → danh sách check, `index` → `category`. Query: bỏ `@@update(n)`, `@@userName` v2 → `@@apiUserName` (biến mới, 2.6), `@@userERP` → `@@userName`, `@@id` → `@@voucherCode`. In ghi chú cần xem lại (đối tác phải gửi mã FBO, controller không có trong `Update.xml`, `'@@appDatabaseName'` trong dấu nháy, cảnh báo nạp thử); nạp thử bằng `ImportFormLoader` | Xong 23/10/2026. `setTemplate.xml` chuyển được, nạp được |
 | 11 test mới (214/214) | Xong 23/10/2026 |
 
+### 7.3e. Tiến độ pha 4 (nhánh `v3/phase4`)
+
+| Việc | Trạng thái |
+|---|---|
+| `Business/V3/DataSetPager`: cắt theo giá trị `key` của bảng dữ liệu đầu tiên (theo thứ tự xuất hiện), **`pageSize` đếm số giá trị key (chứng từ), không đếm dòng**; mỗi trang kèm mọi dòng cùng key ở các bảng khác; bảng không có cột key chỉ ở trang 0; dòng có key không xuất hiện ở bảng đầu bị bỏ; bảng đầu không có cột key → một trang. Trang nào cũng đủ tên bảng (rỗng nếu không có dòng) | Xong 23/10/2026 |
+| `Business/V3/CursorStore`: mỗi trang JSON nén GZip trong HybridCache, TTL `cursorTtlMinutes` (30), khóa có `u_id`; cursor ngẫu nhiên 128 bit, **gắn với user + form + unitCode** (thay cho khóa cache theo fingerprint query/body ở 4.4: request lặp lại luôn chạy lại query, không trả dữ liệu cũ — hợp với quy tắc cache ERP ở 5.1). `HybridCache.MaximumPayloadBytes` nâng lên 16 MB (mặc định 1 MB, mục quá cỡ bị bỏ qua không báo) | Xong 23/10/2026 |
+| Endpoint: request đầu chạy processing → trang 0 + `paging { cursor, page_index, page_count, page_size, total_row_count }` (một trang thì `cursor = null`). Trang sau: `?cursor=…&page=n` (từ 0), vẫn kiểm chữ ký, quyền form, `unitCode`; không chạy lại query. Cursor hết hạn / của user, form, đơn vị khác → 404 `CURSOR_EXPIRED`; `page` sai → 400 `PAGE_OUT_OF_RANGE`. Form không khai `<paging>` mà vượt `maxRowsWithoutPaging` (10.000) → 500 `RESULT_TOO_LARGE` (lỗi khai form, không cắt im lặng) | Xong 23/10/2026 |
+| 14 test mới (228/228), gồm 3 bảng × 10.000 dòng không tách chứng từ | Xong 23/10/2026 |
+| *Nghiệm thu pha 4* trên DB dev: processing sinh 3 bảng × 10.000 dòng (407 ms), cắt 100 trang × 100 chứng từ (50 ms), lưu cursor (255 ms), đọc lại đủ 10.000/10.000/10.000 dòng, 0 chứng từ bị tách, 1,3 MB JSON | **Đạt** (23/10/2026) |
+| Quy tắc 4.4 #5 (`Transfer`: chỉ đánh dấu đã chuyển các dòng của trang đã trả) | Chưa: cần quy ước proc đánh dấu của form `Transfer` |
+
 ### 7.4. Ngoài giai đoạn này
 - **Truyền tệp** (pdf, png, jpg…): thiết kế sơ bộ ở Phụ lục A, làm sau M5.
 - Callback/notify (`CallbackWorker`).

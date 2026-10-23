@@ -41,6 +41,9 @@
 	<message code="FIELD_REQUIRED" success="0" httpStatusCode="400" httpMessage="Field is required"/>
 	<message code="INVALID_VALUE" success="0" httpStatusCode="400" httpMessage="Field value does not match its type or format"/>
 	<message code="VALUE_TOO_LONG" success="0" httpStatusCode="400" httpMessage="Field value is longer than allowed"/>
+	<message code="CURSOR_EXPIRED" success="0" httpStatusCode="404" httpMessage="Cursor has expired or does not belong to this request, send the first request again"/>
+	<message code="PAGE_OUT_OF_RANGE" success="0" httpStatusCode="400" httpMessage="page is out of range"/>
+	<message code="RESULT_TOO_LARGE" success="0" httpStatusCode="500" httpMessage="Result is too large, the form must declare paging"/>
 	<!-- Mã nghiệp vụ dùng trong errorCode của form mẫu -->
 	<message code="CUSTOMER_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Customer does not exist or is inactive"/>
 	<message code="ITEM_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Item does not exist or is inactive"/>

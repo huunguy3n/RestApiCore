@@ -36,6 +36,14 @@ namespace Tests
             </import>
             """;
 
+        private const string GetInvoice = """
+            <import xmlns="urn:schemas-fast-com:fast-api" type="Report">
+              <fields name="filter"><field name="Year" fastName="nam" type="int"/></fields>
+              <paging pageSize="2" key="id"/>
+              <query><text>select 1</text></query>
+            </import>
+            """;
+
         private const string GetCustomer = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="List">
               <fields name="filter"><field name="Keyword" fastName="tu_khoa"/></fields>
@@ -46,20 +54,20 @@ namespace Tests
         private readonly FakeExecutor _executor = new();
         private readonly FakeUnitRights _units = new();
         private readonly FakeIdempotency _idempotency = new();
-        private SignerKeys _signer = new(7, "DOITAC", true, new byte[32], new byte[32], 1, "ADMIN") { AllowForms = new HashSet<string>(["setSaleInvoice", "getCustomer"], StringComparer.OrdinalIgnoreCase) };
+        private SignerKeys _signer = new(7, "DOITAC", true, new byte[32], new byte[32], 1, "ADMIN") { AllowForms = new HashSet<string>(["setSaleInvoice", "getCustomer", "getInvoice"], StringComparer.OrdinalIgnoreCase) };
         private IHost _host = null!;
         private HttpClient _http = null!;
 
         public async Task InitializeAsync()
         {
             ImportForm Load(string name, string xml) => ColumnTypeResolver.Resolve(ImportFormLoader.Parse(name, XDocument.Parse(xml)), _ => null);
-            var catalog = ImportFormCatalog.Build([Load("setSaleInvoice", SaleInvoice), Load("getCustomer", GetCustomer)]);
+            var catalog = ImportFormCatalog.Build([Load("setSaleInvoice", SaleInvoice), Load("getCustomer", GetCustomer), Load("getInvoice", GetInvoice)]);
 
             _host = await new HostBuilder()
                 .ConfigureWebHost(web => web.UseTestServer()
                     .ConfigureServices(services =>
                     {
-                        var appConfig = new AppConfig { pathDirectory = ApiDirectory(), maxDocumentsPerRequest = 5 };
+                        var appConfig = new AppConfig { pathDirectory = ApiDirectory(), maxDocumentsPerRequest = 5, maxRowsWithoutPaging = 50, cursorTtlMinutes = 5 };
                         services.AddSingleton(appConfig);
                         services.AddMemoryCache();
                         services.AddSingleton<Models.Options.Options>(new OptionsRepository(appConfig));
@@ -68,6 +76,8 @@ namespace Tests
                         services.AddSingleton<IFormExecutor>(_executor);
                         services.AddSingleton<IUnitRightsChecker>(_units);
                         services.AddSingleton<IIdempotencyStore>(_idempotency);
+                        services.AddHybridCache();
+                        services.AddSingleton<ICursorStore, CursorStore>();
                         services.AddRouting();
                     })
                     .Configure(app =>
@@ -362,6 +372,121 @@ namespace Tests
             Assert.Empty(sale.Warnings);
             Assert.Equal("/api/v3/customer/get", customer.Route);
             Assert.False(customer.UnitRequired);
+        }
+
+        /// <summary>5 hóa đơn, mỗi hóa đơn 2 dòng chi tiết; bảng tổng không có cột id</summary>
+        private static DataSet Invoices()
+        {
+            DataSet data = DataSetOf(("SUCCESS", "", "master,detail,summary"), 0);
+            DataTable master = new("Table1"), detail = new("Table2"), summary = new("Table3");
+            master.Columns.Add("id");
+            detail.Columns.Add("id");
+            detail.Columns.Add("line", typeof(int));
+            summary.Columns.Add("total", typeof(int));
+            for (int i = 0; i < 5; i++)
+            {
+                master.Rows.Add($"HD{i}");
+                detail.Rows.Add($"HD{i}", 1);
+                detail.Rows.Add($"HD{i}", 2);
+            }
+            summary.Rows.Add(5);
+            data.Tables.AddRange([master, detail, summary]);
+            return data;
+        }
+
+        [Fact]
+        public async Task PhanTrang_Trang0CoCursor_TrangSauLayTuCursor()
+        {
+            _executor.Next = new FormExecutionResult { Data = Invoices() };
+
+            var (status, first, _) = await PostAsync("/api/v3/invoice/get?unitCode=CTY", "{}");
+
+            Assert.Equal(HttpStatusCode.OK, status);
+            JsonElement paging = first.GetProperty("paging");
+            Assert.Equal(3, paging.GetProperty("page_count").GetInt32());
+            Assert.Equal(16, paging.GetProperty("total_row_count").GetInt32());
+            Assert.Equal(0, paging.GetProperty("page_index").GetInt32());
+            Assert.Equal(["HD0", "HD1"], first.GetProperty("data").GetProperty("master").EnumerateArray().Select(r => r.GetProperty("id").GetString()));
+            Assert.Equal(4, first.GetProperty("data").GetProperty("detail").GetArrayLength());
+            Assert.Equal(1, first.GetProperty("data").GetProperty("summary").GetArrayLength());
+            string cursor = paging.GetProperty("cursor").GetString()!;
+
+            var (_, last, _) = await PostAsync($"/api/v3/invoice/get?unitCode=CTY&cursor={cursor}&page=2", "");
+
+            Assert.Equal(1, _executor.Calls);
+            Assert.Equal(["HD4"], last.GetProperty("data").GetProperty("master").EnumerateArray().Select(r => r.GetProperty("id").GetString()));
+            Assert.Equal(2, last.GetProperty("data").GetProperty("detail").GetArrayLength());
+            Assert.Equal(0, last.GetProperty("data").GetProperty("summary").GetArrayLength());
+            Assert.Equal(2, last.GetProperty("paging").GetProperty("page_index").GetInt32());
+        }
+
+        [Theory]
+        [InlineData("page=3", "PAGE_OUT_OF_RANGE", HttpStatusCode.BadRequest)]
+        [InlineData("page=-1", "PAGE_OUT_OF_RANGE", HttpStatusCode.BadRequest)]
+        [InlineData("page=x", "PAGE_OUT_OF_RANGE", HttpStatusCode.BadRequest)]
+        [InlineData("page=1&unitCode=KHAC2", "CURSOR_EXPIRED", HttpStatusCode.NotFound)]
+        public async Task PhanTrang_ThamSoSai(string query, string code, HttpStatusCode expected)
+        {
+            _units.Allow("KHAC2");
+            _executor.Next = new FormExecutionResult { Data = Invoices() };
+            var (_, first, _) = await PostAsync("/api/v3/invoice/get?unitCode=CTY", "{}");
+            string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
+
+            string path = query.Contains("unitCode") ? $"/api/v3/invoice/get?cursor={cursor}&{query}" : $"/api/v3/invoice/get?unitCode=CTY&cursor={cursor}&{query}";
+            var (status, json, _) = await PostAsync(path, "");
+
+            Assert.Equal(expected, status);
+            Assert.Equal(code, json.GetProperty("code").GetString());
+        }
+
+        [Fact]
+        public async Task PhanTrang_CursorKhongCo_HoacKhacForm_Expired()
+        {
+            var (status, json, _) = await PostAsync("/api/v3/invoice/get?cursor=khongco&page=1", "");
+            Assert.Equal(HttpStatusCode.NotFound, status);
+            Assert.Equal("CURSOR_EXPIRED", json.GetProperty("code").GetString());
+
+            _executor.Next = new FormExecutionResult { Data = Invoices() };
+            var (_, first, _) = await PostAsync("/api/v3/invoice/get", "{}");
+            string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
+            var (_, other, _) = await PostAsync($"/api/v3/customer/get?cursor={cursor}&page=1", "");
+            Assert.Equal("CURSOR_EXPIRED", other.GetProperty("code").GetString());
+        }
+
+        [Fact]
+        public async Task PhanTrang_MotTrang_KhongCursor()
+        {
+            DataSet data = DataSetOf(("SUCCESS", "", "master"), 0);
+            DataTable master = new("Table1");
+            master.Columns.Add("id");
+            master.Rows.Add("HD0");
+            data.Tables.Add(master);
+            _executor.Next = new FormExecutionResult { Data = data };
+
+            var (_, json, _) = await PostAsync("/api/v3/invoice/get", "{}");
+
+            Assert.Equal(JsonValueKind.Null, json.GetProperty("paging").GetProperty("cursor").ValueKind);
+            Assert.Equal(1, json.GetProperty("paging").GetProperty("page_count").GetInt32());
+        }
+
+        [Fact]
+        public async Task KhongPhanTrang_QuaTranDong_ResultTooLarge()
+        {
+            DataSet data = DataSetOf(("SUCCESS", "", null), 0);
+            DataTable rows = new("Table1");
+            rows.Columns.Add("id");
+            for (int i = 0; i < 51; i++)
+            {
+                rows.Rows.Add(i.ToString());
+            }
+            data.Tables.Add(rows);
+            _executor.Next = new FormExecutionResult { Data = data };
+
+            var (status, json, _) = await PostAsync("/api/v3/customer/get", "{}");
+
+            Assert.Equal(HttpStatusCode.InternalServerError, status);
+            Assert.Equal("RESULT_TOO_LARGE", json.GetProperty("code").GetString());
+            Assert.Contains("getCustomer", json.GetProperty("message").GetString());
         }
 
         private static DataSet DataSetOf((string Code, string Message, string? Tables) head, int dataTables)
