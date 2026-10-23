@@ -21,46 +21,63 @@ namespace Tests
     /// </summary>
     public sealed class SignatureMiddlewareTests : IAsyncLifetime
     {
-        private const long Now = 1792574400;
+        // Giờ thật (làm tròn giây): JWT do endpoint cấp được kiểm hạn theo đồng hồ thật
+        private static readonly long Now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        private const string SecretKey = "khoa-ky-jwt-chi-dung-cho-test-0123456789";
         private const string Path = "http://localhost/api/v3/_meta/ping?unitCode=CTY&dryRun=false";
         private static readonly byte[] PrivateKey = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
         private static readonly byte[] Body = Encoding.UTF8.GetBytes("{\"master\":{\"YourID\":\"HD001\"}}");
 
         private readonly FakeTime _time = new(Now);
         private readonly FakeKeyStore _keys = new();
+        private readonly FakeRevokedStore _revoked = new();
         private readonly FastApiV3Signer _client = new(PrivateKey);
         private IHost _host = null!;
         private HttpClient _http = null!;
 
         public async Task InitializeAsync()
         {
-            _keys.Add(new SignerKeys(7, "DOITAC", true, Security.MessageSignature.DeriveRequestKey(PrivateKey), Security.MessageSignature.DeriveResponseKey(PrivateKey)));
-            _keys.Add(new SignerKeys(8, "CHUACOKHOA", true, null, null));
+            byte[] requestKey = Security.MessageSignature.DeriveRequestKey(PrivateKey), responseKey = Security.MessageSignature.DeriveResponseKey(PrivateKey);
+            _keys.Add(new SignerKeys(7, "DOITAC", true, requestKey, responseKey, 1, "ADMIN"));
+            _keys.Add(new SignerKeys(8, "CHUACOKHOA", true, null, null, 2, "USER2"));
+            _keys.Add(new SignerKeys(9, "BICHANIP", true, requestKey, responseKey, 3, "USER3"));
+            _keys.Add(new SignerKeys(10, "NGUNG", false, requestKey, responseKey, null, ""));
 
             _host = await new HostBuilder()
                 .ConfigureWebHost(web => web.UseTestServer()
                     .ConfigureServices(services =>
                     {
-                        var appConfig = new AppConfig { pathDirectory = ApiDirectory(), clockSkewSeconds = 300, maxRequestBodyBytes = 1024 };
+                        var appConfig = new AppConfig
+                        {
+                            pathDirectory = ApiDirectory(), clockSkewSeconds = 300, maxRequestBodyBytes = 1024,
+                            secretKey = SecretKey, issuerToken = "FastRestApi", v3TokenMinutes = 60, loginMaxFailures = 3, loginLockMinutes = 15
+                        };
                         services.AddSingleton(appConfig);
                         services.AddMemoryCache();
                         services.AddSingleton<Models.Options.Options>(new OptionsRepository(appConfig));
                         services.AddSingleton<ResponseManager>();
                         services.AddSingleton<NonceStore>();
                         services.AddSingleton<ISignerKeyStore>(_keys);
+                        services.AddSingleton<IRevokedTokenStore>(_revoked);
+                        services.AddSingleton<IIpAccessManager, FakeIpAccess>();
+                        services.AddSingleton<LoginLockout>();
                         services.AddSingleton<TimeProvider>(_time);
                         services.AddRouting();
                     })
                     .Configure(app =>
                     {
                         app.UseMiddleware<RequestIdMiddleware>();
-                        // Giả xác thực JWT: header X-Test-User thành claim sub
+                        // Xác thực JWT như CustomJwtAuthenticationHandler (cùng JwtTokenService)
                         app.Use(async (context, next) =>
                         {
-                            string user = context.Request.Headers["X-Test-User"].ToString();
-                            if (user.Length > 0)
+                            string authorization = context.Request.Headers.Authorization.ToString();
+                            if (authorization.StartsWith("Bearer "))
                             {
-                                context.User = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.NameIdentifier, user)], "Test"));
+                                ClaimsPrincipal? principal = Jwt.ValidateJWTToken(authorization[7..], context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW");
+                                if (principal != null)
+                                {
+                                    context.User = principal;
+                                }
                             }
                             await next(context);
                         });
@@ -74,6 +91,7 @@ namespace Tests
                                 await context.Response.WriteAsync("{\"code\":\"SUCCESS\",\"echo\":" + await reader.ReadToEndAsync() + "}");
                             });
                             endpoints.MapGet("/api/v3/_meta/server", () => "server");
+                            endpoints.MapV3Auth();
                         });
                     }))
                 .StartAsync();
@@ -87,11 +105,32 @@ namespace Tests
             _host.Dispose();
         }
 
-        private HttpRequestMessage NewRequest(string user = "DOITAC", string path = Path)
+        private static readonly Security.JwtTokenService Jwt = new(SecretKey, 60, "FastRestApi");
+
+        /// <summary>Request có JWT v3 hợp lệ của user (u_id lấy từ kho khóa giả trừ khi chỉ định)</summary>
+        private HttpRequestMessage NewRequest(string user = "DOITAC", string path = Path, int? uId = null, string? token = null)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, path);
-            request.Headers.Add("X-Test-User", user);
+            token ??= Jwt.GenerateV3Token(user, uId ?? _keys.UId(user), 1, user, Guid.NewGuid().ToString(), DateTime.UtcNow.AddHours(1));
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
             return request;
+        }
+
+        private HttpRequestMessage TokenRequest(string headerUser, string bodyUser, FastApiV3Signer? signer, out string nonce)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, "http://localhost/api/v3/auth/token");
+            request.Headers.Add("X-Fast-User", headerUser);
+            nonce = (signer ?? _client).Sign(request, Encoding.UTF8.GetBytes("{\"userName\":\"" + bodyUser + "\"}"), Now);
+            return request;
+        }
+
+        private async Task<string> GetTokenAsync(string user = "DOITAC")
+        {
+            var (response, code, verified) = await SendAsync(TokenRequest(user, user, null, out string nonce), nonce);
+            Assert.Equal("SUCCESS", code);
+            Assert.True(verified);
+            string body = await response.Content.ReadAsStringAsync();
+            return System.Text.Json.JsonDocument.Parse(body).RootElement.GetProperty("accessToken").GetString()!;
         }
 
         private async Task<(HttpResponseMessage Response, string Code, bool Verified)> SendAsync(HttpRequestMessage request, string nonce)
@@ -304,6 +343,131 @@ namespace Tests
             return System.IO.Path.Combine(dir?.FullName ?? throw new DirectoryNotFoundException("Không tìm thấy Api/App_Data"), "Api");
         }
 
+        [Fact]
+        public async Task AuthToken_KyDung_TraJwtV3_DungDuocChoRequestSau()
+        {
+            var (response, code, verified) = await SendAsync(TokenRequest("DOITAC", "doitac", null, out string nonce), nonce);
+
+            Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            Assert.Equal("SUCCESS", code);
+            Assert.True(verified, "response auth/token được ký");
+
+            var json = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement;
+            Assert.Equal(3600, json.GetProperty("expiresIn").GetInt32());
+            var jwt = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadJwtToken(json.GetProperty("accessToken").GetString());
+            Assert.Equal("DOITAC", jwt.Subject);
+            Assert.Equal("7", jwt.Claims.First(c => c.Type == "u_id").Value);
+            Assert.Equal("1", jwt.Claims.First(c => c.Type == "user_id").Value);
+            Assert.Equal("ADMIN", jwt.Claims.First(c => c.Type == "name_erp").Value);
+            Assert.Contains(jwt.Claims, c => c.Type == "jti");
+            Assert.Contains(Security.JwtTokenService.V3Audience, jwt.Audiences);
+
+            var ping = NewRequest(token: json.GetProperty("accessToken").GetString());
+            string pingNonce = _client.Sign(ping, Body, Now);
+            Assert.Equal("SUCCESS", (await SendAsync(ping, pingNonce)).Code);
+        }
+
+        [Fact]
+        public async Task AuthToken_UserTrongBodyKhacHeader_UserMismatch()
+        {
+            var (_, code, verified) = await SendAsync(TokenRequest("DOITAC", "NGUOIKHAC", null, out string nonce), nonce);
+
+            Assert.Equal("USER_MISMATCH", code);
+            Assert.True(verified);
+        }
+
+        [Fact]
+        public async Task AuthToken_IpKhongDuocPhep_AccessDenied()
+        {
+            var (response, code, _) = await SendAsync(TokenRequest("BICHANIP", "BICHANIP", null, out string nonce), nonce);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal("ACCESS_DENIED", code);
+        }
+
+        [Theory]
+        [InlineData("KHONGCO")]
+        [InlineData("NGUNG")]
+        [InlineData("")]
+        public async Task AuthToken_UserKhongHopLe_UnauthorizedKhongKy(string user)
+        {
+            var (response, code, _) = await SendAsync(TokenRequest(user, user, null, out string nonce), nonce);
+
+            Assert.Equal("UNAUTHORIZED", code);
+            Assert.False(response.Headers.Contains("X-Fast-Signature"));
+        }
+
+        [Fact]
+        public async Task AuthToken_SaiChuKyNhieuLan_KhoaDangNhap()
+        {
+            var forger = new FastApiV3Signer(new byte[32]);
+            for (int i = 0; i < 3; i++)
+            {
+                Assert.Equal("INVALID_SIGNATURE", (await SendAsync(TokenRequest("DOITAC", "DOITAC", forger, out string forgedNonce), forgedNonce)).Code);
+            }
+
+            var (response, code, verified) = await SendAsync(TokenRequest("DOITAC", "DOITAC", null, out string nonce), nonce);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+            Assert.Equal("ACCOUNT_LOCKED", code);
+            Assert.True(verified);
+        }
+
+        [Fact]
+        public async Task AuthRevoke_TokenBiThuHoi_RequestSauBiTuChoi()
+        {
+            string token = await GetTokenAsync();
+
+            var revoke = NewRequest(path: "http://localhost/api/v3/auth/revoke", token: token);
+            string nonce = _client.Sign(revoke, [], Now);
+            var (_, code, verified) = await SendAsync(revoke, nonce);
+            Assert.Equal("SUCCESS", code);
+            Assert.True(verified);
+
+            var ping = NewRequest(token: token);
+            string pingNonce = _client.Sign(ping, Body, Now);
+            var (response, pingCode, _) = await SendAsync(ping, pingNonce);
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+            Assert.Equal("UNAUTHORIZED", pingCode);
+        }
+
+        [Fact]
+        public async Task TokenKieuCu_KhongCoUId_KhongDungDuocChoV3()
+        {
+            string oldToken = Jwt.GenerateJWTToken("DOITAC", "ADMIN", false, "UNKNOW");
+            var request = NewRequest(token: oldToken);
+            string nonce = _client.Sign(request, Body, Now);
+
+            Assert.Equal("UNAUTHORIZED", (await SendAsync(request, nonce)).Code);
+        }
+
+        [Fact]
+        public async Task TokenUIdKhongKhopTaiKhoan_Unauthorized()
+        {
+            var request = NewRequest(uId: 99);
+            string nonce = _client.Sign(request, Body, Now);
+
+            Assert.Equal("UNAUTHORIZED", (await SendAsync(request, nonce)).Code);
+        }
+
+        private sealed class FakeRevokedStore : IRevokedTokenStore
+        {
+            private readonly HashSet<string> _revoked = new();
+            public Task<bool> IsRevokedAsync(string jti, CancellationToken cancellationToken = default) => Task.FromResult(_revoked.Contains(jti));
+            public Task RevokeAsync(string jti, int uId, DateTime expiresAtUtc, CancellationToken cancellationToken = default)
+            {
+                _revoked.Add(jti);
+                return Task.CompletedTask;
+            }
+        }
+
+        /// <summary>BICHANIP bị chặn IP, còn lại được phép</summary>
+        private sealed class FakeIpAccess(ResponseManager responseManager) : IIpAccessManager
+        {
+            public Task<Models.Interface.IResponse> CheckAsync(string clientIp, string userName, CancellationToken cancellationToken = default) =>
+                Task.FromResult(responseManager.GetResponse(userName == "BICHANIP" ? "ACCESS_DENIED" : "SUCCESS"));
+        }
+
         private sealed class FakeTime(long unixSeconds) : TimeProvider
         {
             public override DateTimeOffset GetUtcNow() => DateTimeOffset.FromUnixTimeSeconds(unixSeconds);
@@ -313,6 +477,7 @@ namespace Tests
         {
             private readonly Dictionary<string, SignerKeys> _keys = new();
             public void Add(SignerKeys keys) => _keys[keys.Name] = keys;
+            public int UId(string userName) => _keys.TryGetValue(userName, out var keys) ? keys.UId : 0;
             public Task<SignerKeys?> GetAsync(string userName, CancellationToken cancellationToken = default) =>
                 Task.FromResult(_keys.GetValueOrDefault(userName));
         }

@@ -5,11 +5,16 @@ using Models.Interface;
 
 namespace Business
 {
+    public interface IIpAccessManager
+    {
+        Task<IResponse> CheckAsync(string clientIp, string userName, CancellationToken cancellationToken = default);
+    }
+
     /// <summary>
     /// Kiểm IP theo restApi_CheckIPAddress, kết quả cache HybridCache để không gọi proc ở mọi request.
     /// Đếm số request đã chuyển sang ASP.NET Core Rate Limiting (Program.cs)
     /// </summary>
-    public class IpAccessManager(AppConfig appConfig, HybridCache cache, ResponseManager responseManager)
+    public class IpAccessManager(AppConfig appConfig, HybridCache cache, ResponseManager responseManager) : IIpAccessManager
     {
         public const string CacheTag = "ip-access";
 

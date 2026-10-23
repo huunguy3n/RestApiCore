@@ -47,6 +47,30 @@
             get; set;
         }
 
+        /// <summary>
+        /// Thời hạn (phút) JWT v3 cấp ở /api/v3/auth/token
+        /// </summary>
+        public int v3TokenMinutes
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Số lần chữ ký sai liên tiếp ở auth/token trước khi khóa đăng nhập
+        /// </summary>
+        public int loginMaxFailures
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Số phút khóa đăng nhập (đếm lại từ lần sai cuối)
+        /// </summary>
+        public int loginLockMinutes
+        {
+            get; set;
+        }
+
         public int expiryToken
         {
             get; set;
@@ -136,6 +160,9 @@
             clockSkewSeconds = 300;
             maxRequestBodyBytes = 10 * 1024 * 1024;
             userCacheSeconds = 60;
+            v3TokenMinutes = 60;
+            loginMaxFailures = 5;
+            loginLockMinutes = 15;
             expiryToken = 0;
             issuerToken = string.Empty;
             maxRequestsPerMinute = 0;

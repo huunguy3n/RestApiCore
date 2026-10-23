@@ -13,7 +13,7 @@ namespace Business
     /// Đánh dấu bất biến để HybridCache dùng lại instance, không serialize khóa
     /// </summary>
     [ImmutableObject(true)]
-    public sealed record SignerKeys(int UId, string Name, bool IsActive, byte[]? RequestKey, byte[]? ResponseKey)
+    public sealed record SignerKeys(int UId, string Name, bool IsActive, byte[]? RequestKey, byte[]? ResponseKey, int? UserId = null, string NameErp = "")
     {
         public bool HasKey => RequestKey != null && ResponseKey != null;
     }
@@ -71,7 +71,7 @@ namespace Business
                 }
             }
 
-            return new SignerKeys(rights.UId, rights.Name, rights.IsActive, requestKey, responseKey);
+            return new SignerKeys(rights.UId, rights.Name, rights.IsActive, requestKey, responseKey, rights.UserId, rights.NameErp);
         }
     }
 

@@ -59,10 +59,12 @@ builder.Services.AddSingleton(appConfig);
 builder.Services.AddSingleton<Options, OptionsRepository>();
 builder.Services.AddSingleton<LogManager>();
 builder.Services.AddSingleton<ResponseManager>();
-builder.Services.AddSingleton<IpAccessManager>();
+builder.Services.AddSingleton<IIpAccessManager, IpAccessManager>();
 builder.Services.AddSingleton(privateKeyProtector);
 builder.Services.AddSingleton<ISignerKeyStore, SignerKeyStore>();
 builder.Services.AddSingleton<NonceStore>();
+builder.Services.AddSingleton<IRevokedTokenStore, RevokedTokenStore>();
+builder.Services.AddSingleton<LoginLockout>();
 builder.Services.AddSingleton(TimeProvider.System);
 
 builder.Services.AddControllers(options =>
@@ -167,6 +169,7 @@ app.MapGet("/api/v3/_meta/server", (TimeProvider time) => Results.Json(new
     signatureVersion = Security.MessageSignature.RequestAlgorithm,
     clockSkewSeconds = appConfig.clockSkewSeconds
 }));
+app.MapV3Auth();
 app.MapPost("/api/v3/_meta/ping", (HttpContext context, TimeProvider time) =>
 {
     var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;

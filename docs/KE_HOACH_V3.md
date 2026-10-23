@@ -604,7 +604,12 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | Client mẫu C# tự chứa `Tests/Sample/FastApiV3Signer.cs` (chỉ dùng `System.Security.Cryptography`); 17 test TestServer: ký đúng, sửa body, đổi query, đổi `Idempotency-Key`, sai khóa, timestamp ±301 s, nonce dùng lại, chữ ký sai không đốt nonce, nonce sai dạng, thiếu header, body quá lớn, chưa xác thực, chưa cấp khóa, response cũ không khớp request khác | Xong 23/10/2026, 67/67 đạt |
 | `CustomJwtAuthenticationHandler` trả `Fail` thay vì tự ghi response (trước đây token sai bị ghi response hai lần) | Xong 23/10/2026 |
 | Api bắt buộc `Security:KeyEncryptionKey` (base64 32 byte) lúc khởi động | Xong 23/10/2026 |
-| `auth/token` ký theo `X-Fast-User` + JWT mới (`u_id`, `user_id`, `name_erp`, `jti`), `auth/revoke` + kiểm `restApiRevokedToken`, kiểm quyền bước 6 | Chưa |
+| `POST /api/v3/auth/token`: user lấy từ `X-Fast-User`, request ký bằng khóa của user đó; body `{ "userName" }` phải khớp (`USER_MISMATCH`); IP theo `restApiAllowIp` của user; khóa đăng nhập sau `loginMaxFailures` (5) lần **chữ ký sai** trong `loginLockMinutes` (15) → `ACCOUNT_LOCKED` (403). Trả `accessToken`, `tokenType`, `expiresIn` (`v3TokenMinutes`, mặc định 60) | Xong 23/10/2026 |
+| JWT v3: `sub`, `u_id`, `user_id`, `name_erp`, `scope = api`, `jti`, audience `fast-api-v3` (**không gắn IP**, khác token cũ). Route v3 đòi claim `u_id` khớp tài khoản và `jti` chưa thu hồi; token cũ (audience = IP) không dùng được cho v3 | Xong 23/10/2026 |
+| `POST /api/v3/auth/revoke`: thu hồi `jti` đang dùng → `restApiRevokedToken` (đồng thời dọn dòng hết hạn), tra qua HybridCache, thu hồi ghi đè cache nên có hiệu lực ngay | Xong 23/10/2026, thử repository trên DB dev |
+| Mã lỗi mới: `ACCOUNT_LOCKED` (403), `INVALID_SHAPE` (400), `USER_MISMATCH` (400); `IIpAccessManager` tách interface | Xong 23/10/2026 |
+| 10 test TestServer mới: cấp token rồi dùng, claim JWT, `USER_MISMATCH`, IP bị chặn, user không tồn tại / ngừng / rỗng, khóa sau 3 lần sai, thu hồi rồi bị từ chối, token cũ, `u_id` không khớp | Xong 23/10/2026, 77/77 đạt |
+| Kiểm quyền bước 6 (form `restApiAllowForm`, `unitRequired`/`unitCode`) | Chuyển sang pha 3: cần bảng route và `unitRequired` của form |
 | Chạy end-to-end trên DB dev (cần `KeyEncryptionKey` trong `appsettings.Local.json` + `issue-key --apply`) | Chưa |
 
 ### 7.4. Ngoài giai đoạn này

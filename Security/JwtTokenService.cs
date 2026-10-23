@@ -45,6 +45,41 @@ namespace Security
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
 
+        /// <summary>
+        /// Audience của JWT v3. Token v3 không gắn IP (đối tác hay đổi IP); IP kiểm riêng theo restApiAllowIp
+        /// </summary>
+        public const string V3Audience = "fast-api-v3";
+
+        /// <summary>
+        /// JWT v3 (KE_HOACH_V3 4.2.5): sub = restApiUser.name, u_id = restApiUser.id, user_id = userinfo2.id, name_erp, jti
+        /// </summary>
+        public string GenerateV3Token(string userName, int uId, int userId, string nameErp, string jti, DateTime expiresUtc)
+        {
+            var claims = new[]
+            {
+                new Claim(JwtRegisteredClaimNames.Sub, userName),
+                new Claim("u_id", uId.ToString(), ClaimValueTypes.Integer32),
+                new Claim("user_id", userId.ToString(), ClaimValueTypes.Integer32),
+                new Claim("name_erp", nameErp),
+                new Claim("scope", "api"),
+                new Claim(JwtRegisteredClaimNames.Jti, jti)
+            };
+
+            var token = new JwtSecurityToken(
+                issuer: _issuer,
+                audience: V3Audience,
+                claims: claims,
+                notBefore: DateTime.UtcNow,
+                expires: expiresUtc,
+                signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretKey)), SecurityAlgorithms.HmacSha256)
+            );
+
+            return new JwtSecurityTokenHandler().WriteToken(token);
+        }
+
+        /// <summary>
+        /// Nhận token kiểu cũ (audience = IP) và token v3 (audience = fast-api-v3). Route v3 tự đòi claim u_id
+        /// </summary>
         public ClaimsPrincipal ValidateJWTToken(string token, string ipAddress)
         {
             try
@@ -59,7 +94,7 @@ namespace Security
                     ValidateLifetime = true,
                     ValidateIssuerSigningKey = true,
                     ValidIssuer = _issuer,
-                    ValidAudience = ipAddress,
+                    ValidAudiences = [ipAddress, V3Audience],
                     IssuerSigningKey = new SymmetricSecurityKey(key)
                 };
 

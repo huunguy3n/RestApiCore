@@ -6,7 +6,7 @@ namespace Web.Custom
     /// <summary>
     /// Kiểm IP được phép / bị chặn. Chạy sau UseAuthentication để biết user
     /// </summary>
-    public class IpAccessMiddleware(RequestDelegate next, IpAccessManager ipAccessManager)
+    public class IpAccessMiddleware(RequestDelegate next, IIpAccessManager ipAccessManager)
     {
         public async Task Invoke(HttpContext httpContext)
         {

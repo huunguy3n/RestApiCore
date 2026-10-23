@@ -11,8 +11,10 @@ namespace Web.Custom
     /// Lỗi trước khi biết khóa của user thì trả không ký; từ khi có khóa, mọi response (kể cả lỗi) đều ký
     /// </summary>
     public partial class SignatureMiddleware(RequestDelegate next, AppConfig appConfig, ISignerKeyStore keyStore, NonceStore nonceStore,
-        ResponseManager responseManager, TimeProvider timeProvider)
+        IRevokedTokenStore revokedTokens, LoginLockout lockout, ResponseManager responseManager, TimeProvider timeProvider)
     {
+        public const string UserHeader = "X-Fast-User";
+        public const string TokenPath = "/api/v3/auth/token";
         public const string TimestampHeader = "X-Fast-Timestamp";
         public const string NonceHeader = "X-Fast-Nonce";
         public const string ContentSha256Header = "X-Fast-Content-SHA256";
@@ -45,9 +47,11 @@ namespace Web.Custom
                 return;
             }
 
-            // Bước 1: JWT hợp lệ, tìm khóa của user. Chưa có khóa thì không ký được response
-            string userName = IpAccessMiddleware.GetUserName(context.User);
-            SignerKeys? signer = userName == "anonymous" ? null : await keyStore.GetAsync(userName, context.RequestAborted);
+            // Bước 1: xác định user và khóa. Chưa có khóa thì không ký được response
+            bool isTokenRequest = IsTokenRequest(context);
+            SignerKeys? signer = isTokenRequest
+                ? await GetTokenRequestSignerAsync(context)
+                : await GetJwtSignerAsync(context);
             if (signer == null || !signer.IsActive)
             {
                 await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("UNAUTHORIZED"));
@@ -68,7 +72,16 @@ namespace Web.Custom
             context.Response.Body = buffer;
             try
             {
-                IResponse? error = await VerifyAsync(context, signer, requestNonce);
+                IResponse? error = isTokenRequest && lockout.IsLocked(signer.UId)
+                    ? responseManager.GetResponse("ACCOUNT_LOCKED")
+                    : await VerifyAsync(context, signer, requestNonce);
+
+                if (isTokenRequest && error?.code == "INVALID_SIGNATURE")
+                {
+                    // Chỉ đếm chữ ký sai (dò khóa); lỗi định dạng, timestamp không tính
+                    lockout.RecordFailure(signer.UId);
+                }
+
                 if (error != null)
                 {
                     await ResponseHelper.WriteJsonAsync(context, error);
@@ -86,6 +99,41 @@ namespace Web.Custom
             SignResponse(context, signer, requestNonce, buffer.ToArray());
             buffer.Position = 0;
             await buffer.CopyToAsync(originalBody, context.RequestAborted);
+        }
+
+        public static bool IsTokenRequest(HttpContext context) =>
+            HttpMethods.IsPost(context.Request.Method) && context.Request.Path.Equals(TokenPath, StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// auth/token chưa có JWT: user lấy từ X-Fast-User, request phải ký bằng khóa của user đó
+        /// </summary>
+        private async Task<SignerKeys?> GetTokenRequestSignerAsync(HttpContext context)
+        {
+            string userName = context.Request.Headers[UserHeader].ToString().Trim();
+            return userName.Length is 0 or > 32 ? null : await keyStore.GetAsync(userName, context.RequestAborted);
+        }
+
+        /// <summary>
+        /// Route v3 khác: JWT v3 (có u_id), jti chưa thu hồi, u_id khớp tài khoản hiện tại.
+        /// Token kiểu cũ (không có u_id) không dùng được cho v3
+        /// </summary>
+        private async Task<SignerKeys?> GetJwtSignerAsync(HttpContext context)
+        {
+            string userName = IpAccessMiddleware.GetUserName(context.User);
+            string? uIdClaim = context.User.FindFirst("u_id")?.Value;
+            string? jti = context.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+
+            if (userName == "anonymous" || !int.TryParse(uIdClaim, out int uId) || string.IsNullOrEmpty(jti))
+            {
+                return null;
+            }
+            if (await revokedTokens.IsRevokedAsync(jti, context.RequestAborted))
+            {
+                return null;
+            }
+
+            SignerKeys? signer = await keyStore.GetAsync(userName, context.RequestAborted);
+            return signer?.UId == uId ? signer : null;
         }
 
         private async Task<IResponse?> VerifyAsync(HttpContext context, SignerKeys signer, string nonce)
