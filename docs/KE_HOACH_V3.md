@@ -579,7 +579,9 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 |---|---|
 | Serilog rolling file (`appSettings:logDirectory`, trống = `ProgramData\FastRestApi\Logs`; cuộn theo ngày + 50 MB, giữ 31 tệp), `X-Request-ID` sinh ở `RequestIdMiddleware`, gắn vào mọi dòng log file và dùng chung với `LogMiddleware` | Xong 23/10/2026, chạy thử: log ghi đúng `RequestId` |
 | `/health/live` (không kiểm gì), `/health/ready` (SQL `SELECT 1` + ghi thử thư mục log); bỏ qua `LogMiddleware`/rate limit | Xong 23/10/2026, cả hai trả 200 trên DB dev |
-| HybridCache, RateLimiter ASP.NET Core | Chưa |
+| HybridCache memory-only (`AddHybridCache`, không đăng ký `IDistributedCache`) | Xong 23/10/2026 |
+| RateLimiter ASP.NET Core thay `RateLimitManager`: fixed window `maxRequestsPerMinute`/phút, partition theo user đã xác thực (claim `sub`), chưa xác thực thì theo IP; 429 `TOO_MANY_REQUESTS` + `Retry-After`. Chạy sau `UseAuthentication` | Xong 23/10/2026, chạy thử: request thứ 6 → 429, `/health` không bị tính. Pha 2 đổi partition sang `u_id` |
+| Kiểm IP tách thành `IpAccessManager`/`IpAccessMiddleware`, kết quả `restApi_CheckIPAddress` cache HybridCache `ipCheckCacheSeconds` (mặc định 60), xoá theo tag `ip-access` (lỗi 1.4 #7) | Xong 23/10/2026. **Đổi hành vi:** trước đây kiểm IP chạy trước xác thực nên luôn gửi `anonymous`; nay gửi đúng user nên `restApiAllowIp` theo user có hiệu lực |
 | `Provider` async, `LogRepository` ghi qua tham số | Chưa |
 | Script SQL `NNN_ten.sql`, `UserRepository` mới | Chưa |
 

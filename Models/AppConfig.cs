@@ -30,6 +30,14 @@
             get; set;
         }
 
+        /// <summary>
+        /// Số giây cache kết quả kiểm IP (restApi_CheckIPAddress)
+        /// </summary>
+        public int ipCheckCacheSeconds
+        {
+            get; set;
+        }
+
         public int maxRowInResponse
         {
             get; set;
@@ -95,6 +103,7 @@
             expiryToken = 0;
             issuerToken = string.Empty;
             maxRequestsPerMinute = 0;
+            ipCheckCacheSeconds = 60;
             maxRowInResponse = 0;
             checkTypeResponse = 1;
             commandTimeout = 360;

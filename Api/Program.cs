@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Diagnostics;
 using Models;
 using Models.Options;
 using Serilog;
+using System.Threading.RateLimiting;
 using Web.Custom;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -53,12 +54,43 @@ builder.Services.AddSingleton(appConfig);
 builder.Services.AddSingleton<Options, OptionsRepository>();
 builder.Services.AddSingleton<LogManager>();
 builder.Services.AddSingleton<ResponseManager>();
+builder.Services.AddSingleton<IpAccessManager>();
 
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<LogActionFilter>();
 });
 builder.Services.AddMemoryCache();
+// HybridCache chỉ dùng bộ nhớ: không đăng ký IDistributedCache (không Redis/Garnet)
+builder.Services.AddHybridCache();
+
+// Rate limit in-process: theo user đã xác thực, chưa xác thực thì theo IP
+builder.Services.AddRateLimiter(options =>
+{
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        string userName = IpAccessMiddleware.GetUserName(context.User);
+        string partitionKey = userName != "anonymous"
+            ? $"user:{userName}"
+            : $"ip:{context.Connection.RemoteIpAddress}";
+
+        return RateLimitPartition.GetFixedWindowLimiter(partitionKey, _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = appConfig.maxRequestsPerMinute,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out TimeSpan retryAfter))
+        {
+            context.HttpContext.Response.Headers.RetryAfter = ((int)Math.Ceiling(retryAfter.TotalSeconds)).ToString();
+        }
+        var responseManager = context.HttpContext.RequestServices.GetRequiredService<ResponseManager>();
+        await ResponseHelper.WriteJsonAsync(context.HttpContext, responseManager.GetResponse("TOO_MANY_REQUESTS"));
+    };
+});
 
 builder.Services.AddHealthChecks()
     .AddCheck<SqlHealthCheck>("sql", tags: ["ready"])
@@ -73,14 +105,21 @@ var app = builder.Build();
 app.UseMiddleware<RequestIdMiddleware>();
 app.UseSerilogRequestLogging();
 
-// /health/* không ghi log SQL, không tính rate limit
-app.UseWhen(context => !context.Request.Path.StartsWithSegments("/health"), branch =>
-{
-    branch.UseMiddleware<LogMiddleware>();
-    branch.UseMiddleware<RateLimitMiddleware>();
-});
+// /health/* không ghi log SQL, không tính rate limit, không kiểm IP
+static bool IsBusinessRequest(HttpContext context) => !context.Request.Path.StartsWithSegments("/health");
+
+// Log đặt trước xác thực để ghi cả response 401
+app.UseWhen(IsBusinessRequest, branch => branch.UseMiddleware<LogMiddleware>());
 
 app.UseAuthentication();
+
+// Rate limit và kiểm IP đặt sau xác thực để biết user
+app.UseWhen(IsBusinessRequest, branch =>
+{
+    branch.UseRateLimiter();
+    branch.UseMiddleware<IpAccessMiddleware>();
+});
+
 app.UseAuthorization();
 
 app.UseExceptionHandler(builder =>
