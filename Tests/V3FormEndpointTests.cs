@@ -45,6 +45,7 @@ namespace Tests
 
         private readonly FakeExecutor _executor = new();
         private readonly FakeUnitRights _units = new();
+        private readonly FakeIdempotency _idempotency = new();
         private SignerKeys _signer = new(7, "DOITAC", true, new byte[32], new byte[32], 1, "ADMIN") { AllowForms = new HashSet<string>(["setSaleInvoice", "getCustomer"], StringComparer.OrdinalIgnoreCase) };
         private IHost _host = null!;
         private HttpClient _http = null!;
@@ -66,6 +67,7 @@ namespace Tests
                         services.AddSingleton(new V3FormRuntime(catalog, null));
                         services.AddSingleton<IFormExecutor>(_executor);
                         services.AddSingleton<IUnitRightsChecker>(_units);
+                        services.AddSingleton<IIdempotencyStore>(_idempotency);
                         services.AddRouting();
                     })
                     .Configure(app =>
@@ -94,9 +96,13 @@ namespace Tests
             _host.Dispose();
         }
 
-        private async Task<(HttpStatusCode Status, JsonElement Json, HttpResponseMessage Response)> PostAsync(string path, string body, HttpMethod? method = null)
+        private async Task<(HttpStatusCode Status, JsonElement Json, HttpResponseMessage Response)> PostAsync(string path, string body, HttpMethod? method = null, string? idempotencyKey = null)
         {
             var request = new HttpRequestMessage(method ?? HttpMethod.Post, "http://localhost" + path) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+            if (idempotencyKey != null)
+            {
+                request.Headers.TryAddWithoutValidation("Idempotency-Key", idempotencyKey);
+            }
             HttpResponseMessage response = await _http.SendAsync(request);
             string text = await response.Content.ReadAsStringAsync();
             return (response.StatusCode, JsonDocument.Parse(text).RootElement.Clone(), response);
@@ -197,7 +203,7 @@ namespace Tests
 
             Assert.Equal(HttpStatusCode.BadRequest, status);
             Assert.Equal("ITEM_NOT_FOUND", json.GetProperty("errors")[0].GetProperty("code").GetString());
-            Assert.Equal("ITEM_NOT_FOUND", json.GetProperty("errors")[0].GetProperty("message").GetString());
+            Assert.Equal("Item does not exist or is inactive", json.GetProperty("errors")[0].GetProperty("message").GetString());
         }
 
         [Fact]
@@ -255,6 +261,109 @@ namespace Tests
             Assert.Equal(message, json.GetProperty("message").GetString());
         }
 
+        [Fact]
+        public async Task Idempotency_LanDau_ChayVaLuu_LanSau_TraLai()
+        {
+            _executor.Next = new FormExecutionResult { Data = DataSetOf(("SUCCESS", "", "master"), 1) };
+
+            var first = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-001");
+            Assert.Equal(HttpStatusCode.OK, first.Status);
+            Assert.Equal(1, _executor.Calls);
+            Assert.Equal(200, _idempotency.Saved["key-001"].Status);
+
+            var second = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-001");
+
+            Assert.Equal(HttpStatusCode.OK, second.Status);
+            Assert.Equal(1, _executor.Calls);
+            Assert.Equal(first.Json.GetRawText(), second.Json.GetRawText());
+            Assert.Equal("true", second.Response.Headers.GetValues(V3FormEndpoint.ReplayedHeader).Single());
+            Assert.False(first.Response.Headers.Contains(V3FormEndpoint.ReplayedHeader));
+        }
+
+        [Fact]
+        public async Task Idempotency_LoiChecking_CungDuocLuu()
+        {
+            _executor.Next = new FormExecutionResult { CheckingErrors = [new CheckingError("[0].master.CustomerID", "master", "CustomerID", "CUSTOMER_NOT_FOUND")], RolledBack = true };
+
+            await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-002");
+            var replay = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-002");
+
+            Assert.Equal(HttpStatusCode.BadRequest, replay.Status);
+            Assert.Equal("VALIDATION_FAILED", replay.Json.GetProperty("code").GetString());
+            Assert.Equal(1, _executor.Calls);
+        }
+
+        [Theory]
+        [InlineData("?unitCode=CTY&dryRun=false", """{ "master": { "YourID": "HD999" }, "detail": [ { "ItemID": "VT01" } ] }""")]
+        [InlineData("?unitCode=KHAC2", null)]
+        public async Task Idempotency_CungKeyKhacBodyHoacQuery_Conflict(string query, string? body)
+        {
+            _units.Allow("KHAC2");
+            await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-003");
+
+            var (status, json, _) = await PostAsync("/api/v3/sale-invoice" + query, body ?? ValidInvoice, idempotencyKey: "key-003");
+
+            Assert.Equal(HttpStatusCode.Conflict, status);
+            Assert.Equal("IDEMPOTENCY_CONFLICT", json.GetProperty("code").GetString());
+            Assert.Equal(1, _executor.Calls);
+        }
+
+        [Fact]
+        public async Task Idempotency_DangChay_InProgress()
+        {
+            _idempotency.Pending("key-004");
+
+            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-004");
+
+            Assert.Equal(HttpStatusCode.Conflict, status);
+            Assert.Equal("IDEMPOTENCY_IN_PROGRESS", json.GetProperty("code").GetString());
+        }
+
+        [Fact]
+        public async Task Idempotency_LoiKhongLuongTruoc_BoGiuCho()
+        {
+            _executor.Throw = true;
+
+            await Assert.ThrowsAnyAsync<Exception>(() => PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-005"));
+
+            Assert.Contains("key-005", _idempotency.Released);
+            Assert.False(_idempotency.Saved.ContainsKey("key-005"));
+        }
+
+        [Fact]
+        public async Task Idempotency_DryRun_KhongDung()
+        {
+            await PostAsync("/api/v3/sale-invoice?unitCode=CTY&dryRun=true", ValidInvoice, idempotencyKey: "key-006");
+
+            Assert.Empty(_idempotency.Reserved);
+        }
+
+        [Fact]
+        public async Task Idempotency_KeySaiDang_Invalid()
+        {
+            var (status, json, _) = await PostAsync("/api/v3/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: new string('k', 129));
+
+            Assert.Equal(HttpStatusCode.BadRequest, status);
+            Assert.Equal("INVALID_IDEMPOTENCY_KEY", json.GetProperty("code").GetString());
+        }
+
+        [Fact]
+        public void FormMau_NapDuoc_DungRoute()
+        {
+            string formDirectory = Path.Combine(ApiDirectory(), "App_Data", "Form");
+
+            ImportForm sale = ImportFormLoader.Load(Path.Combine(formDirectory, "setSaleInvoice.xml"));
+            ImportForm customer = ImportFormLoader.Load(Path.Combine(formDirectory, "getCustomer.xml"));
+
+            Assert.Equal("/api/v3/sale-invoice", sale.Route);
+            Assert.True(sale.UnitRequired);
+            Assert.Equal(["CUSTOMER_NOT_FOUND", "ITEM_NOT_FOUND", "INVALID_FIELD", "INVALID_QUANTITY"],
+                sale.Blocks.SelectMany(b => b.Fields).SelectMany(f => f.Checks).Select(c => c.ErrorCode));
+            Assert.Empty(sale.Warnings);
+            Assert.Equal("/api/v3/customer/get", customer.Route);
+            Assert.False(customer.UnitRequired);
+        }
+
         private static DataSet DataSetOf((string Code, string Message, string? Tables) head, int dataTables)
         {
             DataSet data = new();
@@ -296,26 +405,79 @@ namespace Tests
             public FormExecutionResult Next { get; set; } = new() { Data = new DataSet() };
             public FormCallContext? LastCall { get; private set; }
             public MappedBody? LastBody { get; private set; }
+            public int Calls { get; private set; }
+            public bool Throw { get; set; }
 
             public Task<FormExecutionResult> ExecuteAsync(ImportForm form, MappedBody body, FormCallContext call, CancellationToken cancellationToken = default)
             {
+                Calls++;
                 LastCall = call;
                 LastBody = body;
+                if (Throw)
+                {
+                    throw new InvalidOperationException("lỗi SQL giả");
+                }
                 return Task.FromResult(Next);
+            }
+        }
+
+        /// <summary>Giữ trong bộ nhớ, cùng quy tắc với IdempotencyStore</summary>
+        private sealed class FakeIdempotency : IIdempotencyStore
+        {
+            private readonly Dictionary<string, (string Form, string Sha)> _reserved = new();
+            public Dictionary<string, (int Status, string Body)> Saved { get; } = new();
+            public List<string> Released { get; } = [];
+            public IReadOnlyCollection<string> Reserved => _reserved.Keys;
+
+            public void Pending(string key) => _reserved[key] = ("setSaleInvoice", "dang-chay");
+
+            public Task<IdempotencyResult> ReserveAsync(int uId, string key, string form, string requestSha256, CancellationToken cancellationToken = default)
+            {
+                if (!_reserved.TryGetValue(key, out var existing))
+                {
+                    _reserved[key] = (form, requestSha256);
+                    return Task.FromResult(new IdempotencyResult(IdempotencyState.Reserved));
+                }
+                if (existing.Sha == "dang-chay")
+                {
+                    return Task.FromResult(new IdempotencyResult(IdempotencyState.InProgress));
+                }
+                if (existing != (form, requestSha256))
+                {
+                    return Task.FromResult(new IdempotencyResult(IdempotencyState.Conflict));
+                }
+                var saved = Saved[key];
+                return Task.FromResult(new IdempotencyResult(IdempotencyState.Replay, saved.Status, saved.Body));
+            }
+
+            public Task CompleteAsync(int uId, string key, int statusCode, string responseBody, CancellationToken cancellationToken = default)
+            {
+                Saved[key] = (statusCode, responseBody);
+                return Task.CompletedTask;
+            }
+
+            public Task ReleaseAsync(int uId, string key)
+            {
+                _reserved.Remove(key);
+                Released.Add(key);
+                return Task.CompletedTask;
             }
         }
 
         /// <summary>CTY được phép, KHONGCO không tồn tại, còn lại bị từ chối</summary>
         private sealed class FakeUnitRights : IUnitRightsChecker
         {
+            private readonly HashSet<string> _allowed = ["CTY"];
             public string? LastUnit { get; private set; }
             public string? LastAction { get; private set; }
+
+            public void Allow(string unit) => _allowed.Add(unit);
 
             public Task<string> CheckAsync(int userId, string unitCode, string action, CancellationToken cancellationToken = default)
             {
                 LastUnit = unitCode;
                 LastAction = action;
-                return Task.FromResult(unitCode switch { "CTY" => "SUCCESS", "KHONGCO" => "UNIT_NOT_FOUND", _ => "UNIT_DENIED" });
+                return Task.FromResult(_allowed.Contains(unitCode) ? "SUCCESS" : unitCode == "KHONGCO" ? "UNIT_NOT_FOUND" : "UNIT_DENIED");
             }
         }
     }

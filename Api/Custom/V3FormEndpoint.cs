@@ -7,6 +7,7 @@ using Models;
 using Models.Options;
 using Models.V3;
 using Newtonsoft.Json;
+using Security;
 
 namespace Web.Custom
 {
@@ -21,10 +22,18 @@ namespace Web.Custom
 
     /// <summary>
     /// Route nghiệp vụ v3: POST /api/v3/{resource} và /api/v3/{resource}/{verb} (KE_HOACH_V3 4.1).
-    /// Chữ ký đã kiểm ở SignatureMiddleware. Thứ tự: route → quyền form → unitCode → dạng body → giá trị field → checking → processing
+    /// Chữ ký đã kiểm ở SignatureMiddleware. Thứ tự: route → quyền form → unitCode → dạng body → giá trị field
+    /// → Idempotency-Key → checking → processing
     /// </summary>
-    public static class V3FormEndpoint
+    public static partial class V3FormEndpoint
     {
+        public const string ReplayedHeader = "Idempotent-Replayed";
+
+        [GeneratedRegex("^[\\x21-\\x7E]{1,128}$")]
+        private static partial Regex IdempotencyKeyFormat();
+
+        private sealed record FormResponse(int Status, string Json, bool Replayed = false);
+
         public static void MapV3Forms(this IEndpointRouteBuilder endpoints)
         {
             // Mọi method: route literal (auth, _meta) được ưu tiên, còn lại vào đây để trả 404/405 thống nhất
@@ -33,43 +42,53 @@ namespace Web.Custom
 
         private static async Task HandleAsync(HttpContext context)
         {
+            FormResponse response = await BuildAsync(context);
+
+            context.Response.StatusCode = response.Status;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            if (response.Status == StatusCodes.Status405MethodNotAllowed)
+            {
+                context.Response.Headers.Allow = "POST";
+            }
+            if (response.Replayed)
+            {
+                context.Response.Headers[ReplayedHeader] = "true";
+            }
+            await context.Response.WriteAsync(response.Json, Encoding.UTF8);
+        }
+
+        private static async Task<FormResponse> BuildAsync(HttpContext context)
+        {
             var services = context.RequestServices;
             var runtime = services.GetRequiredService<V3FormRuntime>();
             var appConfig = services.GetRequiredService<AppConfig>();
-            var responseManager = services.GetRequiredService<ResponseManager>();
             var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;
 
             switch (runtime.Catalog.Resolve(context.Request.Method, context.Request.Path.Value ?? "", out ImportForm? form))
             {
                 case RouteMatch.NotFound:
-                    await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("NOT_FOUND"));
-                    return;
+                    return Error(context, "NOT_FOUND");
                 case RouteMatch.MethodNotAllowed:
-                    context.Response.Headers.Allow = "POST";
-                    await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("METHOD_NOT_ALLOWED"));
-                    return;
+                    return Error(context, "METHOD_NOT_ALLOWED");
             }
 
             // Bước 6: quyền form (mặc định từ chối), rồi đơn vị
             if (!signer.CanAccessForm(form!.Name))
             {
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("FORBIDDEN"));
-                return;
+                return Error(context, "FORBIDDEN");
             }
 
             string unit = context.Request.Query["unitCode"].ToString().Trim();
             if (form.UnitRequired && unit.Length == 0)
             {
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("UNIT_REQUIRED"));
-                return;
+                return Error(context, "UNIT_REQUIRED");
             }
             if (unit.Length > 0)
             {
                 string unitCode = await services.GetRequiredService<IUnitRightsChecker>().CheckAsync(signer.UserId!.Value, unit, form.UnitAction, context.RequestAborted);
                 if (unitCode != "SUCCESS")
                 {
-                    await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse(unitCode));
-                    return;
+                    return Error(context, unitCode);
                 }
             }
 
@@ -77,28 +96,67 @@ namespace Web.Custom
             MappedBody body = JsonBodyMapper.Map(form, rawBody, appConfig.maxDocumentsPerRequest, runtime.Irregular);
             if (body.ShapeError != null)
             {
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("INVALID_SHAPE", body.ShapeError));
-                return;
+                return Error(context, "INVALID_SHAPE", body.ShapeError);
             }
             if (body.Errors.Count > 0)
             {
-                await WriteValidationErrorsAsync(context, body.Errors.Select(e => (e.Position, e.Field, e.Code)));
-                return;
+                return ValidationErrors(context, body.Errors.Select(e => (e.Position, e.Field, e.Code)));
             }
 
             bool dryRun = context.Request.Query["dryRun"].ToString().Trim().ToLowerInvariant() is "true" or "1";
             var call = new FormCallContext(signer.UId, signer.Name, signer.UserId!.Value, signer.NameErp, signer.ErpAdmin, unit, dryRun);
 
-            FormExecutionResult result = await services.GetRequiredService<IFormExecutor>().ExecuteAsync(form, body, call, context.RequestAborted);
+            // dryRun không ghi gì nên không cần Idempotency-Key
+            string key = context.Request.Headers[SignatureMiddleware.IdempotencyKeyHeader].ToString().Trim();
+            if (key.Length == 0 || dryRun)
+            {
+                return await ExecuteAsync(context, form, body, call);
+            }
+            if (!IdempotencyKeyFormat().IsMatch(key))
+            {
+                return Error(context, "INVALID_IDEMPOTENCY_KEY");
+            }
+
+            // Cùng key phải cùng form, cùng query và cùng body (byte thô)
+            string fingerprint = MessageSignature.Sha256Hex(Encoding.UTF8.GetBytes(
+                form.Name + "\n" + MessageSignature.CanonicalQuery(context.Request.QueryString.Value) + "\n" + MessageSignature.Sha256Hex(rawBody)));
+
+            var store = services.GetRequiredService<IIdempotencyStore>();
+            IdempotencyResult reservation = await store.ReserveAsync(signer.UId, key, form.Name, fingerprint, context.RequestAborted);
+            switch (reservation.State)
+            {
+                case IdempotencyState.Replay:
+                    return new FormResponse(reservation.StatusCode, reservation.ResponseBody, Replayed: true);
+                case IdempotencyState.Conflict:
+                    return Error(context, "IDEMPOTENCY_CONFLICT");
+                case IdempotencyState.InProgress:
+                    return Error(context, "IDEMPOTENCY_IN_PROGRESS");
+            }
+
+            try
+            {
+                FormResponse response = await ExecuteAsync(context, form, body, call);
+                await store.CompleteAsync(signer.UId, key, response.Status, response.Json, CancellationToken.None);
+                return response;
+            }
+            catch
+            {
+                await store.ReleaseAsync(signer.UId, key);
+                throw;
+            }
+        }
+
+        private static async Task<FormResponse> ExecuteAsync(HttpContext context, ImportForm form, MappedBody body, FormCallContext call)
+        {
+            FormExecutionResult result = await context.RequestServices.GetRequiredService<IFormExecutor>().ExecuteAsync(form, body, call, context.RequestAborted);
 
             if (result.CheckingErrors.Count > 0)
             {
-                await WriteValidationErrorsAsync(context, result.CheckingErrors.Select(e => (e.Position, e.Field, e.Code)));
-                return;
+                return ValidationErrors(context, result.CheckingErrors.Select(e => (e.Position, e.Field, e.Code)));
             }
-            if (dryRun)
+            if (call.DryRun)
             {
-                await WriteAsync(context, 200, new
+                return Json(200, new
                 {
                     code = "SUCCESS",
                     success = true,
@@ -107,16 +165,14 @@ namespace Web.Custom
                     dryRun = true,
                     documents = body.DocumentCount
                 });
-                return;
             }
-
-            await WriteDataSetAsync(context, result.Data!);
+            return DataSetResponse(context, result.Data!);
         }
 
         /// <summary>
         /// Dataset processing (4.4): bảng 0 code, message, tables; bảng 1..N dữ liệu, tên theo tables hoặc data / data1..dataN
         /// </summary>
-        private static async Task WriteDataSetAsync(HttpContext context, DataSet data)
+        private static FormResponse DataSetResponse(HttpContext context, DataSet data)
         {
             var options = context.RequestServices.GetRequiredService<Options>();
 
@@ -142,7 +198,7 @@ namespace Web.Custom
                 message = known.message;
             }
 
-            await WriteAsync(context, status, new
+            return Json(status, new
             {
                 code,
                 success = code == "SUCCESS",
@@ -152,12 +208,12 @@ namespace Web.Custom
             });
         }
 
-        private static async Task WriteValidationErrorsAsync(HttpContext context, IEnumerable<(string Position, string Field, string Code)> errors)
+        private static FormResponse ValidationErrors(HttpContext context, IEnumerable<(string Position, string Field, string Code)> errors)
         {
             var options = context.RequestServices.GetRequiredService<Options>();
             Message? head = options.Messages.Get("VALIDATION_FAILED");
 
-            await WriteAsync(context, head?.httpStatusCode ?? 400, new
+            return Json(head?.httpStatusCode ?? 400, new
             {
                 code = "VALIDATION_FAILED",
                 success = false,
@@ -167,13 +223,15 @@ namespace Web.Custom
             });
         }
 
+        /// <summary>Lỗi trước khi chạy form, cùng dạng với ResponseHelper.WriteJsonAsync</summary>
+        private static FormResponse Error(HttpContext context, string code, string? message = null)
+        {
+            var response = context.RequestServices.GetRequiredService<ResponseManager>().GetResponse(code, message ?? "");
+            return new FormResponse(response.statusCode, JsonConvert.SerializeObject(response));
+        }
+
         private static string? RequestId(HttpContext context) => context.Items["requestID"]?.ToString();
 
-        private static async Task WriteAsync(HttpContext context, int status, object value)
-        {
-            context.Response.StatusCode = status;
-            context.Response.ContentType = "application/json; charset=utf-8";
-            await context.Response.WriteAsync(JsonConvert.SerializeObject(value), Encoding.UTF8);
-        }
+        private static FormResponse Json(int status, object value) => new(status, JsonConvert.SerializeObject(value));
     }
 }

@@ -35,7 +35,14 @@
 	<message code="UNIT_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="unitCode does not exist or is inactive"/>
 	<message code="UNIT_DENIED" success="0" httpStatusCode="403" httpMessage="You do not have permission on this unit"/>
 	<message code="VALIDATION_FAILED" success="0" httpStatusCode="400" httpMessage="One or more fields are invalid"/>
+	<message code="INVALID_IDEMPOTENCY_KEY" success="0" httpStatusCode="400" httpMessage="Idempotency-Key must be 1-128 visible ASCII characters"/>
+	<message code="IDEMPOTENCY_CONFLICT" success="0" httpStatusCode="409" httpMessage="Idempotency-Key was already used with a different request"/>
+	<message code="IDEMPOTENCY_IN_PROGRESS" success="0" httpStatusCode="409" httpMessage="A request with this Idempotency-Key is still being processed"/>
 	<message code="FIELD_REQUIRED" success="0" httpStatusCode="400" httpMessage="Field is required"/>
 	<message code="INVALID_VALUE" success="0" httpStatusCode="400" httpMessage="Field value does not match its type or format"/>
 	<message code="VALUE_TOO_LONG" success="0" httpStatusCode="400" httpMessage="Field value is longer than allowed"/>
+	<!-- Mã nghiệp vụ dùng trong errorCode của form mẫu -->
+	<message code="CUSTOMER_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Customer does not exist or is inactive"/>
+	<message code="ITEM_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Item does not exist or is inactive"/>
+	<message code="INVALID_QUANTITY" success="0" httpStatusCode="400" httpMessage="Quantity must be greater than 0"/>
 </messages>

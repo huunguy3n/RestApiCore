@@ -79,6 +79,14 @@
             get; set;
         }
 
+        /// <summary>
+        /// Số giờ giữ response theo Idempotency-Key
+        /// </summary>
+        public int idempotencyHours
+        {
+            get; set;
+        }
+
         public int expiryToken
         {
             get; set;
@@ -170,6 +178,7 @@
             userCacheSeconds = 60;
             v3TokenMinutes = 60;
             maxDocumentsPerRequest = 100;
+            idempotencyHours = 24;
             loginMaxFailures = 5;
             loginLockMinutes = 15;
             expiryToken = 0;

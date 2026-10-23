@@ -67,6 +67,7 @@ builder.Services.AddSingleton<IRevokedTokenStore, RevokedTokenStore>();
 builder.Services.AddSingleton<LoginLockout>();
 builder.Services.AddSingleton<Business.V3.IUnitRightsChecker, Business.V3.UnitRightsChecker>();
 builder.Services.AddSingleton<Business.V3.IFormExecutor, Business.V3.FormExecutor>();
+builder.Services.AddSingleton<Business.V3.IIdempotencyStore, Business.V3.IdempotencyStore>();
 // Form v3: nạp App_Data/Form một lần, gắn kiểu theo cột thật của bảng FBO (mỗi bảng đọc một lần)
 builder.Services.AddSingleton(services =>
 {
