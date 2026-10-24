@@ -15,7 +15,6 @@ namespace DataAccess
 
             Irregular = GetIrregular();
             Messages = GetMessageList();
-            Updates = GetUpdateList();
         }
 
         #region Irregular
@@ -61,39 +60,6 @@ namespace DataAccess
             }
 
             return messages;
-        }
-        #endregion
-
-        #region Update
-        public UpdateList GetUpdateList()
-        {
-            var updates = new UpdateList();
-            string pathXML = Path.Combine(_appConfig.pathDirectory, "App_Data/Options/Update.xml");
-
-            if (!File.Exists(pathXML))
-            {
-                return null;
-            }
-            else
-            {
-                var doc = XMLReader.GetDocument(pathXML);
-
-                var xmlNamespace = new XmlNamespaceManager(doc.NameTable);
-                xmlNamespace.AddNamespace("ns", "urn:schemas-fast-com:data-update");
-
-                var nodeUpdates = doc.SelectNodes("ns:update/ns:controller", xmlNamespace);
-
-                foreach (XmlNode nodeUpdate in nodeUpdates)
-                {
-                    updates.Add(new Update
-                    {
-                        controller = XMLReader.GetAttributes(nodeUpdate, "name"),
-                        query = nodeUpdate.SelectSingleNode("ns:text", xmlNamespace).InnerText,
-                    });
-                }
-            }
-
-            return updates;
         }
         #endregion
     }

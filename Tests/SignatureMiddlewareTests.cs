@@ -76,7 +76,7 @@ namespace Tests
                             string authorization = context.Request.Headers.Authorization.ToString();
                             if (authorization.StartsWith("Bearer "))
                             {
-                                ClaimsPrincipal? principal = Jwt.ValidateJWTToken(authorization[7..], context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW");
+                                ClaimsPrincipal? principal = Jwt.ValidateJWTToken(authorization[7..]);
                                 if (principal != null)
                                 {
                                     context.User = principal;
@@ -108,7 +108,7 @@ namespace Tests
             _host.Dispose();
         }
 
-        private static readonly Security.JwtTokenService Jwt = new(SecretKey, 60, "FastRestApi");
+        private static readonly Security.JwtTokenService Jwt = new(SecretKey, "FastRestApi");
 
         /// <summary>Request có JWT v3 hợp lệ của user (u_id lấy từ kho khóa giả trừ khi chỉ định)</summary>
         private HttpRequestMessage NewRequest(string user = "DOITAC", string path = Path, int? uId = null, string? token = null)
@@ -410,16 +410,6 @@ namespace Tests
             var (response, pingCode, _) = await SendAsync(ping, pingNonce);
             Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
             Assert.Equal("UNAUTHORIZED", pingCode);
-        }
-
-        [Fact]
-        public async Task TokenKieuCu_KhongCoUId_KhongDungDuocChoV3()
-        {
-            string oldToken = Jwt.GenerateJWTToken("DOITAC", "ADMIN", false, "UNKNOW");
-            var request = NewRequest(token: oldToken);
-            string nonce = _client.Sign(request, Body, Now);
-
-            Assert.Equal("UNAUTHORIZED", (await SendAsync(request, nonce)).Code);
         }
 
         [Fact]

@@ -64,7 +64,6 @@ builder.Services.AddSerilog(config => config
 
 // Dịch vụ ứng dụng: Web.Custom.ServiceRegistration (dùng chung với ServiceRegistrationTests)
 builder.Services.AddFastApi(appConfig, privateKeyProtector, portalKey);
-builder.Services.AddControllers();
 
 // Rate limit in-process: theo user đã xác thực, chưa xác thực thì theo IP
 builder.Services.AddRateLimiter(options =>
@@ -184,7 +183,6 @@ app.MapPost("/api/_meta/ping", (HttpContext context, TimeProvider time) =>
 });
 // Route nghiệp vụ v3 từ App_Data/Form (route literal ở trên được ưu tiên)
 app.MapForms();
-app.MapControllers();
 
 // Nạp form ngay lúc khởi động để lỗi XML hiện trong log, không đợi request đầu
 app.Services.GetRequiredService<FormRuntime>();

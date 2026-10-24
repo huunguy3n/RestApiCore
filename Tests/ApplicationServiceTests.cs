@@ -96,7 +96,7 @@ namespace Tests
     public class AccessTokenIssuerTests
     {
         private const string SecretKey = "khoa-ky-jwt-chi-dung-cho-test-0123456789";
-        private static readonly JwtTokenService Jwt = new(SecretKey, 60, "FastRestApi");
+        private static readonly JwtTokenService Jwt = new(SecretKey, "FastRestApi");
         private static readonly SignerKeys Signer = new(7, "DOITAC", true, null, null, 12, "ADMIN");
 
         private static AccessTokenIssuer Create() =>
@@ -108,7 +108,7 @@ namespace Tests
             IssuedToken token = Create().IssueApiToken(Signer);
 
             Assert.Equal(3600, token.ExpiresIn);
-            ClaimsPrincipal principal = Jwt.ValidateJWTToken(token.AccessToken, "khong-dung-ip")!;
+            ClaimsPrincipal principal = Jwt.ValidateJWTToken(token.AccessToken)!;
             Assert.NotNull(principal);
             Assert.Equal("7", principal.FindFirst("u_id")?.Value);
             Assert.Equal("12", principal.FindFirst("user_id")?.Value);
@@ -126,7 +126,7 @@ namespace Tests
             IssuedToken token = Create().IssuePortalToken(Signer);
 
             Assert.Equal(1800, token.ExpiresIn);
-            Assert.Equal("portal", Jwt.ValidateJWTToken(token.AccessToken, "")!.FindFirst("scope")?.Value);
+            Assert.Equal("portal", Jwt.ValidateJWTToken(token.AccessToken)!.FindFirst("scope")?.Value);
         }
 
         [Fact]

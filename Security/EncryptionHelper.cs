@@ -56,39 +56,5 @@ namespace Security
                 }
             }
         }
-
-        public static string ComputeMD5Hash(string input)
-        {
-            using (MD5 md5 = MD5.Create())
-            {
-                byte[] inputBytes = Encoding.ASCII.GetBytes(input);
-                byte[] hashBytes = md5.ComputeHash(inputBytes);
-
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < hashBytes.Length; i++)
-                {
-                    sb.Append(hashBytes[i].ToString("X2"));
-                }
-
-                return sb.ToString();
-            }
-        }
-
-        public static string GenerateAuthKey(string userName, long time, string password, string secretKey, string[] positions)
-        {
-            List<int> position = positions.Select(o => int.Parse(o)).ToList();
-            string plainPassword = DecryptString(password, secretKey);
-            string md5 = ComputeMD5Hash(plainPassword + userName.Trim() + time);
-
-            string key = "";
-            for (int i = 0; i < position.Count; i++)
-            {
-                int p = position[i];
-                key += md5[p - 1];
-            }
-
-            return key;
-        }
-
     }
 }

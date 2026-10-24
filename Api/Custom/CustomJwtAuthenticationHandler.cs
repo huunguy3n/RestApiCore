@@ -21,11 +21,10 @@ namespace Web.Custom
             }
 
             string token = Request.Headers["Authorization"].ToString().Split(" ").Last();
-            string ipAddress = Context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
 
             // Không tự ghi response ở đây: request vẫn đi tiếp, ghi ở đây sẽ bị ghi đè hoặc ghi hai lần.
             // Route [Authorize] trả 401 qua HandleChallengeAsync, /api trả 401 ở SignatureMiddleware
-            var principal = jwtTokenService.ValidateJWTToken(token, ipAddress);
+            var principal = jwtTokenService.ValidateJWTToken(token);
             if (principal == null)
             {
                 return Task.FromResult(AuthenticateResult.Fail("Invalid token"));

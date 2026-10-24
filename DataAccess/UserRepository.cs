@@ -61,39 +61,5 @@ namespace DataAccess
             string text = value == DBNull.Value ? "" : value.ToString()!.Trim();
             return text.Length > 0 ? text[0] : '0';
         }
-
-        /// <summary>
-        /// Engine v2 cũ (AuthController, GenerateAuthKey): user theo name, có mật khẩu
-        /// </summary>
-        public User? GetUser(string name)
-        {
-            var ds = database.Retrieve("select * from restApiUser where [name] = @name and status = '1'",
-                new SqlParameter { ParameterName = "@name", Value = name });
-
-            if (ds.Tables[0].Rows.Count == 0)
-            {
-                return null;
-            }
-
-            var row = ds.Tables[0].Rows[0];
-            return new User
-            {
-                Id = Convert.ToInt32(row["id"]),
-                Name = row["name"].ToString()!,
-                NameErp = row["name_erp"].ToString()!,
-                Password = row["password"].ToString()!,
-                IsAdmin = Convert.ToBoolean(row["admin"]),
-                IsGroup = Convert.ToBoolean(row["group"]),
-                AccessYN = Convert.ToBoolean(row["access_yn"]),
-                NewYN = Convert.ToBoolean(row["new_yn"]),
-                EditYN = Convert.ToBoolean(row["edit_yn"]),
-                DeleteYN = Convert.ToBoolean(row["delete_yn"]),
-                Status = Convert.ToChar(row["status"]),
-                UserId0 = row["user_id0"] as int?,
-                UserId2 = row["user_id2"] as int?,
-                DateTime0 = row["datetime0"] as DateTime?,
-                DateTime2 = row["datetime2"] as DateTime?
-            };
-        }
     }
 }

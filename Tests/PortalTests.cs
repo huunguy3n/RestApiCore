@@ -29,7 +29,7 @@ namespace Tests
         private const string SecretKey = "khoa-ky-jwt-chi-dung-cho-test-0123456789";
         private const string PasswordKey = "0123456789abcdef0123456789abcdef";
         private static readonly byte[] PrivateKey = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-        private static readonly JwtTokenService Jwt = new(SecretKey, 60, "FastRestApi");
+        private static readonly JwtTokenService Jwt = new(SecretKey, "FastRestApi");
 
         private readonly PortalKeyProvider _portalKey = PortalKeyProvider.Ephemeral();
         private readonly FakeKeyStore _keys = new();
@@ -95,7 +95,7 @@ namespace Tests
                         app.Use(async (context, next) =>
                         {
                             string authorization = context.Request.Headers.Authorization.ToString();
-                            if (authorization.StartsWith("Bearer ") && Jwt.ValidateJWTToken(authorization[7..], "UNKNOW") is ClaimsPrincipal principal)
+                            if (authorization.StartsWith("Bearer ") && Jwt.ValidateJWTToken(authorization[7..]) is ClaimsPrincipal principal)
                             {
                                 context.User = principal;
                             }

@@ -1,4 +1,4 @@
-# Obsolete-code audit
+﻿# Obsolete-code audit
 
 Date: 23/10/2026. Scope: every C# type in `Api`, `Business`, `DataAccess`, `Provider`, `Security`, `Models`, `Utilities`, `Cli`, `CallbackWorker`.
 
@@ -37,23 +37,27 @@ Classifications: `ACTIVE`, `DUPLICATED`, `LEGACY`, `DEAD`, `UNKNOWN`.
 | `Business/PortalCredentials.cs` (`PortalCredentialStore`) | DUPLICATED → removed | A pass-through: `new UserRepository(appConfig).GetEncryptedPasswordAsync(...)` | Name, DI | `UserRepository` implements `IPortalCredentialStore` directly | **Removed** | None |
 | `AuthManager.AuthenticateToken` | DUPLICATED → removed | Built a new `JwtTokenService` per request only to call `ValidateJWTToken` | Name | `CustomJwtAuthenticationHandler` uses the injected `JwtTokenService` | **Removed** | None |
 
+## Removed (LEGACY v2 pipeline, 24/10/2026)
+
+The v2 engine was removed as a whole; v3 (`/api/auth/token`, `/api/auth/portal`, `FormEndpoint`) is the only pipeline.
+
+- Routes `POST /api/auth/{userName}` and `POST /api/query/{name}`: `Api/Controllers/*`, `Api/Legacy/*`, `Api/Custom/RequestHelper.cs`, `SignatureMiddleware.IsLegacyController` (every `/api` route now requires a signature, except `GET _meta/server` and `POST auth/portal`).
+- `DataAccess/FormRepository.cs`, `CacheRepository.cs`, `ServerRepository.CheckFormRights`, `UserRepository.GetUser`, `OptionsRepository.GetUpdateList`, `Options.Updates`, `Provider.SqlDatabase` sync API.
+- `Models/Form/*`, `Models/Request/*`, `Models/User.cs`, `Models/Response/ResponseAuth|ResponseQuery|ResponseData.cs`, `Models/Options/Update*.cs`, `Utilities/CustomJsonConverter.cs`, `ResponseHelper.ToActionResult`.
+- `EncryptionHelper.GenerateAuthKey`, `ComputeMD5Hash`; `JwtTokenService.GenerateJWTToken` (old IP-audience tokens); `JwtTokenService` no longer takes an expiry and `ValidateJWTToken(token)` accepts only audience `fast-api`.
+- `config`: `expiryToken`, `maxRowInResponse`, `cacheDurationInMinutes`, `positions` (class `AppConfig`, `appsettings.json` of Api and CallbackWorker).
+- Tests of the removed code (`GenerateAuthKey`, `ComputeMD5Hash`, old-token test).
+
 ## Kept
 
-| Class / file | Classification | Evidence | Replacement | Decision | Remaining uncertainty |
-|---|---|---|---|---|---|
-| `Api/Controllers/AuthController.cs` (`POST /api/auth/{userName}`) | LEGACY | Live public route; HMAC-exempt; MD5 `GenerateAuthKey` login; JWT with audience = client IP | `/api/auth/token`, `/api/auth/portal` | Kept, constructor-injected, moved collaborators to `Api/Legacy` | **Whether any partner still calls it** cannot be proven from the repository |
-| `Api/Controllers/QueryController.cs` (`POST /api/query/{name}`) | LEGACY | Live public route; **contains the known SQL injection** (`FormRepository.ReplaceDefaultVaraible`, `unit` header) and the shared-form race (`KE_HOACH` 1.4 #2, #4). Only `App_Data/Form/setTemplate.xml` is still in v2 format; the two v3 files throw | `FormEndpoint` | Kept and isolated; see deprecation plan in `architecture-decisions.md` (ADR-6) | Same as above. Recommended: remove (decision pending) |
-| `Api/Legacy/*` (`AuthManager`, `FormManager`, `IFormMethod`, `FormMethodBase`, `FormMethodCache`, `LegacyResponseManager`) | LEGACY | Only reachable from the two controllers above. `FormMethodBase`/`FormMethodCache` are a valid two-strategy hierarchy (execute vs. read cached page) behind `IFormMethod` — no duplicated behavior between them | v3 pipeline | Kept, DI-registered, no `new` | Deleted together with the controllers |
-| `DataAccess/FormRepository.cs`, `CacheRepository.cs`, `ServerRepository.CheckFormRights`, `UserRepository.GetUser(string)` | LEGACY | Only used by `Api/Legacy` | `ImportFormLoader`, `FormExecutor`, `restApi_GetUserRights` | Kept | Same |
-| `Models/Form/*`, `Models/Request/*`, `Models/Response/ResponseAuth.cs`, `ResponseQuery.cs`, `ResponseData.cs`, `Models/Options/Update*.cs`, `Options.Updates`, `OptionsRepository.GetUpdateList` | LEGACY | Only used by the legacy pipeline | `Models/ImportForm.cs` | Kept | Same |
-| `Utilities/CustomJsonConverter.cs`, `Api/Custom/RequestHelper.cs`, `ResponseHelper.ToActionResult` | LEGACY | Only used by the legacy pipeline | `JsonBodyMapper`, `SignatureMiddleware` body reading | Kept | Same |
-| `Security/EncryptionHelper.GenerateAuthKey`, `ComputeMD5Hash`; `JwtTokenService.GenerateJWTToken`; `AppConfig.positions/maxRowInResponse/cacheDurationInMinutes/expiryToken` | LEGACY | Legacy login/paging; `GenerateJWTToken` is also used by a v3 test proving old tokens are rejected | — | Kept | Same |
-| `App_Data/Options/Update.xml` | LEGACY / ACTIVE for CLI | Read by `OptionsRepository` (legacy) **and** by `Fast.Api.Cli upgrade` (default path) | — | Kept | None |
-| `App_Data/Form/setTemplate.xml` | LEGACY | v2 `<form>` file; the v3 catalog logs it as an error on every load | Upgrade with `Fast.Api.Cli upgrade` | Kept | Remove or upgrade together with the v2 pipeline |
-| `UserRights.IsIpAllowed`, `MatchIp`, `AllowIps`, `BlackListIps` | DUPLICATED | C# copy of the IP rule; production uses `restApi_CheckIPAddress`. Only `UserRightsTests` call it | `IpAccessManager` → `restApi_CheckIPAddress` | Kept | Decide which implementation is authoritative before deleting either (security semantics) |
-| `SignerKeyStore.InvalidateAsync`, `IpAccessManager.InvalidateAsync` | UNKNOWN | No caller; documented hooks for "make key/IP change effective immediately". The CLI runs in another process and cannot call them | — | Kept | Needs an admin endpoint or a decision that the cache TTL is enough |
-| `CallbackWorker` project | LEGACY (placeholder) | Template worker; `KE_HOACH` 1.1 lists callback/notify as out of scope for this phase | — | Kept | Planned component |
-| `ApiDocs/wwwroot/js/site.js`, `Pages/Shared/_ValidationScriptsPartial.cshtml`, `wwwroot/lib/*` | UNKNOWN (front-end) | Razor template leftovers, not referenced by `Index.cshtml`/`_Layout.cshtml` | — | Not in scope of this class audit | Needs a portal asset review |
+| Class / file | Classification | Decision | Remaining uncertainty |
+|---|---|---|---|
+| `App_Data/Options/Update.xml` | ACTIVE for CLI | Read only by `Fast.Api.Cli upgrade` (default path) | None |
+| `App_Data/Form/setTemplate.xml` | v2 file | Still logged as an error by the v3 catalog; upgrade with the CLI or delete | Pending |
+| `UserRights.IsIpAllowed`, `MatchIp`, `AllowIps`, `BlackListIps` | DUPLICATED | Production uses `restApi_CheckIPAddress`; only `UserRightsTests` call it | Decide which implementation is authoritative |
+| `SignerKeyStore.InvalidateAsync`, `IpAccessManager.InvalidateAsync` | UNKNOWN | No caller | Needs an admin endpoint or a decision that the TTL is enough |
+| `CallbackWorker` project | placeholder | Planned component | — |
+| `ApiDocs` template leftovers (`site.js`, `_ValidationScriptsPartial.cshtml`, `wwwroot/lib/*`) | UNKNOWN | Not in scope of this class audit | Needs a portal asset review |
 
 ## Behavior changes caused by removal
 

@@ -1,4 +1,4 @@
-using Business;
+﻿using Business;
 using Models;
 using Models.Interface;
 using Security;
@@ -26,16 +26,10 @@ namespace Web.Custom
         public const string RawBodyItem = "rawBody";
         public const string SignerItem = "signer";
 
-        /// <summary>Controller kiểu cũ (AuthController, QueryController) dùng JWT theo IP, không ký HMAC</summary>
-        private static bool IsLegacyController(PathString path) =>
-            path.StartsWithSegments("/api/query")
-            || path.StartsWithSegments("/api/auth") && !path.Equals(TokenPath, StringComparison.OrdinalIgnoreCase)
-                && !path.Equals("/api/auth/revoke", StringComparison.OrdinalIgnoreCase) && !path.Equals(PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase);
-
         /// <summary>Route cần ký</summary>
         public static bool RequiresSignature(HttpContext context)
         {
-            if (!context.Request.Path.StartsWithSegments("/api") || IsLegacyController(context.Request.Path))
+            if (!context.Request.Path.StartsWithSegments("/api"))
             {
                 return false;
             }

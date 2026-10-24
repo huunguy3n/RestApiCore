@@ -1,4 +1,4 @@
-using Business;
+﻿using Business;
 using Business.Logging;
 using DataAccess;
 using Models;
@@ -43,7 +43,7 @@ namespace Web.Custom
             // Bảo mật: khóa, JWT, chữ ký
             services.AddSingleton(privateKeyProtector);
             services.AddSingleton(portalKey);
-            services.AddSingleton(new JwtTokenService(appConfig.secretKey, appConfig.expiryToken, appConfig.issuerToken));
+            services.AddSingleton(new JwtTokenService(appConfig.secretKey, appConfig.issuerToken));
             services.AddPortalCors(appConfig.portalOrigins);
 
             // Nghiệp vụ (Business)
@@ -65,15 +65,6 @@ namespace Web.Custom
             services.AddSingleton<IRequestLogSink, SqlRequestLogSink>();
             services.AddSingleton(new RequestLogSpool(Path.Combine(appConfig.logDirectory, "spool")));
             services.AddHostedService<LogWorker>();
-
-            // Engine v2 cũ (AuthController, QueryController): đóng băng, gom ở Api/Legacy để bỏ được một lần (docs/architecture)
-            services.AddSingleton<CacheRepository>();
-            services.AddSingleton<FormRepository>();
-            services.AddSingleton<Web.Legacy.LegacyResponseManager>();
-            services.AddSingleton<Web.Legacy.FormMethodBase>();
-            services.AddSingleton<Web.Legacy.FormMethodCache>();
-            services.AddSingleton<Web.Legacy.FormManager>();
-            services.AddSingleton<Web.Legacy.AuthManager>();
 
             // Form v3: nạp App_Data/Form lúc khởi động, gắn kiểu theo cột thật; file đổi thì FormReloader nạp lại
             services.AddSingleton<FormLoader>();

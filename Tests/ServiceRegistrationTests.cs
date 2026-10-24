@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Models;
 using Security;
-using Web.Controllers;
 using Web.Custom;
 
 namespace Tests
@@ -87,7 +86,7 @@ namespace Tests
         }
 
         [Fact]
-        public void Middleware_Controller_HandlerXacThuc_HealthCheck_DuPhuThuoc()
+        public void Middleware_HandlerXacThuc_HealthCheck_DuPhuThuoc()
         {
             using ServiceProvider provider = Build();
             var isService = provider.GetRequiredService<IServiceProviderIsService>();
@@ -95,7 +94,7 @@ namespace Tests
             Type[] activated =
             [
                 typeof(SignatureMiddleware), typeof(IpAccessMiddleware), typeof(RequestLogMiddleware), typeof(RequestIdMiddleware),
-                typeof(AuthController), typeof(QueryController), typeof(CustomJwtAuthenticationHandler),
+                typeof(CustomJwtAuthenticationHandler),
                 typeof(SqlHealthCheck), typeof(LogDirectoryHealthCheck), typeof(LogWorker)
             ];
             var missing = activated
@@ -117,8 +116,7 @@ namespace Tests
             [
                 typeof(ISignerKeyStore), typeof(IRevokedTokenStore), typeof(IIpAccessManager), typeof(IUnitRightsChecker), typeof(ICursorStore),
                 typeof(IFormExecutor), typeof(IIdempotencyStore), typeof(IRequestLogSink), typeof(MessageAuthenticator), typeof(AccessTokenIssuer),
-                typeof(PortalLoginService), typeof(FormRequestService), typeof(FormResponseWriter), typeof(FormLoader), typeof(LogRepository),
-                typeof(Web.Legacy.FormManager), typeof(Web.Legacy.AuthManager), typeof(Web.Legacy.LegacyResponseManager)
+                typeof(PortalLoginService), typeof(FormRequestService), typeof(FormResponseWriter), typeof(FormLoader), typeof(LogRepository)
             ];
             foreach (Type type in services)
             {
