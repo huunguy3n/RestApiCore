@@ -1,0 +1,9 @@
+@model (string? Ok, string? Error)
+@if (!string.IsNullOrEmpty(Model.Ok))
+{
+    <p class="adm__ok" role="status">@Model.Ok</p>
+}
+@if (!string.IsNullOrEmpty(Model.Error))
+{
+    <p class="adm__alert" role="alert">@Model.Error</p>
+}

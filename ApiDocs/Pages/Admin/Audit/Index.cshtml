@@ -1,0 +1,60 @@
+@page
+@model ApiDocs.Pages.Admin.Audit.IndexModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Nhật ký";
+    ViewData["Crumb"] = "Lịch sử thao tác quản trị và đăng nhập";
+    ViewData["Nav"] = "audit";
+}
+<partial name="_Flash" model="@((Model.Flash, Model.FlashError))" />
+@if (Model.View != null)
+{
+    <form method="get" class="adm__bar">
+        <label>Từ <input type="date" name="from" value="@Model.View.From.ToString("yyyy-MM-dd")" /></label>
+        <label>Đến <input type="date" name="to" value="@Model.View.To.ToString("yyyy-MM-dd")" /></label>
+        <select name="projectId" aria-label="Dự án">
+            <option value="">Mọi dự án</option>
+            @foreach (var project in Model.View.ProjectOptions)
+            {
+                <option value="@project.Id" selected="@(Model.ProjectId == project.Id)">@project.Code</option>
+            }
+        </select>
+        <input name="person" value="@Model.Person" maxlength="64" placeholder="Người thao tác / đối tượng" aria-label="Người" />
+        <input name="action" value="@Model.ActionPrefix" maxlength="40" placeholder="Hành động (vd account., login)" aria-label="Hành động" />
+        <select name="outcome" aria-label="Kết quả">
+            <option value="">Mọi kết quả</option>
+            @foreach (var option in new[] { "SUCCESS", "DENIED", "REJECTED" })
+            {
+                <option value="@option" selected="@(Model.Outcome == option)">@option</option>
+            }
+        </select>
+        <button type="submit" class="adm__btn">Lọc</button>
+    </form>
+
+    <table class="adm__table">
+        <thead><tr><th>Thời gian</th><th>Người thao tác</th><th>Dự án</th><th>Hành động</th><th>Đối tượng</th><th>Kết quả</th><th>Chi tiết</th></tr></thead>
+        <tbody>
+        @foreach (var e in Model.View.Page.Items)
+        {
+            <tr>
+                <td>@e.At.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                <td>@(e.ActorLogin ?? "(không xác định)")</td>
+                <td>@e.ProjectCode</td>
+                <td>@e.Action</td>
+                <td>@e.Target</td>
+                <td><span class="adm__chip adm__chip--@e.Outcome.ToLowerInvariant()">@e.Outcome</span></td>
+                <td>@e.Detail</td>
+            </tr>
+        }
+        @if (Model.View.Page.Items.Count == 0)
+        {
+            <tr><td colspan="7" class="adm__empty">Không có dòng nhật ký phù hợp.</td></tr>
+        }
+        </tbody>
+    </table>
+    <p class="adm__crumb">
+        @Model.View.Page.Total dòng · trang @Model.PageNumber
+        @if (Model.PageNumber > 1) { <a asp-page="Index" asp-all-route-data="@Model.RouteFor(Model.PageNumber - 1)">Trước</a> }
+        @if (Model.PageNumber * ApiDocs.ControlPlane.AuditViewService.PageSize < Model.View.Page.Total) { <a asp-page="Index" asp-all-route-data="@Model.RouteFor(Model.PageNumber + 1)">Sau</a> }
+    </p>
+}

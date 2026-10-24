@@ -19,5 +19,13 @@ namespace Web.Custom
             var json = JsonConvert.SerializeObject(response);
             await context.Response.WriteAsync(json);
         }
+
+        /// <summary>Ghi JSON đã dựng sẵn (response thành công của endpoint tự định dạng)</summary>
+        public static async Task WriteRawAsync(HttpContext context, int status, string json)
+        {
+            context.Response.StatusCode = status;
+            context.Response.ContentType = "application/json; charset=utf-8";
+            await context.Response.WriteAsync(json);
+        }
     }
 }

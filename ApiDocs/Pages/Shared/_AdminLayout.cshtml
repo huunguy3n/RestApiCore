@@ -1,0 +1,81 @@
+@using System.Security.Claims
+@using ApiDocs.ControlPlane
+@using Models
+@inject ProjectAccessService Access
+@{
+    // Menu chỉ để dễ dùng: mỗi trang và mỗi thao tác vẫn tự kiểm quyền ở server
+    bool canAccounts = false, canProjects = false, canAudit = false, canForms = false;
+    if (User.Identity?.IsAuthenticated == true && int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out int navAccountId))
+    {
+        try
+        {
+            AccountAccess? navAccess = await Access.GetAccessAsync(navAccountId);
+            if (navAccess != null)
+            {
+                canAccounts = navAccess.CanCentral(PortalPermissions.UsersRead) || navAccess.Projects.Any(p => p.Permissions.Contains(PortalPermissions.UsersRead));
+                canProjects = navAccess.CanCentral(PortalPermissions.SettingsManage);
+                canForms = navAccess.Account.Kind == AccountKind.Staff && navAccess.Projects.Any(p => p.Permissions.Contains(PortalPermissions.FormsRead));
+                canAudit = navAccess.CanCentral(PortalPermissions.AuditRead) || navAccess.Projects.Any(p => p.Permissions.Contains(PortalPermissions.AuditRead));
+            }
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+    string nav = ViewData["Nav"]?.ToString() ?? "";
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>@ViewData["Title"] - Fast API Portal</title>
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+</head>
+<body class="adm">
+    <aside class="adm__side" aria-label="Điều hướng">
+        <a class="adm__brand" href="~/Admin">Fast API Portal</a>
+        <nav class="adm__nav">
+            <a href="~/Admin" class="@(nav == "overview" ? "is-active" : "")">Tổng quan</a>
+            @if (canAccounts)
+            {
+                <a href="~/Admin/Accounts" class="@(nav == "accounts" ? "is-active" : "")">Tài khoản</a>
+            }
+            @if (canProjects)
+            {
+                <a href="~/Admin/Projects" class="@(nav == "projects" ? "is-active" : "")">Dự án</a>
+            }
+            @if (canForms)
+            {
+                <a href="~/Admin/Forms" class="@(nav == "forms" ? "is-active" : "")">Form</a>
+                <a href="~/Admin/Packages" class="@(nav == "packages" ? "is-active" : "")">Gói DEV→PROD</a>
+                <a href="~/Admin/Sync" class="@(nav == "sync" ? "is-active" : "")">Đồng bộ</a>
+            }
+            @if (canAudit)
+            {
+                <a href="~/Admin/Audit" class="@(nav == "audit" ? "is-active" : "")">Nhật ký</a>
+            }
+            <a href="~/Admin/Password" class="@(nav == "password" ? "is-active" : "")">Đổi mật khẩu</a>
+        </nav>
+    </aside>
+    <div class="adm__main">
+        <header class="adm__top">
+            <div>
+                <h1 class="adm__title">@ViewData["Title"]</h1>
+                <p class="adm__crumb">@ViewData["Crumb"]</p>
+            </div>
+            @if (User.Identity?.IsAuthenticated == true)
+            {
+                <form method="post" asp-page="/Admin/Logout" class="adm__user">
+                    <span>@User.Identity.Name <span class="adm__chip">@(User.FindFirst("kind")?.Value == "staff" ? "Nội bộ" : "Khách hàng")</span></span>
+                    <button type="submit" class="adm__btn adm__btn--ghost">Đăng xuất</button>
+                </form>
+            }
+        </header>
+        <main class="adm__content">
+            @RenderBody()
+        </main>
+    </div>
+</body>
+</html>

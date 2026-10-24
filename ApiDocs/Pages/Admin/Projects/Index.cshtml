@@ -1,0 +1,45 @@
+@page
+@model ApiDocs.Pages.Admin.Projects.IndexModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Dự án";
+    ViewData["Crumb"] = "Danh bạ Api từng dự án (chỉ administrator trung tâm)";
+    ViewData["Nav"] = "projects";
+}
+<partial name="_Flash" model="@((Model.Flash, Model.FlashError))" />
+@if (Model.Projects != null)
+{
+    <section class="adm__panel">
+        <h2>Thêm dự án</h2>
+        <form method="post" asp-page-handler="Create" class="adm__bar">
+            <input name="code" maxlength="32" placeholder="Mã (vd FSD_DEV)" aria-label="Mã dự án" required />
+            <input name="name" maxlength="100" placeholder="Tên dự án" aria-label="Tên dự án" required />
+            <input name="apiBaseUrl" maxlength="256" placeholder="https://api.khach.vn" aria-label="Địa chỉ Api" required />
+            <button type="submit" class="adm__btn">Thêm</button>
+        </form>
+    </section>
+
+    <table class="adm__table">
+        <thead><tr><th>Mã</th><th>Tên</th><th>Địa chỉ Api</th><th>Hoạt động</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var p in Model.Projects)
+        {
+            <tr>
+                <td>@p.Code</td>
+                <td><input form="p@(p.Id)" name="name" value="@p.Name" maxlength="100" aria-label="Tên" /></td>
+                <td><input form="p@(p.Id)" name="apiBaseUrl" value="@p.ApiBaseUrl" maxlength="256" aria-label="Địa chỉ Api" /></td>
+                <td><input form="p@(p.Id)" type="checkbox" name="active" value="true" checked="@p.Active" aria-label="Hoạt động" /></td>
+                <td>
+                    <input form="p@(p.Id)" type="hidden" name="id" value="@p.Id" />
+                    <button form="p@(p.Id)" type="submit" class="adm__btn adm__btn--small">Lưu</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @* Form đặt ngoài bảng (HTML hợp lệ); ô nhập trong bảng gắn vào bằng thuộc tính form= *@
+    @foreach (var p in Model.Projects)
+    {
+        <form method="post" asp-page-handler="Update" id="p@(p.Id)"></form>
+    }
+}

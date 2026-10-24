@@ -1,0 +1,267 @@
+﻿/* Nhật ký request API (Main/zcrptapilog.aspx). Mọi selector nằm dưới .apilog để không đụng CSS của FBO */
+.apilog {
+  --al-bg: #f3f5f8;
+  --al-surface: #ffffff;
+  --al-surface-alt: #f8fafc;
+  --al-border: #e2e7ee;
+  --al-border-strong: #cbd3de;
+  --al-text: #17212e;
+  --al-muted: #5a6677;
+  --al-faint: #8a95a5;
+  --al-primary: #2563eb;
+  --al-primary-hover: #1d4ed8;
+  --al-primary-soft: #eaf1fe;
+  --al-success: #157a3c;
+  --al-success-soft: #e7f6ed;
+  --al-warning: #a35207;
+  --al-warning-soft: #fdf2e1;
+  --al-danger: #b42318;
+  --al-danger-soft: #fdeceb;
+  --al-info: #1d4ed8;
+  --al-info-soft: #eaf1fe;
+  --al-neutral: #475569;
+  --al-neutral-soft: #eef1f5;
+  --al-violet: #6d28d9;
+  --al-violet-soft: #f1ebfd;
+  --al-radius: 8px;
+  --al-radius-sm: 6px;
+  --al-shadow: 0 1px 2px rgba(16, 24, 40, .05);
+  --al-focus: 0 0 0 3px rgba(37, 99, 235, .28);
+  --al-mono: Consolas, 'Cascadia Mono', 'Courier New', monospace;
+  --al-detail-width: 480px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 16px 12px;
+  background: var(--al-bg);
+  color: var(--al-text);
+  font-family: 'Segoe UI', -apple-system, Roboto, Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  box-sizing: border-box;
+}
+.apilog *, .apilog *::before, .apilog *::after { box-sizing: border-box; }
+.apilog [hidden] { display: none !important; }
+.apilog.is-fitted { overflow: hidden; }
+.apilog button, .apilog input, .apilog select { font: inherit; color: inherit; }
+.apilog-muted { color: var(--al-muted); }
+.apilog-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.apilog-mono { font-family: var(--al-mono); font-size: 12px; }
+.apilog-num { text-align: right; font-variant-numeric: tabular-nums; }
+.apilog-icon { width: 14px; height: 14px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ---------- Buttons / fields ---------- */
+.apilog-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 32px; padding: 0 12px; border: 1px solid transparent; border-radius: var(--al-radius-sm);
+  background: transparent; cursor: pointer; white-space: nowrap; font-weight: 500;
+  transition: background-color .12s, border-color .12s, color .12s;
+}
+.apilog-btn:focus-visible, .apilog-field input:focus-visible, .apilog-pager select:focus-visible,
+.apilog-table tbody tr:focus-visible, .apilog-tab:focus-visible, .apilog-resizer:focus-visible { outline: none; box-shadow: var(--al-focus); }
+.apilog-btn:disabled { opacity: .5; cursor: not-allowed; }
+.apilog-btn--primary { background: var(--al-primary); border-color: var(--al-primary); color: #fff; }
+.apilog-btn--primary:hover:not(:disabled) { background: var(--al-primary-hover); border-color: var(--al-primary-hover); }
+.apilog-btn--secondary { background: var(--al-surface); border-color: var(--al-border-strong); color: var(--al-text); }
+.apilog-btn--secondary:hover:not(:disabled) { background: var(--al-surface-alt); border-color: var(--al-faint); }
+.apilog-btn--ghost { color: var(--al-muted); }
+.apilog-btn--ghost:hover:not(:disabled) { background: var(--al-neutral-soft); color: var(--al-text); }
+.apilog-btn--sm { height: 26px; padding: 0 8px; font-size: 12px; }
+.apilog-btn--icon { width: 28px; height: 28px; padding: 0; }
+.apilog-btn--link { height: auto; padding: 0; color: var(--al-primary); }
+.apilog-btn--link:hover { text-decoration: underline; }
+
+.apilog-card { background: var(--al-surface); border: 1px solid var(--al-border); border-radius: var(--al-radius); box-shadow: var(--al-shadow); }
+
+/* ---------- Chip lọc nhanh (đầu bảng) ---------- */
+.apilog-facets { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.apilog-facet {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px;
+  border: 1px solid var(--al-border-strong); border-radius: 999px; background: var(--al-surface);
+  color: var(--al-text); font-size: 12px; cursor: pointer; white-space: nowrap; transition: background-color .12s, border-color .12s;
+}
+.apilog-facet:hover { background: var(--al-surface-alt); border-color: var(--al-faint); }
+.apilog-facet:focus-visible { outline: none; box-shadow: var(--al-focus); }
+.apilog-facet[aria-pressed="true"] { background: var(--al-primary-soft); border-color: var(--al-primary); color: var(--al-primary); }
+.apilog-facet__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--al-faint); }
+.apilog-facet--success .apilog-facet__dot { background: var(--al-success); }
+.apilog-facet--warning .apilog-facet__dot { background: var(--al-warning); }
+.apilog-facet--danger .apilog-facet__dot { background: var(--al-danger); }
+.apilog-facet--violet .apilog-facet__dot { background: var(--al-violet); }
+.apilog-facet__count { font-weight: 600; font-variant-numeric: tabular-nums; }
+.apilog-facets.is-loading .apilog-facet__count { color: var(--al-faint); }
+
+/* ---------- Filter ---------- */
+.apilog-filter { padding: 12px 14px; }
+.apilog-filter__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 12px; align-items: end; }
+.apilog-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.apilog-field--wide { grid-column: span 2; }
+.apilog-field label { font-size: 12px; font-weight: 500; color: var(--al-muted); }
+.apilog-field input {
+  width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--al-border-strong); border-radius: var(--al-radius-sm);
+  background: var(--al-surface); transition: border-color .12s, box-shadow .12s;
+}
+.apilog-field input::placeholder { color: var(--al-faint); }
+.apilog-field input:hover { border-color: var(--al-faint); }
+.apilog-field input:focus { border-color: var(--al-primary); }
+.apilog-field input[aria-invalid="true"] { border-color: var(--al-danger); background: #fffafa; }
+.apilog-filter__actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; grid-column: span 3; }
+.apilog-filter__loaded { font-size: 12px; white-space: nowrap; }
+.apilog-filter__error { margin: 8px 0 0; color: var(--al-danger); font-size: 12px; }
+.apilog-filter__error:empty { display: none; }
+
+/* ---------- Main layout ---------- */
+.apilog-main { position: relative; display: flex; align-items: stretch; flex: 1 1 auto; min-height: 340px; }
+.apilog-list { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.apilog-list__head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 8px 14px; border-bottom: 1px solid var(--al-border); min-height: 44px; }
+.apilog-list__meta { display: flex; align-items: center; gap: 12px; font-size: 12px; white-space: nowrap; }
+.apilog-list__count { font-weight: 600; font-size: 13px; }
+.apilog-list__scroll { position: relative; flex: 1 1 auto; overflow: auto; min-height: 180px; }
+.apilog:not(.is-fitted) .apilog-list__scroll { max-height: 70vh; }
+.apilog-list.is-loading .apilog-list__head { background-image: linear-gradient(90deg, transparent, var(--al-primary-soft), transparent); background-size: 40% 100%; background-repeat: no-repeat; animation: apilog-slide 1.1s linear infinite; }
+.apilog-list.is-loading tbody { opacity: .55; }
+
+.apilog-resizer { flex: 0 0 12px; cursor: col-resize; position: relative; }
+.apilog-resizer::after { content: ''; position: absolute; top: 40%; bottom: 40%; left: 5px; width: 2px; border-radius: 2px; background: var(--al-border-strong); }
+.apilog-resizer:hover::after, .apilog-resizer.is-dragging::after { top: 0; bottom: 0; background: var(--al-primary); }
+.apilog-detail { display: flex; flex-direction: column; flex: 0 0 var(--al-detail-width); min-width: 340px; max-width: 70%; overflow: hidden; }
+.apilog.is-detail-closed .apilog-detail, .apilog.is-detail-closed .apilog-resizer { display: none; }
+.apilog-backdrop { display: none; }
+
+/* ---------- Table ---------- */
+.apilog-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.apilog-table th, .apilog-table td { padding: 0 12px; height: 40px; border-bottom: 1px solid var(--al-border); text-align: left; white-space: nowrap; vertical-align: middle; }
+.apilog-table th { position: sticky; top: 0; z-index: 1; height: 36px; background: var(--al-surface-alt); color: var(--al-muted); font-size: 12px; font-weight: 600; }
+.apilog-table th.apilog-num, .apilog-table td.apilog-num { text-align: right; }
+.apilog-table tbody tr { cursor: pointer; }
+.apilog-table tbody tr:hover td { background: #f6f8fb; }
+.apilog-table tbody tr.is-selected td { background: var(--al-primary-soft); }
+.apilog-table tbody tr.is-selected td:first-child { box-shadow: inset 3px 0 0 var(--al-primary); }
+.apilog-table tbody tr:last-child td { border-bottom-color: transparent; }
+.apilog-col-path { width: 40%; }
+.apilog-cell-time { font-variant-numeric: tabular-nums; color: var(--al-text); }
+.apilog-cell-time small { color: var(--al-faint); }
+.apilog-cell-path { max-width: 1px; overflow: hidden; text-overflow: ellipsis; font-family: var(--al-mono); font-size: 12px; }
+.apilog-cell-user { max-width: 160px; overflow: hidden; text-overflow: ellipsis; }
+.apilog-dash { color: var(--al-faint); }
+.apilog-slow { color: var(--al-warning); font-weight: 600; }
+.apilog-row-btn { opacity: .85; }
+.apilog-table tbody tr:hover .apilog-row-btn, .apilog-table tbody tr.is-selected .apilog-row-btn { opacity: 1; }
+
+.apilog-skel td { cursor: default; }
+.apilog-skel span { display: block; height: 10px; border-radius: 4px; background: linear-gradient(90deg, #eef1f5 25%, #e2e7ee 37%, #eef1f5 63%); background-size: 400% 100%; animation: apilog-shimmer 1.4s ease infinite; }
+
+.apilog-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 40px 16px; text-align: center; color: var(--al-muted); }
+.apilog-state__icon { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--al-neutral-soft); color: var(--al-neutral); }
+.apilog-state__icon .apilog-icon { width: 18px; height: 18px; }
+.apilog-state--error .apilog-state__icon { background: var(--al-danger-soft); color: var(--al-danger); }
+.apilog-state--lock .apilog-state__icon { background: var(--al-warning-soft); color: var(--al-warning); }
+.apilog-state__title { color: var(--al-text); font-weight: 600; font-size: 14px; }
+
+/* ---------- Badges ---------- */
+.apilog-badge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 8px; border-radius: 999px; font-size: 11.5px; font-weight: 600; line-height: 1; white-space: nowrap; border: 1px solid transparent; }
+.apilog-badge .apilog-icon { width: 11px; height: 11px; stroke-width: 2.6; }
+.apilog-method { min-width: 52px; justify-content: center; border-radius: 4px; font-family: var(--al-mono); letter-spacing: .02em; }
+.apilog-method--get { color: var(--al-info); background: var(--al-info-soft); }
+.apilog-method--post { color: var(--al-success); background: var(--al-success-soft); }
+.apilog-method--put { color: var(--al-warning); background: var(--al-warning-soft); }
+.apilog-method--patch { color: var(--al-violet); background: var(--al-violet-soft); }
+.apilog-method--delete { color: var(--al-danger); background: var(--al-danger-soft); }
+.apilog-method--other { color: var(--al-neutral); background: var(--al-neutral-soft); }
+.apilog-status { font-variant-numeric: tabular-nums; }
+.apilog-tone--success { color: var(--al-success); background: var(--al-success-soft); }
+.apilog-tone--info { color: var(--al-info); background: var(--al-info-soft); }
+.apilog-tone--warning { color: var(--al-warning); background: var(--al-warning-soft); }
+.apilog-tone--danger { color: var(--al-danger); background: var(--al-danger-soft); }
+.apilog-tone--neutral { color: var(--al-neutral); background: var(--al-neutral-soft); }
+.apilog-result { border-radius: 4px; font-family: var(--al-mono); font-weight: 500; background: transparent; border-color: currentColor; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.apilog-result.apilog-tone--neutral { border-color: var(--al-border-strong); }
+
+/* ---------- Pager ---------- */
+.apilog-pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 14px; border-top: 1px solid var(--al-border); font-size: 12px; }
+.apilog-pager__nav { display: flex; align-items: center; gap: 4px; }
+.apilog-page { min-width: 28px; height: 28px; padding: 0 6px; border: 1px solid transparent; border-radius: var(--al-radius-sm); background: transparent; cursor: pointer; font-variant-numeric: tabular-nums; }
+.apilog-page:hover:not(:disabled) { background: var(--al-neutral-soft); }
+.apilog-page[aria-current="page"] { background: var(--al-primary); color: #fff; font-weight: 600; }
+.apilog-page:disabled { opacity: .4; cursor: default; }
+.apilog-page:focus-visible { outline: none; box-shadow: var(--al-focus); }
+.apilog-pager__gap { padding: 0 4px; color: var(--al-faint); }
+.apilog-pager__size { display: inline-flex; align-items: center; gap: 6px; color: var(--al-muted); }
+.apilog-pager select { height: 28px; padding: 0 6px; border: 1px solid var(--al-border-strong); border-radius: var(--al-radius-sm); background: var(--al-surface); }
+
+/* ---------- Detail ---------- */
+.apilog-detail__head { padding: 12px 14px 10px; border-bottom: 1px solid var(--al-border); }
+.apilog-detail__title { display: flex; align-items: flex-start; gap: 8px; }
+.apilog-detail__path { flex: 1; min-width: 0; margin: 0; font-family: var(--al-mono); font-size: 13px; font-weight: 600; word-break: break-all; line-height: 20px; }
+.apilog-detail__sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 8px; color: var(--al-muted); font-size: 12px; }
+.apilog-tabs { display: flex; gap: 0; padding: 0 6px; border-bottom: 1px solid var(--al-border); overflow-x: auto; flex: none; }
+.apilog-tab { position: relative; height: 38px; padding: 0 9px; border: 0; background: transparent; color: var(--al-muted); cursor: pointer; white-space: nowrap; font-weight: 500; }
+.apilog-tab:hover { color: var(--al-text); }
+.apilog-tab[aria-selected="true"] { color: var(--al-primary); }
+.apilog-tab[aria-selected="true"]::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; border-radius: 2px; background: var(--al-primary); }
+.apilog-tab__dot { display: inline-block; width: 6px; height: 6px; margin-left: 5px; border-radius: 50%; background: var(--al-danger); vertical-align: middle; }
+.apilog-detail__body { flex: 1 1 auto; overflow: auto; padding: 14px; }
+.apilog-detail__placeholder { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; color: var(--al-muted); }
+
+.apilog-section { margin: 0 0 16px; }
+.apilog-section:last-child { margin-bottom: 0; }
+.apilog-section__title { margin: 0 0 8px; font-size: 12px; font-weight: 600; color: var(--al-muted); text-transform: uppercase; letter-spacing: .04em; }
+.apilog-dl { display: grid; grid-template-columns: minmax(110px, 34%) 1fr; margin: 0; border: 1px solid var(--al-border); border-radius: var(--al-radius-sm); overflow: hidden; }
+.apilog-dl dt, .apilog-dl dd { margin: 0; padding: 7px 10px; border-bottom: 1px solid var(--al-border); }
+.apilog-dl dt { color: var(--al-muted); background: var(--al-surface-alt); }
+.apilog-dl dd { min-width: 0; word-break: break-word; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.apilog-dl dd > .apilog-mono { flex: 0 1 auto; min-width: 0; word-break: break-all; }
+.apilog-dl dt:last-of-type, .apilog-dl dd:last-of-type { border-bottom: 0; }
+.apilog-note { margin: 0 0 10px; padding: 8px 10px; border-radius: var(--al-radius-sm); background: var(--al-surface-alt); border: 1px solid var(--al-border); color: var(--al-muted); font-size: 12px; }
+.apilog-note--warning { background: var(--al-warning-soft); border-color: #f3d9b1; color: #7a3d05; }
+.apilog-note--danger { background: var(--al-danger-soft); border-color: #f5c6c2; color: #8f1d14; }
+.apilog-note--success { background: var(--al-success-soft); border-color: #bfe5cd; color: #105c2d; }
+.apilog-list-plain { margin: 0; padding: 0; list-style: none; }
+.apilog-list-plain li { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--al-border); }
+.apilog-list-plain li:last-child { border-bottom: 0; }
+
+/* ---------- JSON viewer ---------- */
+.apilog-code { border: 1px solid var(--al-border); border-radius: var(--al-radius-sm); overflow: hidden; }
+.apilog-code__bar { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; background: var(--al-surface-alt); border-bottom: 1px solid var(--al-border); }
+.apilog-code__title { flex: 1; min-width: 0; font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apilog-code__meta { color: var(--al-faint); font-size: 11.5px; font-weight: 400; margin-left: 6px; }
+.apilog-code pre { margin: 0; padding: 10px 12px; max-height: 520px; overflow: auto; font-family: var(--al-mono); font-size: 12px; line-height: 1.55; white-space: pre; tab-size: 2; background: #fbfcfe; color: var(--al-text); }
+.apilog-code.is-wrap pre { white-space: pre-wrap; word-break: break-all; }
+.apilog-code__empty { padding: 12px; color: var(--al-muted); font-size: 12px; }
+.apilog-j-key { color: #0b4f8a; }
+.apilog-j-str { color: #0a7339; }
+.apilog-j-num { color: #a14a00; }
+.apilog-j-lit { color: #6d28d9; }
+.apilog-j-mask { color: var(--al-danger); font-weight: 600; }
+.apilog-j-pun { color: #6b7686; }
+
+/* ---------- Toast ---------- */
+.apilog-toast { position: fixed; right: 20px; bottom: 56px; z-index: 400002; padding: 8px 12px; border-radius: var(--al-radius-sm); background: #17212e; color: #fff; font-size: 12px; box-shadow: 0 4px 12px rgba(16, 24, 40, .2); }
+
+@keyframes apilog-shimmer { 0% { background-position: 100% 50%; } 100% { background-position: 0 50%; } }
+@keyframes apilog-slide { 0% { background-position: -40% 0; } 100% { background-position: 140% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .apilog-skel span, .apilog-list.is-loading .apilog-list__head { animation: none; }
+}
+
+/* ---------- Responsive ---------- */
+/* Tablet / cửa sổ hẹp: panel chi tiết thành drawer phủ bên phải */
+@media (max-width: 1199px) {
+  .apilog-resizer { display: none; }
+  .apilog-detail {
+    position: fixed; top: 0; right: 0; bottom: 0; z-index: 400001; width: min(600px, 100%); max-width: 100%; min-width: 0;
+    border-radius: 0; border-width: 0 0 0 1px; box-shadow: -8px 0 24px rgba(16, 24, 40, .12);
+  }
+  .apilog.is-detail-closed .apilog-detail { display: none; }
+  .apilog-backdrop { display: block; position: fixed; inset: 0; z-index: 400000; background: rgba(15, 23, 42, .35); }
+  .apilog.is-detail-closed .apilog-backdrop { display: none; }
+}
+@media (max-width: 767px) {
+  .apilog { padding: 10px; gap: 10px; }
+  .apilog-filter__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .apilog-field--wide, .apilog-filter__actions { grid-column: 1 / -1; }
+  .apilog-filter__actions .apilog-btn { flex: 1; }
+  .apilog-table { min-width: 760px; }
+  .apilog-pager { justify-content: center; }
+}

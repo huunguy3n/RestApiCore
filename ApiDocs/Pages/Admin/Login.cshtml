@@ -1,0 +1,38 @@
+@page
+@model ApiDocs.Pages.Admin.LoginModel
+@{
+    Layout = null;
+    ViewData["Title"] = "Đăng nhập";
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Đăng nhập - Fast API Portal</title>
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+</head>
+<body class="adm adm--login">
+    <main class="adm__card">
+        <h1 class="adm__title">Fast API Portal</h1>
+        <p class="adm__crumb">Đăng nhập tài khoản nội bộ hoặc khách hàng</p>
+        @if (Model.Flash != null)
+        {
+            <p class="adm__ok" role="status">@Model.Flash</p>
+        }
+        @if (Model.Message != null)
+        {
+            <p class="adm__alert" role="alert">@Model.Message</p>
+        }
+        <form method="post" autocomplete="on">
+            <input type="hidden" name="returnUrl" value="@Model.ReturnUrl" />
+            <label for="Login">Tài khoản</label>
+            <input id="Login" name="Login" asp-for="Login" maxlength="64" autocomplete="username" required autofocus />
+            <label for="Password">Mật khẩu</label>
+            <input id="Password" name="Password" asp-for="Password" type="password" maxlength="256" autocomplete="current-password" required />
+            <button type="submit" class="adm__btn">Đăng nhập</button>
+        </form>
+    </main>
+</body>
+</html>

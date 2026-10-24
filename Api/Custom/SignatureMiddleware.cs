@@ -41,7 +41,10 @@ namespace Web.Custom
         public static bool PortalMayCall(HttpContext context) =>
             HttpMethods.IsGet(context.Request.Method)
             && context.Request.Path.StartsWithSegments("/api/_meta", StringComparison.OrdinalIgnoreCase)
-            && !context.Request.Path.StartsWithSegments("/api/_meta/ping", StringComparison.OrdinalIgnoreCase);
+            && !context.Request.Path.StartsWithSegments("/api/_meta/ping", StringComparison.OrdinalIgnoreCase)
+            // Quản trị portal: quyền kiểm theo vai trò ở từng handler (PortalAdminEndpoints), không ở đây
+            || (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsPut(context.Request.Method))
+            && context.Request.Path.StartsWithSegments(PortalAdminEndpoints.BasePath, StringComparison.OrdinalIgnoreCase);
 
         public async Task Invoke(HttpContext context)
         {

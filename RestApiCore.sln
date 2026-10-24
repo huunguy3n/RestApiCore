@@ -27,6 +27,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cli", "Cli\Cli.csproj", "{7
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gui", "Gui\Gui.csproj", "{DCC820E1-9CC2-4719-9ADC-6157269DD0A7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FboWeb", "FboWeb\FboWeb.csproj", "{4355B9F3-D548-46F5-832F-00325B16E485}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -181,6 +183,18 @@ Global
 		{DCC820E1-9CC2-4719-9ADC-6157269DD0A7}.Release|x64.Build.0 = Release|Any CPU
 		{DCC820E1-9CC2-4719-9ADC-6157269DD0A7}.Release|x86.ActiveCfg = Release|Any CPU
 		{DCC820E1-9CC2-4719-9ADC-6157269DD0A7}.Release|x86.Build.0 = Release|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Debug|x64.Build.0 = Debug|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Debug|x86.Build.0 = Debug|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Release|x64.ActiveCfg = Release|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Release|x64.Build.0 = Release|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Release|x86.ActiveCfg = Release|Any CPU
+		{4355B9F3-D548-46F5-832F-00325B16E485}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

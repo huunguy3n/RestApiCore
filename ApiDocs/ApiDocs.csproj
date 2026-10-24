@@ -7,6 +7,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Control plane (trang /Admin): DB portal riêng, băm mật khẩu, danh mục quyền -->
+    <ProjectReference Include="..\Provider\Provider.csproj" />
+    <ProjectReference Include="..\Security\Security.csproj" />
+    <ProjectReference Include="..\Models\Models.csproj" />
+    <ProjectReference Include="..\Business\Business.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Code mẫu cho đối tác tải về, không biên dịch vào portal -->
     <Compile Remove="wwwroot\**" />
   </ItemGroup>

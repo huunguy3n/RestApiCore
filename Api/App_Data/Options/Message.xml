@@ -3,6 +3,7 @@
 <messages xmlns="urn:schemas-fast-com:data-message">
 	<message code="ACCESS_DENIED" success="0" httpStatusCode="403" httpMessage="You do not have permission to access on this server"/>
 	<message code="EXCEPTION" success="0" httpStatusCode="500" httpMessage="Exception"/>
+	<message code="EMPTY_ALLOW_LIST" success="0" httpStatusCode="400" httpMessage="Form list must not be empty: an empty allow-list would grant access to every form"/>
 	<message code="FORBIDDEN" success="0" httpStatusCode="403" httpMessage="You do not have permission to access this resource"/>
 	<message code="INVALID_FIELD" success="0" httpStatusCode="400" httpMessage="Field {0} does not satisfy the conditions ({1})"/>
 	<message code="INVALID_FIELD_IRREGULAR" success="0" httpStatusCode="400" httpMessage="The {0} field contains special characters"/>

@@ -49,7 +49,17 @@ namespace Web.Custom
             // Nghiệp vụ (Business)
             services.AddSingleton<ResponseManager>();
             services.AddSingleton<IIpAccessManager, IpAccessManager>();
-            services.AddSingleton<ISignerKeyStore, SignerKeyStore>();
+            services.AddSingleton<SignerKeyStore>();
+            services.AddSingleton<ISignerKeyStore>(provider => provider.GetRequiredService<SignerKeyStore>());
+            services.AddSingleton<ISignerCacheInvalidator>(provider => provider.GetRequiredService<SignerKeyStore>());
+            // Quản trị portal: vai trò/quyền chi tiết, quyền form, nhật ký quản trị (sql/008)
+            services.AddSingleton<IPortalAccessRepository, PortalAccessRepository>();
+            services.AddSingleton<PortalAuthorizationService>();
+            services.AddSingleton<FormPermissionService>();
+            services.AddSingleton<UserAdminService>();
+            services.AddSingleton<IRequestLogReader, LogViewRepository>();
+            services.AddSingleton<RequestLogViewService>();
+            services.AddSingleton<IFormCatalogProvider>(provider => provider.GetRequiredService<FormRuntime>());
             services.AddSingleton<NonceStore>();
             services.AddSingleton<IRevokedTokenStore, RevokedTokenStore>();
             services.AddSingleton<LoginLockout>();

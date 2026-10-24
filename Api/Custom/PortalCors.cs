@@ -45,7 +45,7 @@ namespace Web.Custom
         {
             // Không AllowCredentials: JWT đi bằng header Authorization, không dùng cookie
             policy.WithOrigins(origins.Select(o => o.Trim().TrimEnd('/')).Where(o => o.Length > 0).ToArray())
-                .WithMethods("GET", "POST")
+                .WithMethods("GET", "POST", "PUT")
                 .WithHeaders(AllowedHeaders)
                 .WithExposedHeaders(ExposedHeaders)
                 .SetPreflightMaxAge(TimeSpan.FromMinutes(10));

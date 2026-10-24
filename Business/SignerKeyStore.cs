@@ -35,7 +35,7 @@ namespace Business
     /// <summary>
     /// Tra restApi_GetUserRights, giải private_key bằng PrivateKeyProtector, cache HybridCache userCacheSeconds
     /// </summary>
-    public class SignerKeyStore(AppConfig appConfig, HybridCache cache, PrivateKeyProtector protector, IUserRightsRepository users, ILogger<SignerKeyStore> logger) : ISignerKeyStore
+    public class SignerKeyStore(AppConfig appConfig, HybridCache cache, PrivateKeyProtector protector, IUserRightsRepository users, ILogger<SignerKeyStore> logger) : ISignerKeyStore, ISignerCacheInvalidator
     {
         public const string CacheTag = "signer-keys";
 

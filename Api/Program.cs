@@ -169,6 +169,7 @@ app.MapGet("/api/_meta/server", (TimeProvider time) => Results.Json(new
 }));
 app.MapAuth();
 app.MapPortal();
+app.MapPortalAdmin();
 app.MapPost("/api/_meta/ping", (HttpContext context, TimeProvider time) =>
 {
     var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;
