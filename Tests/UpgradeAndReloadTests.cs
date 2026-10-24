@@ -10,32 +10,32 @@ namespace Tests
     {
         private static readonly Dictionary<string, ControllerLookup> Controllers = new(StringComparer.OrdinalIgnoreCase)
         {
-            ["Customer"] = new("dmkh", "ma_kh"),
+            ["customer"] = new("dmkh", "ma_kh"),
             ["Item"] = new("dmvt", "ma_vt")
         };
 
         private const string V2Form = """
             <form type="Voucher" id="HDA" xmlns="urn:schemas-fast-com:rest-api">
               <struct name="master" baseTable="m81$000000">
-                <field name="YourID" mapping="id_doitac" maxLength="36" isPrimaryKey="true" allowNulls="false"/>
-                <field name="VoucherDate" mapping="ngay_ct" type="DateTime" dataFormatString="dd/MM/yyyy" allowNulls="false"/>
-                <field name="CustomerID" mapping="customer_id" maxLength="36" allowNulls="false">
-                  <reference name="ma_kh" controller="Customer" index="0"/>
+                <field name="yourId" mapping="id_doitac" maxLength="36" isPrimaryKey="true" allowNulls="false"/>
+                <field name="voucherDate" mapping="ngay_ct" type="DateTime" dataFormatString="dd/MM/yyyy" allowNulls="false"/>
+                <field name="customerId" mapping="customer_id" maxLength="36" allowNulls="false">
+                  <reference name="ma_kh" controller="customer" index="0"/>
                 </field>
-                <field name="Salesman" mapping="nv_id"><reference name="ma_nvbh" controller="Employee" index="0"/></field>
+                <field name="salesman" mapping="nv_id"><reference name="ma_nvbh" controller="Employee" index="0"/></field>
                 <field name="ma_kh" mapping="" hidden="true"/>
-                <field name="Flag" mapping="" type="Boolean"/>
+                <field name="flag" mapping="" type="Boolean"/>
               </struct>
               <struct name="detail" baseTable="d81$000000">
-                <field name="YourID" mapping="id_doitac" maxLength="36" allowNulls="false"/>
-                <field name="ItemID" mapping="item_id"><reference name="ma_vt" controller="Item" index="1"/></field>
+                <field name="yourId" mapping="id_doitac" maxLength="36" allowNulls="false"/>
+                <field name="itemId" mapping="item_id"><reference name="ma_vt" controller="Item" index="1"/></field>
                 <field name="ma_vt" mapping="" hidden="true"/>
-                <field name="Promotion" mapping="km_yn" type="Int" defaultValue="0">
+                <field name="promotion" mapping="km_yn" type="Int" defaultValue="0">
                   <check condition="km_yn not in (0, 1)" errorCode="INVALID_FIELD" index="1"/>
                   <check condition="km_yn = 1 and so_luong = 0" errorCode="PROMOTION_QTY" index="1"/>
                 </field>
-                <field name="Quantity" mapping="so_luong" type="Decimal"/>
-                <field name="Note" mapping="ghi_chu" type="Money"/>
+                <field name="quantity" mapping="so_luong" type="Decimal"/>
+                <field name="note" mapping="ghi_chu" type="Money"/>
               </struct>
               <queries>
                 <query action="Checking"><text>@@update(0) @@checking(0) @@update(1) @@checking(1)</text></query>
@@ -58,7 +58,7 @@ namespace Tests
             Assert.True(result.Valid);
             Assert.Equal(ImportFormType.Voucher, form.Type);
             Assert.Equal("HDA", form.VoucherCode);
-            Assert.Equal("YourID", form.Root.Key);
+            Assert.Equal("yourId", form.Root.Key);
             Assert.Equal("m81$000000", form.Root.Table);
         }
 
@@ -67,7 +67,7 @@ namespace Tests
         {
             var (form, result) = Upgrade();
 
-            ImportField customer = form.Root.Fields.Single(f => f.Name == "CustomerID");
+            ImportField customer = form.Root.Fields.Single(f => f.Name == "customerId");
             Assert.Equal("ma_kh", customer.FastName);
             Assert.True(customer.UpperCase);
             Assert.Null(customer.MaxLength);
@@ -82,7 +82,7 @@ namespace Tests
         {
             var (form, result) = Upgrade();
 
-            ImportField salesman = form.Root.Fields.Single(f => f.Name == "Salesman");
+            ImportField salesman = form.Root.Fields.Single(f => f.Name == "salesman");
             Assert.Equal("ma_nvbh", salesman.FastName);
             Assert.Empty(salesman.Checks);
             Assert.Contains(result.Notes, n => n.Contains("controller 'Employee'"));
@@ -94,15 +94,15 @@ namespace Tests
             var (form, result) = Upgrade();
             ImportBlock detail = form.Blocks[1];
 
-            Assert.True(detail.Fields[0].IsInheritedKey, "YourID của khối con do v3 tự thêm");
-            ImportField promotion = detail.Fields.Single(f => f.Name == "Promotion");
+            Assert.True(detail.Fields[0].IsInheritedKey, "yourId của khối con do v3 tự thêm");
+            ImportField promotion = detail.Fields.Single(f => f.Name == "promotion");
             Assert.Equal(["INVALID_FIELD", "PROMOTION_QTY"], promotion.Checks.Select(c => c.ErrorCode));
             Assert.Equal(1, promotion.Category);
             Assert.Equal(ImportFieldType.Int, promotion.Type);
             Assert.Equal("0", promotion.DefaultValue);
-            Assert.Equal(ImportFieldType.Numeric, detail.Fields.Single(f => f.Name == "Quantity").Type);
+            Assert.Equal(ImportFieldType.Numeric, detail.Fields.Single(f => f.Name == "quantity").Type);
             Assert.Contains(result.Notes, n => n.Contains("'Money'"));
-            Assert.Contains(result.Notes, n => n.Contains("Flag: v2 không có mapping"));
+            Assert.Contains(result.Notes, n => n.Contains("flag: v2 không có mapping"));
         }
 
         [Fact]
@@ -123,19 +123,19 @@ namespace Tests
         {
             var controllers = V2FormUpgrader.ReadControllers(XDocument.Parse("""
                 <update xmlns="urn:schemas-fast-com:data-update">
-                  <controller name="Customer"><text>--update @@table set @@reference = b.ma_kh from @@table a join dmkh b with(nolock) on a.@@field = b.id_doitac</text></controller>
-                  <controller name="Lot"><text>update @@table set @@reference = b.ma_lo from @@table a join dmlo b on a.@@field = b.id_doitac</text></controller>
-                  <controller name="Odd"><text>select 1</text></controller>
+                  <controller name="customer"><text>--update @@table set @@reference = b.ma_kh from @@table a join dmkh b with(nolock) on a.@@field = b.id_doitac</text></controller>
+                  <controller name="lot"><text>update @@table set @@reference = b.ma_lo from @@table a join dmlo b on a.@@field = b.id_doitac</text></controller>
+                  <controller name="odd"><text>select 1</text></controller>
                 </update>
                 """));
 
             Assert.Equal(new ControllerLookup("dmkh", "ma_kh"), controllers["customer"]);
-            Assert.Equal(new ControllerLookup("dmlo", "ma_lo"), controllers["Lot"]);
-            Assert.False(controllers.ContainsKey("Odd"));
+            Assert.Equal(new ControllerLookup("dmlo", "ma_lo"), controllers["lot"]);
+            Assert.False(controllers.ContainsKey("odd"));
         }
 
         [Theory]
-        [InlineData("Customer", "CUSTOMER_NOT_FOUND")]
+        [InlineData("customer", "CUSTOMER_NOT_FOUND")]
         [InlineData("SaleEmployee", "SALE_EMPLOYEE_NOT_FOUND")]
         public void ErrorCodeOf(string controller, string code)
         {
@@ -153,7 +153,7 @@ namespace Tests
     {
         private const string Form = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="List">
-              <fields name="master"><field name="A" fastName="a"/></fields>
+              <fields name="master"><field name="a" fastName="a"/></fields>
               <query><text>select 1</text></query>
             </import>
             """;

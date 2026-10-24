@@ -1,4 +1,4 @@
-using Business;
+﻿using Business;
 using Newtonsoft.Json;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
@@ -38,7 +38,7 @@ namespace Web.Custom
                 code = "SUCCESS",
                 success = true,
                 message = "",
-                request_id = context.Items["requestID"]?.ToString(),
+                requestId = context.Items["requestID"]?.ToString(),
                 accessToken = token.AccessToken,
                 tokenType = "Bearer",
                 expiresIn = token.ExpiresIn

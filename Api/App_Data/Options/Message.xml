@@ -41,6 +41,8 @@
 	<message code="VALUE_TOO_LONG" success="0" httpStatusCode="400" httpMessage="Field value is longer than allowed"/>
 	<message code="CURSOR_EXPIRED" success="0" httpStatusCode="404" httpMessage="Cursor has expired or does not belong to this request, send the first request again"/>
 	<message code="PAGE_OUT_OF_RANGE" success="0" httpStatusCode="400" httpMessage="page is out of range"/>
+	<message code="INVALID_FIELD_NAME" success="0" httpStatusCode="400" httpMessage="Property name must match the declared name exactly (case-sensitive)"/>
+	<message code="INVALID_RESPONSE_FORMAT" success="0" httpStatusCode="500" httpMessage="Processing query returned table or column names that are not camelCase"/>
 	<message code="RESULT_TOO_LARGE" success="0" httpStatusCode="500" httpMessage="Result is too large, the form must declare paging"/>
 	<message code="INVALID_KID" success="0" httpStatusCode="400" httpMessage="kid does not match the current portal key, fetch /api/_meta/server again"/>
 	<message code="INVALID_CREDENTIAL" success="0" httpStatusCode="401" httpMessage="Invalid user name or password"/>

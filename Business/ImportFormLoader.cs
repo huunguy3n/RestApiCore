@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+﻿using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
 using Models;
@@ -108,6 +108,18 @@ namespace Business
 
             List<string> warnings = [];
 
+            // Quy ước đặt tên khai ở <import>; mặc định và giá trị duy nhất được hỗ trợ: JSON camelCase, cột SQL snake_case
+            string jsonNaming = Attr(root, "jsonNaming") is { Length: > 0 } json ? json : NamingConvention.CamelCase;
+            string columnNaming = Attr(root, "columnNaming") is { Length: > 0 } column ? column : NamingConvention.SnakeCase;
+            if (jsonNaming != NamingConvention.CamelCase)
+            {
+                throw new ImportFormException(name, $"jsonNaming '{jsonNaming}' phải là {NamingConvention.CamelCase}");
+            }
+            if (columnNaming != NamingConvention.SnakeCase)
+            {
+                throw new ImportFormException(name, $"columnNaming '{columnNaming}' phải là {NamingConvention.SnakeCase}");
+            }
+
             ImportFormType type = ParseEnum<ImportFormType>(name, root, "type");
             string unitAction = Attr(root, "unitAction") is { Length: > 0 } action ? action : DefaultUnitAction(verb);
             if (unitAction is not ("Acc" or "New" or "Edit" or "Del"))
@@ -142,9 +154,9 @@ namespace Business
             {
                 int pageSize = ParseInt(name, pagingElement, "pageSize") ?? throw new ImportFormException(name, "paging thiếu pageSize");
                 string pagingKey = Attr(pagingElement, "key");
-                if (pageSize <= 0 || !Identifier().IsMatch(pagingKey))
+                if (pageSize <= 0 || !NamingConvention.IsCamelCase(pagingKey))
                 {
-                    throw new ImportFormException(name, "paging cần pageSize > 0 và key là tên cột hợp lệ");
+                    throw new ImportFormException(name, "paging cần pageSize > 0 và key là tên cột camelCase của dữ liệu trả về");
                 }
                 paging = new ImportPaging(pageSize, pagingKey);
             }
@@ -172,6 +184,8 @@ namespace Business
                 UnitAction = unitAction,
                 Enable = ParseBool(name, root, "enable", true),
                 Description = Attr(root, "description"),
+                JsonNaming = jsonNaming,
+                ColumnNaming = columnNaming,
                 Blocks = blocks,
                 CheckingQuery = checking,
                 ProcessingQuery = queries["processing"],
@@ -198,9 +212,9 @@ namespace Business
                 XElement element = elements[i];
                 bool isRoot = i == 0;
                 string blockName = Attr(element, "name");
-                if (!Identifier().IsMatch(blockName) || !blockNames.Add(blockName))
+                if (!NamingConvention.IsCamelCase(blockName) || !blockNames.Add(blockName))
                 {
-                    throw new ImportFormException(name, $"tên khối '{blockName}' trống, sai dạng hoặc trùng");
+                    throw new ImportFormException(name, $"tên khối '{blockName}' trống, trùng hoặc không phải camelCase");
                 }
 
                 string key = Attr(element, "key");
@@ -262,13 +276,13 @@ namespace Business
         {
             string fieldName = Attr(element, "name");
             string fastName = Attr(element, "fastName");
-            if (!Identifier().IsMatch(fieldName))
+            if (!NamingConvention.IsCamelCase(fieldName))
             {
-                throw new ImportFormException(name, $"khối '{blockName}': tên field '{fieldName}' trống hoặc sai dạng");
+                throw new ImportFormException(name, $"khối '{blockName}': tên field '{fieldName}' trống hoặc không phải camelCase");
             }
-            if (!Identifier().IsMatch(fastName))
+            if (!NamingConvention.IsSnakeCase(fastName))
             {
-                throw new ImportFormException(name, $"{blockName}.{fieldName}: fastName '{fastName}' trống hoặc sai dạng");
+                throw new ImportFormException(name, $"{blockName}.{fieldName}: fastName '{fastName}' trống hoặc không phải snake_case");
             }
 
             int? maxLength = ParseInt(name, element, "maxLength");

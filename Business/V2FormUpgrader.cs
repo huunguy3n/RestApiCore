@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -133,6 +133,9 @@ namespace Business
             return key ?? string.Empty;
         }
 
+        /// <summary>Tên JSON v3 là camelCase: v2 hay đặt PascalCase nên hạ chữ đầu</summary>
+        private static string JsonName(string name) => name.Length > 0 ? char.ToLowerInvariant(name[0]) + name[1..] : name;
+
         private static XElement ConvertStruct(XElement source, bool isRoot, string rootKey, ref string? rootKeyMapping,
             IReadOnlyDictionary<string, ControllerLookup> controllers, List<string> notes)
         {
@@ -144,7 +147,7 @@ namespace Business
             }
             if (isRoot && rootKey.Length > 0)
             {
-                block.Add(new XAttribute("key", rootKey));
+                block.Add(new XAttribute("key", JsonName(rootKey)));
             }
 
             List<XElement> fields = Fields(source).ToList();

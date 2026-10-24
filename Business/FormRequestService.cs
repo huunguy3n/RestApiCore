@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Text.RegularExpressions;
 using Models;
 using Models.Options;
@@ -134,6 +134,13 @@ namespace Business
         /// </summary>
         private async Task<FormOutcome> CompleteAsync(ImportForm form, FormCallContext call, FormResultSet result, CancellationToken cancellationToken)
         {
+            // Dữ liệu trả ra là JSON response: không đúng camelCase thì không trả (query processing tự đặt alias đúng)
+            if (result.FormatProblems.Count > 0)
+            {
+                return new FormFailed("INVALID_RESPONSE_FORMAT",
+                    $"Query processing của form {form.Name} phải trả tên bảng và cột camelCase: {string.Join(", ", result.FormatProblems.Take(10))}");
+            }
+
             string message = result.Message.Length == 0 && options.Messages.Get(result.Code) is Message known ? known.message : result.Message;
 
             if (result.IsSuccess && form.Paging is ImportPaging paging)

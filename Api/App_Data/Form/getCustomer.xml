@@ -1,17 +1,19 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE import [
   <!ENTITY And "&#38;#13;">
 ]>
 
 <!--
   Mẫu form v3: POST /api/customer/get
-  Body (dạng phẳng, form một khối): { "Keyword": "huy", "CustomerID": "KH001" }, cả hai đều không bắt buộc
+  JSON camelCase, cột SQL snake_case (alias cột processing trả ra phải camelCase vì thành JSON response).
+  Body (dạng phẳng, form một khối): { "keyword": "huy", "customerId": "KH001" }, cả hai đều không bắt buộc
 -->
-<import xmlns="urn:schemas-fast-com:fast-api" type="List" description="Danh mục khách hàng">
+<import xmlns="urn:schemas-fast-com:fast-api" type="List" jsonNaming="camelCase" columnNaming="snake_case"
+        description="Danh mục khách hàng">
 
   <fields name="filter">
-    <field name="Keyword" fastName="tu_khoa" maxLength="64" description="Tìm trong mã và tên khách" example="huy"/>
-    <field name="CustomerID" fastName="ma_kh" maxLength="16" upperCase="true" description="Mã khách" example="KH001"/>
+    <field name="keyword" fastName="tu_khoa" maxLength="64" description="Tìm trong mã và tên khách" example="huy"/>
+    <field name="customerId" fastName="ma_kh" maxLength="16" upperCase="true" description="Mã khách" example="KH001"/>
   </fields>
 
   <query action="processing">
@@ -25,8 +27,8 @@ SELECT @Keyword = REPLACE(REPLACE(REPLACE(@Keyword, '[', '[[]'), '%', '[%]'), '_
 
 SELECT 'SUCCESS' AS code, '' AS message, 'customers' AS tables
 
-SELECT RTRIM(a.ma_kh) AS CustomerID, a.ten_kh AS CustomerName, a.dia_chi AS Address,
-		RTRIM(a.ma_so_thue) AS TaxCode, RTRIM(a.dien_thoai) AS Phone, a.e_mail AS Email
+SELECT RTRIM(a.ma_kh) AS customerId, a.ten_kh AS customerName, a.dia_chi AS address,
+		RTRIM(a.ma_so_thue) AS taxCode, RTRIM(a.dien_thoai) AS phone, a.e_mail AS email
 	FROM dmkh a
 	WHERE a.status = '1'
 		AND (@CustomerID = '' OR a.ma_kh = @CustomerID)

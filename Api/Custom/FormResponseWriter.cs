@@ -1,4 +1,4 @@
-using Business;
+﻿using Business;
 using Models.Options;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -23,7 +23,7 @@ namespace Web.Custom
                 code = FormResultSet.Success,
                 success = true,
                 message = "",
-                request_id = RequestId(context),
+                requestId = RequestId(context),
                 dryRun = true,
                 documents = dryRun.Documents
             }),
@@ -52,7 +52,7 @@ namespace Web.Custom
                 code = completed.Code,
                 success = completed.Code == FormResultSet.Success,
                 message = completed.Message,
-                request_id = RequestId(context),
+                requestId = RequestId(context),
                 data = completed.Tables
             });
         }
@@ -67,21 +67,21 @@ namespace Web.Custom
                 ["code"] = paged.Code,
                 ["success"] = paged.Code == FormResultSet.Success,
                 ["message"] = paged.Message,
-                ["request_id"] = RequestId(context),
+                ["requestId"] = RequestId(context),
                 ["data"] = JToken.Parse(paged.DataJson),
                 ["paging"] = new JObject
                 {
                     ["cursor"] = paged.Cursor,
-                    ["page_index"] = paged.PageIndex,
-                    ["page_count"] = paged.PageCount,
-                    ["page_size"] = paged.PageSize,
-                    ["total_row_count"] = paged.TotalRowCount
+                    ["pageIndex"] = paged.PageIndex,
+                    ["pageCount"] = paged.PageCount,
+                    ["pageSize"] = paged.PageSize,
+                    ["totalRowCount"] = paged.TotalRowCount
                 }
             };
             if (paged.TransferredCount != null)
             {
                 // Form Transfer: số chứng từ của trang này đã được đánh dấu đã chuyển
-                ((JObject)response["paging"]!)["transferred_count"] = paged.TransferredCount;
+                ((JObject)response["paging"]!)["transferredCount"] = paged.TransferredCount;
             }
             return new FormResponse(200, response.ToString(Formatting.None));
         }
@@ -95,7 +95,7 @@ namespace Web.Custom
                 code = "VALIDATION_FAILED",
                 success = false,
                 message = head?.message ?? "",
-                request_id = RequestId(context),
+                requestId = RequestId(context),
                 errors = errors.Select(e => new { position = e.Position, field = e.Field, code = e.Code, message = options.Messages.Get(e.Code)?.message ?? e.Code })
             });
         }

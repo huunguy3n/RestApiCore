@@ -25,7 +25,7 @@ namespace Tests
     {
         private const long Now = 1792574400;
         private static readonly byte[] PrivateKey = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-        private static readonly byte[] Body = Encoding.UTF8.GetBytes("{\"master\":{\"YourID\":\"HD001\"}}");
+        private static readonly byte[] Body = Encoding.UTF8.GetBytes("{\"master\":{\"yourId\":\"HD001\"}}");
 
         private static readonly SignerKeys Signer = new(7, "DOITAC", true,
             MessageSignature.DeriveRequestKey(PrivateKey), MessageSignature.DeriveResponseKey(PrivateKey), 1, "ADMIN");
@@ -63,7 +63,7 @@ namespace Tests
         {
             var authenticator = Create();
             string nonce = $"{Now}-abcdefgh02";
-            byte[] tampered = Encoding.UTF8.GetBytes("{\"master\":{\"YourID\":\"HD002\"}}");
+            byte[] tampered = Encoding.UTF8.GetBytes("{\"master\":{\"yourId\":\"HD002\"}}");
 
             Assert.Equal("INVALID_SIGNATURE", authenticator.VerifySignature(Signer, tampered, nonce, Sign(nonce, Body)));
             // Request giả không làm hỏng nonce của request thật
@@ -217,14 +217,14 @@ namespace Tests
     {
         private static readonly ImportForm GetCustomer = ColumnTypeResolver.Resolve(ImportFormLoader.Parse("getCustomer", XDocument.Parse("""
             <import xmlns="urn:schemas-fast-com:fast-api" type="List">
-              <fields name="filter"><field name="Keyword" fastName="tu_khoa"/></fields>
+              <fields name="filter"><field name="keyword" fastName="tu_khoa"/></fields>
               <query><text>select 1</text></query>
             </import>
             """)), _ => null);
 
         private static readonly ImportForm SaleInvoice = ColumnTypeResolver.Resolve(ImportFormLoader.Parse("setSaleInvoice", XDocument.Parse("""
             <import xmlns="urn:schemas-fast-com:fast-api" type="Voucher" unitRequired="true">
-              <fields name="master" key="YourID"><field name="YourID" fastName="id_doitac"/></fields>
+              <fields name="master" key="yourId"><field name="yourId" fastName="id_doitac"/></fields>
               <query><text>select 1</text></query>
             </import>
             """)), _ => null);
@@ -270,7 +270,7 @@ namespace Tests
             head.Rows.Add(code, message);
             data.Tables.Add(head);
             DataTable table = new("Table1");
-            table.Columns.Add("ma_kh");
+            table.Columns.Add("customerId");
             for (int i = 0; i < rows; i++)
             {
                 table.Rows.Add($"KH{i}");

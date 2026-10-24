@@ -1,4 +1,4 @@
-using Business;
+﻿using Business;
 using DataAccess;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics;
@@ -177,8 +177,8 @@ app.MapPost("/api/_meta/ping", (HttpContext context, TimeProvider time) =>
         code = "SUCCESS",
         success = true,
         message = "",
-        request_id = context.Items["requestID"]?.ToString(),
-        data = new { u_id = signer.UId, name = signer.Name, serverTime = time.GetUtcNow().ToUnixTimeSeconds() }
+        requestId = context.Items["requestID"]?.ToString(),
+        data = new { uId = signer.UId, name = signer.Name, serverTime = time.GetUtcNow().ToUnixTimeSeconds() }
     });
 });
 // Route nghiệp vụ v3 từ App_Data/Form (route literal ở trên được ưu tiên)

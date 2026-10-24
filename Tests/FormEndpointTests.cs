@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -23,12 +23,12 @@ namespace Tests
     {
         private const string SaleInvoice = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="Voucher" voucherCode="HDA" unitRequired="true">
-              <fields name="master" key="YourID">
-                <field name="YourID" fastName="id_doitac" maxLength="10" allowNull="false"/>
-                <field name="CustomerID" fastName="ma_kh"/>
+              <fields name="master" key="yourId">
+                <field name="yourId" fastName="id_doitac" maxLength="10" allowNull="false"/>
+                <field name="customerId" fastName="ma_kh"/>
               </fields>
               <fields name="detail">
-                <field name="ItemID" fastName="ma_vt" allowNull="false"/>
+                <field name="itemId" fastName="ma_vt" allowNull="false"/>
               </fields>
               <query><text>select 1</text></query>
             </import>
@@ -36,7 +36,7 @@ namespace Tests
 
         private const string GetInvoice = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="Report">
-              <fields name="filter"><field name="Year" fastName="nam" type="int"/></fields>
+              <fields name="filter"><field name="year" fastName="nam" type="int"/></fields>
               <paging pageSize="2" key="id"/>
               <query><text>select 1</text></query>
             </import>
@@ -44,7 +44,7 @@ namespace Tests
 
         private const string TransferInvoice = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="Transfer">
-              <fields name="filter"><field name="Year" fastName="nam" type="int"/></fields>
+              <fields name="filter"><field name="year" fastName="nam" type="int"/></fields>
               <paging pageSize="2" key="id"/>
               <query><text>select 1</text></query>
               <query action="transferred"><text>update x set transfer_yn = 1 from x join #transferred b on b.id = x.id</text></query>
@@ -53,7 +53,7 @@ namespace Tests
 
         private const string GetCustomer = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="List">
-              <fields name="filter"><field name="Keyword" fastName="tu_khoa"/></fields>
+              <fields name="filter"><field name="keyword" fastName="tu_khoa"/></fields>
               <query><text>select 1</text></query>
             </import>
             """;
@@ -131,7 +131,7 @@ namespace Tests
             return (response.StatusCode, JsonDocument.Parse(text).RootElement.Clone(), response);
         }
 
-        private const string ValidInvoice = """{ "master": { "YourID": "HD001", "CustomerID": "KH01" }, "detail": [ { "ItemID": "VT01" } ] }""";
+        private const string ValidInvoice = """{ "master": { "yourId": "HD001", "customerId": "KH01" }, "detail": [ { "itemId": "VT01" } ] }""";
 
         [Fact]
         public async Task KhongCoRoute_404()
@@ -197,7 +197,7 @@ namespace Tests
         [Fact]
         public async Task BodySaiDang_InvalidShape()
         {
-            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", """{ "YourID": "HD001" }""");
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", """{ "yourId": "HD001" }""");
 
             Assert.Equal(HttpStatusCode.BadRequest, status);
             Assert.Equal("INVALID_SHAPE", json.GetProperty("code").GetString());
@@ -207,12 +207,12 @@ namespace Tests
         [Fact]
         public async Task LoiGiaTri_ValidationFailed_CoViTriVaMessage()
         {
-            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", """{ "master": { "YourID": "QUA_DAI_HON_10" }, "detail": [ {} ] }""");
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", """{ "master": { "yourId": "QUA_DAI_HON_10" }, "detail": [ {} ] }""");
 
             Assert.Equal(HttpStatusCode.BadRequest, status);
             Assert.Equal("VALIDATION_FAILED", json.GetProperty("code").GetString());
             var errors = json.GetProperty("errors").EnumerateArray().Select(e => (e.GetProperty("position").GetString(), e.GetProperty("code").GetString())).ToList();
-            Assert.Equal([("[0].master.YourID", "VALUE_TOO_LONG"), ("[0].detail[0].ItemID", "FIELD_REQUIRED")], errors);
+            Assert.Equal([("[0].master.yourId", "VALUE_TOO_LONG"), ("[0].detail[0].itemId", "FIELD_REQUIRED")], errors);
             Assert.Equal("Field is required", json.GetProperty("errors")[1].GetProperty("message").GetString());
             Assert.Null(_executor.LastCall);
         }
@@ -220,7 +220,7 @@ namespace Tests
         [Fact]
         public async Task LoiChecking_ValidationFailed()
         {
-            _executor.Next = new FormExecutionResult { CheckingErrors = [new CheckingError("[0].detail[0].ItemID", "detail", "ItemID", "ITEM_NOT_FOUND")], RolledBack = true };
+            _executor.Next = new FormExecutionResult { CheckingErrors = [new CheckingError("[0].detail[0].itemId", "detail", "itemId", "ITEM_NOT_FOUND")], RolledBack = true };
 
             var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice);
 
@@ -256,6 +256,35 @@ namespace Tests
             Assert.Equal("HD001", json.GetProperty("data").GetProperty("master")[0].GetProperty("id").GetString());
             Assert.Equal(1, json.GetProperty("data").GetProperty("detail").GetArrayLength());
             Assert.Equal(1, _executor.LastBody!.Data.Tables["detail"]!.Rows.Count);
+        }
+
+        [Fact]
+        public async Task ProcessingTraCotKhongCamel_InvalidResponseFormat_KhongTraDuLieu()
+        {
+            DataSet data = DataSetOf(("SUCCESS", "", "master"), 1);
+            data.Tables[1].Columns.Add("customer_name");
+            _executor.Next = new FormExecutionResult { Data = data };
+
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice);
+
+            Assert.Equal(HttpStatusCode.InternalServerError, status);
+            Assert.Equal("INVALID_RESPONSE_FORMAT", json.GetProperty("code").GetString());
+            Assert.Contains("master.customer_name", json.GetProperty("message").GetString());
+            Assert.False(json.TryGetProperty("data", out _));
+        }
+
+        [Theory]
+        [InlineData("""{ "master": { "YourId": "HD001", "customerId": "KH01" } }""", "VALIDATION_FAILED", "[0].master.YourId")]
+        [InlineData("""{ "Master": { "yourId": "HD001", "customerId": "KH01" } }""", "INVALID_SHAPE", "Master")]
+        [InlineData("""{ "master": { "yourId": "HD001", "customerId": "KH01" }, "Detail": [ { "itemId": "VT01" } ] }""", "INVALID_SHAPE", "Detail")]
+        public async Task TenJsonSaiHoaThuong_BiTuChoi(string body, string code, string expected)
+        {
+            var (status, json, _) = await PostAsync("/api/sale-invoice?unitCode=CTY", body);
+
+            Assert.Equal(HttpStatusCode.BadRequest, status);
+            Assert.Equal(code, json.GetProperty("code").GetString());
+            Assert.Contains(expected, json.ToString());
+            Assert.Null(_executor.LastBody);
         }
 
         [Theory]
@@ -306,7 +335,7 @@ namespace Tests
         [Fact]
         public async Task Idempotency_LoiChecking_CungDuocLuu()
         {
-            _executor.Next = new FormExecutionResult { CheckingErrors = [new CheckingError("[0].master.CustomerID", "master", "CustomerID", "CUSTOMER_NOT_FOUND")], RolledBack = true };
+            _executor.Next = new FormExecutionResult { CheckingErrors = [new CheckingError("[0].master.customerId", "master", "customerId", "CUSTOMER_NOT_FOUND")], RolledBack = true };
 
             await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-002");
             var replay = await PostAsync("/api/sale-invoice?unitCode=CTY", ValidInvoice, idempotencyKey: "key-002");
@@ -317,7 +346,7 @@ namespace Tests
         }
 
         [Theory]
-        [InlineData("?unitCode=CTY&dryRun=false", """{ "master": { "YourID": "HD999" }, "detail": [ { "ItemID": "VT01" } ] }""")]
+        [InlineData("?unitCode=CTY&dryRun=false", """{ "master": { "yourId": "HD999" }, "detail": [ { "itemId": "VT01" } ] }""")]
         [InlineData("?unitCode=KHAC2", null)]
         public async Task Idempotency_CungKeyKhacBodyHoacQuery_Conflict(string query, string? body)
         {
@@ -416,9 +445,9 @@ namespace Tests
 
             Assert.Equal(HttpStatusCode.OK, status);
             JsonElement paging = first.GetProperty("paging");
-            Assert.Equal(3, paging.GetProperty("page_count").GetInt32());
-            Assert.Equal(16, paging.GetProperty("total_row_count").GetInt32());
-            Assert.Equal(0, paging.GetProperty("page_index").GetInt32());
+            Assert.Equal(3, paging.GetProperty("pageCount").GetInt32());
+            Assert.Equal(16, paging.GetProperty("totalRowCount").GetInt32());
+            Assert.Equal(0, paging.GetProperty("pageIndex").GetInt32());
             Assert.Equal(["HD0", "HD1"], first.GetProperty("data").GetProperty("master").EnumerateArray().Select(r => r.GetProperty("id").GetString()));
             Assert.Equal(4, first.GetProperty("data").GetProperty("detail").GetArrayLength());
             Assert.Equal(1, first.GetProperty("data").GetProperty("summary").GetArrayLength());
@@ -430,7 +459,7 @@ namespace Tests
             Assert.Equal(["HD4"], last.GetProperty("data").GetProperty("master").EnumerateArray().Select(r => r.GetProperty("id").GetString()));
             Assert.Equal(2, last.GetProperty("data").GetProperty("detail").GetArrayLength());
             Assert.Equal(0, last.GetProperty("data").GetProperty("summary").GetArrayLength());
-            Assert.Equal(2, last.GetProperty("paging").GetProperty("page_index").GetInt32());
+            Assert.Equal(2, last.GetProperty("paging").GetProperty("pageIndex").GetInt32());
         }
 
         [Theory]
@@ -479,7 +508,7 @@ namespace Tests
             var (_, json, _) = await PostAsync("/api/invoice/get", "{}");
 
             Assert.Equal(JsonValueKind.Null, json.GetProperty("paging").GetProperty("cursor").ValueKind);
-            Assert.Equal(1, json.GetProperty("paging").GetProperty("page_count").GetInt32());
+            Assert.Equal(1, json.GetProperty("paging").GetProperty("pageCount").GetInt32());
         }
 
         [Fact]
@@ -509,7 +538,7 @@ namespace Tests
 
             var (_, first, _) = await PostAsync("/api/invoice/transfer?unitCode=CTY", "{}");
             string cursor = first.GetProperty("paging").GetProperty("cursor").GetString()!;
-            Assert.Equal(2, first.GetProperty("paging").GetProperty("transferred_count").GetInt32());
+            Assert.Equal(2, first.GetProperty("paging").GetProperty("transferredCount").GetInt32());
             Assert.Equal(["HD0", "HD1"], _executor.Marked.Single().Keys);
             Assert.Equal("CTY", _executor.Marked.Single().Unit);
 
@@ -517,7 +546,7 @@ namespace Tests
 
             Assert.Equal(["HD4"], _executor.Marked[1].Keys);
             Assert.Equal("CTY", _executor.Marked[1].Unit);
-            Assert.Equal(1, last.GetProperty("paging").GetProperty("transferred_count").GetInt32());
+            Assert.Equal(1, last.GetProperty("paging").GetProperty("transferredCount").GetInt32());
             Assert.Equal(2, _executor.Marked.Count);
         }
 
@@ -556,7 +585,7 @@ namespace Tests
             var (_, json, _) = await PostAsync("/api/invoice/get?unitCode=CTY", "{}");
 
             Assert.Empty(_executor.Marked);
-            Assert.False(json.GetProperty("paging").TryGetProperty("transferred_count", out _));
+            Assert.False(json.GetProperty("paging").TryGetProperty("transferredCount", out _));
         }
 
         private static DataSet DataSetOf((string Code, string Message, string? Tables) head, int dataTables)
@@ -706,7 +735,7 @@ namespace Tests
         {
             ImportForm form = ImportFormLoader.Parse("setSaleInvoice", XDocument.Parse("""
                 <import xmlns="urn:schemas-fast-com:fast-api" type="Voucher" voucherCode="HDA">
-                  <fields name="master" key="YourID"><field name="YourID" fastName="id_doitac" isPrimaryKey="true"/></fields>
+                  <fields name="master" key="yourId"><field name="yourId" fastName="id_doitac" isPrimaryKey="true"/></fields>
                   <query><text>select 1</text></query>
                 </import>
                 """));
@@ -718,7 +747,7 @@ namespace Tests
                 form, call, config);
 
             Assert.Equal(
-                "exec p N'HDA', N'CT''Y', 1, N'ADMIN', 1, N'setSaleInvoice', N'set', N'sale-invoice', N'Voucher'; select * from [FSD]]S]..x, [FSD_A]..y; select id_doitac AS YourID; @@khongCo @@ROWCOUNT",
+                "exec p N'HDA', N'CT''Y', 1, N'ADMIN', 1, N'setSaleInvoice', N'set', N'sale-invoice', N'Voucher'; select * from [FSD]]S]..x, [FSD_A]..y; select id_doitac AS yourId; @@khongCo @@ROWCOUNT",
                 sql);
         }
 
@@ -730,11 +759,11 @@ namespace Tests
             {
                 table.Columns.Add(column);
             }
-            table.Rows.Add("master", 1, 1, "CustomerID", "CUSTOMER_NOT_FOUND");
-            table.Rows.Add("detail", 2, 0, "ItemID", "ITEM_NOT_FOUND");
+            table.Rows.Add("master", 1, 1, "customerId", "CUSTOMER_NOT_FOUND");
+            table.Rows.Add("detail", 2, 0, "itemId", "ITEM_NOT_FOUND");
 
-            Assert.Equal("[1].master.CustomerID", FormExecutor.ToError(table.Rows[0], "master").Position);
-            Assert.Equal("[0].detail[2].ItemID", FormExecutor.ToError(table.Rows[1], "master").Position);
+            Assert.Equal("[1].master.customerId", FormExecutor.ToError(table.Rows[0], "master").Position);
+            Assert.Equal("[0].detail[2].itemId", FormExecutor.ToError(table.Rows[1], "master").Position);
         }
     }
 }

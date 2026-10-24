@@ -38,14 +38,14 @@ namespace Tests
 
         private const string SaleInvoice = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="Voucher" unitRequired="true" description="Hóa đơn bán hàng">
-              <fields name="master" key="YourID">
-                <field name="YourID" fastName="id_doitac" maxLength="36" allowNull="false" example="HD001"/>
-                <field name="VoucherDate" fastName="ngay_ct" type="datetime" format="dd/MM/yyyy" allowNull="false"/>
-                <field name="CustomerID" fastName="ma_kh" check="ma_kh = ''" errorCode="CUSTOMER_NOT_FOUND"/>
-                <field name="Secret" fastName="noi_bo" hidden="true"/>
+              <fields name="master" key="yourId">
+                <field name="yourId" fastName="id_doitac" maxLength="36" allowNull="false" example="HD001"/>
+                <field name="voucherDate" fastName="ngay_ct" type="datetime" format="dd/MM/yyyy" allowNull="false"/>
+                <field name="customerId" fastName="ma_kh" check="ma_kh = ''" errorCode="CUSTOMER_NOT_FOUND"/>
+                <field name="secret" fastName="noi_bo" hidden="true"/>
               </fields>
               <fields name="detail">
-                <field name="Quantity" fastName="so_luong" type="numeric" example="2"/>
+                <field name="quantity" fastName="so_luong" type="numeric" example="2"/>
               </fields>
               <query><text>select 1</text></query>
             </import>
@@ -59,7 +59,7 @@ namespace Tests
             _keys.Add(new SignerKeys(9, "NGUNG", false, null, null, null, ""));
 
             ImportForm Load(string name, string xml) => ColumnTypeResolver.Resolve(ImportFormLoader.Parse(name, XDocument.Parse(xml)), _ => null);
-            var catalog = ImportFormCatalog.Build([Load("setSaleInvoice", SaleInvoice), Load("getSecret", "<import xmlns=\"urn:schemas-fast-com:fast-api\" type=\"List\"><fields name=\"f\"><field name=\"A\" fastName=\"a\"/></fields><query><text>select 1</text></query></import>")]);
+            var catalog = ImportFormCatalog.Build([Load("setSaleInvoice", SaleInvoice), Load("getSecret", "<import xmlns=\"urn:schemas-fast-com:fast-api\" type=\"List\"><fields name=\"f\"><field name=\"a\" fastName=\"a\"/></fields><query><text>select 1</text></query></import>")]);
 
             _host = await new HostBuilder()
                 .ConfigureWebHost(web => web.UseTestServer()
@@ -245,14 +245,14 @@ namespace Tests
             Assert.Equal("/api/sale-invoice", data.GetProperty("summary").GetProperty("route").GetString());
             Assert.True(data.GetProperty("summary").GetProperty("unitRequired").GetBoolean());
             JsonElement master = data.GetProperty("blocks")[0];
-            Assert.Equal(["YourID", "VoucherDate", "CustomerID"], master.GetProperty("fields").EnumerateArray().Select(f => f.GetProperty("name").GetString()));
+            Assert.Equal(["yourId", "voucherDate", "customerId"], master.GetProperty("fields").EnumerateArray().Select(f => f.GetProperty("name").GetString()));
             Assert.Equal("dd/MM/yyyy hoặc ISO 8601", master.GetProperty("fields")[1].GetProperty("format").GetString());
             Assert.Equal("CUSTOMER_NOT_FOUND", master.GetProperty("fields")[2].GetProperty("errorCodes")[0].GetString());
             JsonElement sample = data.GetProperty("sample");
-            Assert.Equal("HD001", sample.GetProperty("master").GetProperty("YourID").GetString());
-            Assert.Equal("21/10/2026", sample.GetProperty("master").GetProperty("VoucherDate").GetString());
-            Assert.Equal(2m, sample.GetProperty("detail")[0].GetProperty("Quantity").GetDecimal());
-            Assert.False(sample.GetProperty("master").TryGetProperty("Secret", out _), "field hidden không hiện trong mẫu");
+            Assert.Equal("HD001", sample.GetProperty("master").GetProperty("yourId").GetString());
+            Assert.Equal("21/10/2026", sample.GetProperty("master").GetProperty("voucherDate").GetString());
+            Assert.Equal(2m, sample.GetProperty("detail")[0].GetProperty("quantity").GetDecimal());
+            Assert.False(sample.GetProperty("master").TryGetProperty("secret", out _), "field hidden không hiện trong mẫu");
         }
 
         [Theory]

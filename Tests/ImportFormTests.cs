@@ -1,4 +1,4 @@
-using System.Xml.Linq;
+﻿using System.Xml.Linq;
 using Business;
 using Models;
 
@@ -13,21 +13,21 @@ namespace Tests
               <!ENTITY And "&#38;#13;">
             ]>
             <import xmlns="urn:schemas-fast-com:fast-api" type="Voucher" voucherCode="HDA" unitRequired="true" description="Hóa đơn bán hàng">
-              <fields name="master" table="m81$000000" key="YourID">
-                <field name="YourID" fastName="id_doitac" type="string" maxLength="36" allowNull="false" isPrimaryKey="true"/>
-                <field name="VoucherDate" fastName="ngay_ct" type="datetime" format="dd/MM/yyyy" allowNull="false"/>
-                <field name="CustomerID" fastName="ma_kh" allowNull="false" upperCase="true" category="1"
+              <fields name="master" table="m81$000000" key="yourId">
+                <field name="yourId" fastName="id_doitac" type="string" maxLength="36" allowNull="false" isPrimaryKey="true"/>
+                <field name="voucherDate" fastName="ngay_ct" type="datetime" format="dd/MM/yyyy" allowNull="false"/>
+                <field name="customerId" fastName="ma_kh" allowNull="false" upperCase="true" category="1"
                        check="ma_kh not in (select ma_kh from dmkh where status = '1')" errorCode="CUSTOMER_NOT_FOUND"/>
               </fields>
               <fields name="detail" table="d81$000000">
-                <field name="ItemID" fastName="ma_vt" allowNull="false" upperCase="true" category="2"
+                <field name="itemId" fastName="ma_vt" allowNull="false" upperCase="true" category="2"
                        check="ma_vt not in (select ma_vt from dmvt where status = '1')" errorCode="ITEM_NOT_FOUND"/>
-                <field name="Promotion" fastName="km_yn" type="int" defaultValue="0" category="2"
+                <field name="promotion" fastName="km_yn" type="int" defaultValue="0" category="2"
                        check="km_yn not in (0, 1, 2, 3)&And;km_yn = 3 and exists (select 1 from @@table b where b.km_yn = 0)"
                        condition="&And;IF EXISTS (SELECT 1 FROM #master) BEGIN"
                        tag="&And;END"
                        errorCode="INVALID_FIELD&And;PROMOTION_MIXED"/>
-                <field name="Quantity" fastName="so_luong" type="numeric"/>
+                <field name="quantity" fastName="so_luong" type="numeric"/>
               </fields>
               <query action="checking"><text><![CDATA[ @@checking(1) @@checking(2) ]]></text></query>
               <query action="processing"><text><![CDATA[ exec restApi_ProcessDataFor_m81 @@voucherCode, @@unit, @@userId ]]></text></query>
@@ -96,14 +96,14 @@ namespace Tests
             Assert.Equal("/api/sale-invoice", form.Route);
             Assert.Equal(["master", "detail"], form.Blocks.Select(b => b.Name));
             Assert.True(form.Root.IsRoot);
-            Assert.Equal("YourID", form.Root.Key);
+            Assert.Equal("yourId", form.Root.Key);
 
-            ImportField date = form.Root.Fields.Single(f => f.Name == "VoucherDate");
+            ImportField date = form.Root.Fields.Single(f => f.Name == "voucherDate");
             Assert.Equal(ImportFieldType.DateTime, date.Type);
             Assert.Equal("dd/MM/yyyy", date.Format);
             Assert.False(date.AllowNull);
 
-            ImportField promotion = form.Blocks[1].Fields.Single(f => f.Name == "Promotion");
+            ImportField promotion = form.Blocks[1].Fields.Single(f => f.Name == "promotion");
             Assert.Equal(2, promotion.Checks.Count);
             Assert.Equal(new ImportCheck("km_yn not in (0, 1, 2, 3)", "", "", "INVALID_FIELD"), promotion.Checks[0]);
             Assert.Equal("IF EXISTS (SELECT 1 FROM #master) BEGIN", promotion.Checks[1].Condition);
@@ -118,7 +118,7 @@ namespace Tests
             ImportForm form = Parse("setSaleInvoice", SaleInvoice);
 
             ImportField key = form.Blocks[1].Fields[0];
-            Assert.Equal("YourID", key.Name);
+            Assert.Equal("yourId", key.Name);
             Assert.Equal("id_doitac", key.FastName);
             Assert.Equal(36, key.MaxLength);
             Assert.True(key.IsInheritedKey);
@@ -133,7 +133,7 @@ namespace Tests
             int customer = sql.IndexOf("'CUSTOMER_NOT_FOUND'");
             int item = sql.IndexOf("'ITEM_NOT_FOUND'");
             Assert.True(customer >= 0 && item > customer, "@@checking(1) chỉ có ma_kh, @@checking(2) có ma_vt, km_yn");
-            Assert.Contains("SELECT 'master', _row, _parent, 'CustomerID', 'CUSTOMER_NOT_FOUND' FROM #master WHERE ISNULL(ma_kh, '') <> '' AND (ma_kh not in (select ma_kh from dmkh where status = '1'))", sql);
+            Assert.Contains("SELECT 'master', _row, _parent, 'customerId', 'CUSTOMER_NOT_FOUND' FROM #master WHERE ISNULL(ma_kh, '') <> '' AND (ma_kh not in (select ma_kh from dmkh where status = '1'))", sql);
             Assert.Contains("FROM #detail WHERE km_yn IS NOT NULL AND (km_yn not in (0, 1, 2, 3))", sql);
             Assert.Contains("exists (select 1 from #detail b where b.km_yn = 0)", sql);
             Assert.Contains("IF EXISTS (SELECT 1 FROM #master) BEGIN", sql);
@@ -146,8 +146,8 @@ namespace Tests
         {
             ImportForm form = Parse("setCustomer", Minimal("""
                 <fields name="master">
-                  <field name="A" fastName="a" check="a = 1" errorCode="E1" category="5"/>
-                  <field name="B" fastName="b" check="b = 2" errorCode="E2"/>
+                  <field name="a" fastName="a" check="a = 1" errorCode="E1" category="5"/>
+                  <field name="b" fastName="b" check="b = 2" errorCode="E2"/>
                 </fields>
                 """, "<query action=\"checking\"><text>@@checking</text></query>"));
 
@@ -160,26 +160,26 @@ namespace Tests
         {
             ImportForm form = Parse("setCustomer", Minimal("""
                 <fields name="master">
-                  <field name="A" fastName="a" check="a = 1" errorCode="E1"/>
-                  <field name="B" fastName="b" check="b = 2" errorCode="E2" category="3"/>
+                  <field name="a" fastName="a" check="a = 1" errorCode="E1"/>
+                  <field name="b" fastName="b" check="b = 2" errorCode="E2" category="3"/>
                 </fields>
                 """, "<query action=\"checking\"><text>@@checking(1)</text></query>"));
 
-            Assert.Contains(form.Warnings, w => w.Contains("master.A") && w.Contains("không khai category"));
-            Assert.Contains(form.Warnings, w => w.Contains("master.B") && w.Contains("@@checking(3)"));
+            Assert.Contains(form.Warnings, w => w.Contains("master.a") && w.Contains("không khai category"));
+            Assert.Contains(form.Warnings, w => w.Contains("master.b") && w.Contains("@@checking(3)"));
             Assert.DoesNotContain("'E1'", form.CheckingQuery);
         }
 
         [Theory]
-        [InlineData("<field name=\"A\" fastName=\"a\" check=\"a = 1&And;a = 2\" errorCode=\"E1\"/>", "cùng số phần tử")]
-        [InlineData("<field name=\"A\" fastName=\"a\" check=\"a = 1\" errorCode=\"E1\" condition=\"x&And;y\"/>", "cùng số phần tử")]
-        [InlineData("<field name=\"A\" fastName=\"a\" check=\"a = 1\"/>", "không được trống")]
-        [InlineData("<field name=\"A\" fastName=\"a\" errorCode=\"E1\"/>", "không có check")]
-        [InlineData("<field name=\"A\" fastName=\"a\" type=\"money\"/>", "không hỗ trợ")]
-        [InlineData("<field name=\"A\" fastName=\"a b\"/>", "fastName")]
-        [InlineData("<field name=\"A\" fastName=\"a\"/><field name=\"a\" fastName=\"b\"/>", "trùng field")]
-        [InlineData("<field name=\"A\" fastName=\"a\" maxLength=\"0\"/>", "maxLength")]
-        [InlineData("<field name=\"A\" fastName=\"a\" allowNull=\"co\"/>", "true/false")]
+        [InlineData("<field name=\"a\" fastName=\"a\" check=\"a = 1&And;a = 2\" errorCode=\"E1\"/>", "cùng số phần tử")]
+        [InlineData("<field name=\"a\" fastName=\"a\" check=\"a = 1\" errorCode=\"E1\" condition=\"x&And;y\"/>", "cùng số phần tử")]
+        [InlineData("<field name=\"a\" fastName=\"a\" check=\"a = 1\"/>", "không được trống")]
+        [InlineData("<field name=\"a\" fastName=\"a\" errorCode=\"E1\"/>", "không có check")]
+        [InlineData("<field name=\"a\" fastName=\"a\" type=\"money\"/>", "không hỗ trợ")]
+        [InlineData("<field name=\"a\" fastName=\"a b\"/>", "fastName")]
+        [InlineData("<field name=\"a\" fastName=\"a\"/><field name=\"a\" fastName=\"b\"/>", "trùng field")]
+        [InlineData("<field name=\"a\" fastName=\"a\" maxLength=\"0\"/>", "maxLength")]
+        [InlineData("<field name=\"a\" fastName=\"a\" allowNull=\"co\"/>", "true/false")]
         public void FieldSai_LoiLucNap(string field, string message)
         {
             var ex = Assert.Throws<ImportFormException>(() => Parse("setCustomer", Minimal($"<fields name=\"master\">{field}</fields>")));
@@ -190,7 +190,7 @@ namespace Tests
         public void EntityKhaiSai_CRThanhDauCach_BaoLechDanhSach()
         {
             // <!ENTITY And "&#13;"> làm CR thành dấu cách: check còn 1 phần tử, errorCode cũng 1 nhưng condition 2 → lệch
-            string xml = Minimal("""<fields name="master"><field name="A" fastName="a" check="a = 1&And;a = 2" errorCode="E1&And;E2"/></fields>""")
+            string xml = Minimal("""<fields name="master"><field name="a" fastName="a" check="a = 1&And;a = 2" errorCode="E1&And;E2"/></fields>""")
                 .Replace("&#38;#13;", "&#13;");
 
             ImportForm form = Parse("setCustomer", xml);
@@ -200,11 +200,11 @@ namespace Tests
         }
 
         [Theory]
-        [InlineData("<fields name=\"master\" key=\"YourID\"><field name=\"A\" fastName=\"a\"/></fields>", "không phải field")]
-        [InlineData("<fields name=\"master\"><field name=\"A\" fastName=\"a\"/></fields><fields name=\"detail\"><field name=\"B\" fastName=\"b\"/></fields>", "phải khai key")]
-        [InlineData("<fields name=\"master\" key=\"A\"><field name=\"A\" fastName=\"a\"/></fields><fields name=\"detail\" key=\"A\"><field name=\"B\" fastName=\"b\"/></fields>", "không được khai key")]
-        [InlineData("<fields name=\"master\" key=\"A\"><field name=\"A\" fastName=\"a\"/></fields><fields name=\"Master\"><field name=\"B\" fastName=\"b\"/></fields>", "trùng")]
-        [InlineData("<fields name=\"master\" key=\"A\"><field name=\"A\" fastName=\"a\"/></fields><fields name=\"detail\"><field name=\"A\" fastName=\"x\"/></fields>", "cùng fastName")]
+        [InlineData("<fields name=\"master\" key=\"yourId\"><field name=\"a\" fastName=\"a\"/></fields>", "không phải field")]
+        [InlineData("<fields name=\"master\"><field name=\"a\" fastName=\"a\"/></fields><fields name=\"detail\"><field name=\"b\" fastName=\"b\"/></fields>", "phải khai key")]
+        [InlineData("<fields name=\"master\" key=\"a\"><field name=\"a\" fastName=\"a\"/></fields><fields name=\"detail\" key=\"a\"><field name=\"b\" fastName=\"b\"/></fields>", "không được khai key")]
+        [InlineData("<fields name=\"master\" key=\"a\"><field name=\"a\" fastName=\"a\"/></fields><fields name=\"master\"><field name=\"b\" fastName=\"b\"/></fields>", "trùng")]
+        [InlineData("<fields name=\"master\" key=\"a\"><field name=\"a\" fastName=\"a\"/></fields><fields name=\"detail\"><field name=\"a\" fastName=\"x\"/></fields>", "cùng fastName")]
         [InlineData("<fields name=\"master\"></fields>", "không có field")]
         [InlineData("", "ít nhất một khối")]
         public void KhoiSai_LoiLucNap(string fields, string message)
@@ -221,7 +221,7 @@ namespace Tests
         [InlineData("setCustomer", "type=\"List\" unitAction=\"Read\"", "unitAction")]
         public void ThuocTinhImportSai_LoiLucNap(string name, string attributes, string message)
         {
-            var ex = Assert.Throws<ImportFormException>(() => Parse(name, Minimal("<fields name=\"master\"><field name=\"A\" fastName=\"a\"/></fields>", rootAttributes: attributes)));
+            var ex = Assert.Throws<ImportFormException>(() => Parse(name, Minimal("<fields name=\"master\"><field name=\"a\" fastName=\"a\"/></fields>", rootAttributes: attributes)));
             Assert.Contains(message, ex.Message);
         }
 
@@ -237,18 +237,18 @@ namespace Tests
         [InlineData("type=\"Transfer\"", "", "", "phải khai <paging")]
         [InlineData("type=\"Transfer\"", "<paging pageSize=\"10\" key=\"id\"/>", "", "phải khai <paging")]
         [InlineData("type=\"List\"", "<paging pageSize=\"10\" key=\"id\"/>", "<query action=\"transferred\"><text>select 1</text></query>", "chỉ dùng cho form")]
-        [InlineData("type=\"List\"", "<paging pageSize=\"10\" key=\"id; drop\"/>", "", "tên cột hợp lệ")]
+        [InlineData("type=\"List\"", "<paging pageSize=\"10\" key=\"id; drop\"/>", "", "tên cột camelCase")]
         public void TransferVaPaging_KiemLucNap(string attributes, string paging, string transferred, string message)
         {
             var ex = Assert.Throws<ImportFormException>(() => Parse("transferInvoice",
-                Minimal("<fields name=\"master\"><field name=\"A\" fastName=\"a\"/></fields>", paging + transferred, attributes)));
+                Minimal("<fields name=\"master\"><field name=\"a\" fastName=\"a\"/></fields>", paging + transferred, attributes)));
             Assert.Contains(message, ex.Message);
         }
 
         [Fact]
         public void Transfer_DocQueryTransferred()
         {
-            ImportForm form = Parse("transferInvoice", Minimal("<fields name=\"master\"><field name=\"A\" fastName=\"a\"/></fields>",
+            ImportForm form = Parse("transferInvoice", Minimal("<fields name=\"master\"><field name=\"a\" fastName=\"a\"/></fields>",
                 "<paging pageSize=\"10\" key=\"id\"/><query action=\"transferred\"><text>update x set y = 1</text></query>", "type=\"Transfer\""));
 
             Assert.Equal(ImportFormType.Transfer, form.Type);
@@ -259,9 +259,9 @@ namespace Tests
         [Fact]
         public void Paging_DocDung()
         {
-            ImportForm form = Parse("getInvoice", Minimal("<fields name=\"master\"><field name=\"A\" fastName=\"a\"/></fields>", "<paging pageSize=\"100\" key=\"stt_rec\"/>"));
+            ImportForm form = Parse("getInvoice", Minimal("<fields name=\"master\"><field name=\"a\" fastName=\"a\"/></fields>", "<paging pageSize=\"100\" key=\"sttRec\"/>"));
 
-            Assert.Equal(new ImportPaging(100, "stt_rec"), form.Paging);
+            Assert.Equal(new ImportPaging(100, "sttRec"), form.Paging);
             Assert.Equal("Acc", form.UnitAction);
         }
 
@@ -282,7 +282,7 @@ namespace Tests
                       <!ENTITY IrregularValue SYSTEM "../Options/Irregular.txt">
                     ]>
                     <import xmlns="urn:schemas-fast-com:fast-api" type="List">
-                      <fields name="master"><field name="A" fastName="a"/></fields>
+                      <fields name="master"><field name="a" fastName="a"/></fields>
                       <query><text>select '&IrregularValue;'</text></query>
                     </import>
                     """);
@@ -313,7 +313,7 @@ namespace Tests
                 Type = ImportFormType.List,
                 UnitAction = ImportFormLoader.DefaultUnitAction(verb),
                 Enable = enable,
-                Blocks = [new ImportBlock { Name = "master", IsRoot = true, Fields = [new ImportField { Name = "A", FastName = "a" }] }]
+                Blocks = [new ImportBlock { Name = "master", IsRoot = true, Fields = [new ImportField { Name = "a", FastName = "a" }] }]
             };
         }
 
@@ -358,7 +358,7 @@ namespace Tests
             {
                 File.WriteAllText(Path.Combine(dir, "getCustomer.xml"), """
                     <import xmlns="urn:schemas-fast-com:fast-api" type="List">
-                      <fields name="master"><field name="A" fastName="a"/></fields>
+                      <fields name="master"><field name="a" fastName="a"/></fields>
                       <query><text>select 1</text></query>
                     </import>
                     """);

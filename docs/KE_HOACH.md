@@ -1,4 +1,4 @@
-# Kế hoạch FastAPI v3 (RestApiCore) — đề xuất, chờ duyệt
+﻿# Kế hoạch FastAPI v3 (RestApiCore) — đề xuất, chờ duyệt
 
 **Cập nhật:** 23/10/2026 · v3 = repo này (`huunguyenit/RestApiCore`), phát triển tiếp, không dựng mới. v2 = FastAPI 2.4.7 (VB, `D:\Fast Source\API\FastAPI 2.4.7`).
 
@@ -131,6 +131,8 @@ Khối `detail` không cần khai `YourID`: khóa `key` của khối gốc đư�
 |---|---|---|
 | `import` | `type` | `List` / `Voucher` / `Report` / `Transfer` |
 | | `voucherCode` | Mã chứng từ |
+| | `jsonNaming` | Quy ước tên JSON, mặc định và duy nhất hỗ trợ: `camelCase`. Tên khối, tên `field` phải camelCase (`customerId`). Body gửi lên phải khớp từng ký tự với khai báo: `CustomerId` thay vì `customerId` là lỗi (`INVALID_FIELD_NAME` ở field, `INVALID_SHAPE` ở tên khối). Response (kể cả khung `requestId`, `paging.pageIndex`…) cũng camelCase |
+| | `columnNaming` | Quy ước tên cột SQL, mặc định và duy nhất hỗ trợ: `snake_case`. `fastName` phải snake_case (`ma_kh`). Riêng dataset query `processing` trả ra làm `data` của response nên tên bảng (`tables`) và tên cột phải camelCase ngay trong SQL (`SELECT a.ten_kh AS customerName`); không tự đổi tên hộ, sai thì không trả dữ liệu và trả `INVALID_RESPONSE_FORMAT` (500) kèm danh sách tên sai. `<paging key>` là tên cột camelCase của dữ liệu trả ra |
 | | `unitRequired` | `true` → bắt buộc `?unitCode=`, thiếu thì `UNIT_REQUIRED`. Mặc định `false`. Có gửi `unitCode` thì luôn bị kiểm quyền |
 | | `unitAction` | Quyền đơn vị cần kiểm: `Acc`/`New`/`Edit`/`Del`. Không khai thì suy từ động từ (3.2) |
 | | `enable`, `description` | Bật/tắt, mô tả trên portal |

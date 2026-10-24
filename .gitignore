@@ -370,3 +370,4 @@ MigrationBackup/
 FodyWeavers.xsd
 # Bi mat cuc bo (secretKey, connection string) - khong commit
 appsettings.Local.json
+/Api/App_Data/Options/Update.xml

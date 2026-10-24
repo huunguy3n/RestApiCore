@@ -1,4 +1,4 @@
-// Portal đối tác Fast API (KE_HOACH 5.3). Trang một màn, định tuyến bằng hash.
+﻿// Portal đối tác Fast API (KE_HOACH 5.3). Trang một màn, định tuyến bằng hash.
 // JWT portal giữ trong sessionStorage (chỉ đọc _meta); private_key và JWT API chỉ nằm trong biến của trang, tải lại là mất.
 import * as sign from "./fast-sign.js";
 
@@ -277,7 +277,7 @@ function tryItPanel(summary, sampleText) {
             const result = await signedCall("POST", summary.route + (query ? "?" + query : ""), bodyText, idempotencyKey);
             output.replaceChildren(callResult(result));
             const paging = result.json?.paging;
-            lastPaging = paging && paging.cursor && paging.page_index + 1 < paging.page_count ? paging : null;
+            lastPaging = paging && paging.cursor && paging.pageIndex + 1 < paging.pageCount ? paging : null;
             lastQuery = query;
             pageButton.disabled = !lastPaging;
         } catch (error) {
@@ -288,7 +288,7 @@ function tryItPanel(summary, sampleText) {
     function nextPage() {
         if (!lastPaging) return;
         const base = lastQuery.split("&").filter(p => !/^(cursor|page|dryRun)=/.test(p));
-        call([...base, `cursor=${encodeURIComponent(lastPaging.cursor)}`, `page=${lastPaging.page_index + 1}`].join("&"), "", "");
+        call([...base, `cursor=${encodeURIComponent(lastPaging.cursor)}`, `page=${lastPaging.pageIndex + 1}`].join("&"), "", "");
     }
 
     refreshKeyStatus();

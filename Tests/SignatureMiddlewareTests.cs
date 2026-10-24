@@ -26,7 +26,7 @@ namespace Tests
         private const string SecretKey = "khoa-ky-jwt-chi-dung-cho-test-0123456789";
         private const string Path = "http://localhost/api/_meta/ping?unitCode=CTY&dryRun=false";
         private static readonly byte[] PrivateKey = Enumerable.Range(0, 32).Select(i => (byte)i).ToArray();
-        private static readonly byte[] Body = Encoding.UTF8.GetBytes("{\"master\":{\"YourID\":\"HD001\"}}");
+        private static readonly byte[] Body = Encoding.UTF8.GetBytes("{\"master\":{\"yourId\":\"HD001\"}}");
 
         private readonly FakeTime _time = new(Now);
         private readonly FakeKeyStore _keys = new();
@@ -175,7 +175,7 @@ namespace Tests
         {
             var request = NewRequest();
             string nonce = _client.Sign(request, Body, Now);
-            request.Content = new ByteArrayContent(Encoding.UTF8.GetBytes("{\"master\":{\"YourID\":\"HD002\"}}"));
+            request.Content = new ByteArrayContent(Encoding.UTF8.GetBytes("{\"master\":{\"yourId\":\"HD002\"}}"));
 
             var (response, code, verified) = await SendAsync(request, nonce);
 

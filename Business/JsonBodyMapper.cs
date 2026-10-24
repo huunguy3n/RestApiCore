@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -21,7 +21,7 @@ namespace Business
 
     /// <summary>
     /// JSON object → bảng theo khối (KE_HOACH 4.3). Body là một chứng từ { "master": {…}, "detail": […] } hoặc mảng chứng từ.
-    /// Form chỉ có một khối thì nhận thêm dạng phẳng { "Field": … } (body tham số của get). Thuộc tính không khai bị bỏ qua.
+    /// Form chỉ có một khối thì nhận thêm dạng phẳng { "Field": … } (body tham số của get). Tên thuộc tính khớp đúng từng ký tự với khai báo (sai hoa thường là lỗi); thuộc tính không khai bị bỏ qua.
     /// Lỗi giá trị gom đủ, có vị trí; lỗi dạng dừng ngay
     /// </summary>
     public static partial class JsonBodyMapper
@@ -33,6 +33,8 @@ namespace Business
         public const string InvalidValue = "INVALID_VALUE";
         public const string ValueTooLong = "VALUE_TOO_LONG";
         public const string InvalidIrregular = "INVALID_FIELD_IRREGULAR";
+        /// <summary>Có thuộc tính trùng tên field nhưng khác hoa thường: tên JSON phải khớp đúng khai báo</summary>
+        public const string InvalidFieldName = "INVALID_FIELD_NAME";
 
         [GeneratedRegex(@"^\d{4}-\d{2}-\d{2}")]
         private static partial Regex IsoDatePrefix();
@@ -130,6 +132,10 @@ namespace Business
             {
                 rootObject = nested;
             }
+            else if (FindCaseVariant(document, root.Name) is string rootVariant)
+            {
+                return $"khối gốc '{rootVariant}' sai hoa thường, phải là '{root.Name}'";
+            }
             else if (form.Blocks.Count == 1)
             {
                 // Form một khối: nhận cả dạng phẳng
@@ -153,6 +159,10 @@ namespace Business
             {
                 if (!TryGetProperty(document, block.Name, out JsonElement rows) || rows.ValueKind == JsonValueKind.Null)
                 {
+                    if (FindCaseVariant(document, block.Name) is string blockVariant)
+                    {
+                        return $"khối '{blockVariant}' sai hoa thường, phải là '{block.Name}'";
+                    }
                     continue;
                 }
                 if (rows.ValueKind != JsonValueKind.Array)
@@ -197,6 +207,12 @@ namespace Business
                 }
 
                 JsonElement? value = !field.Hidden && TryGetProperty(source, field.Name, out JsonElement element) ? element : null;
+                if (value == null && !field.Hidden && FindCaseVariant(source, field.Name) is string variant)
+                {
+                    errors.Add(new FieldError($"{position}.{variant}", block.Name, variant, InvalidFieldName));
+                    row[field.FastName] = DBNull.Value;
+                    continue;
+                }
                 string? code = Convert(field, value, irregular, out object result);
                 if (code != null)
                 {
@@ -352,10 +368,10 @@ namespace Business
 
         private static bool TryGetProperty(JsonElement element, string name, out JsonElement value)
         {
-            // Tên thuộc tính không phân biệt hoa thường; trùng tên khác hoa thường thì lấy cái đầu
+            // Khớp đúng từng ký tự; trùng tên là JSON không hợp lệ nên lấy cái đầu
             foreach (JsonProperty property in element.EnumerateObject())
             {
-                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(property.Name, name, StringComparison.Ordinal))
                 {
                     value = property.Value;
                     return true;
@@ -363,6 +379,19 @@ namespace Business
             }
             value = default;
             return false;
+        }
+
+        /// <summary>Tên thuộc tính khác hoa thường với <paramref name="name"/> (và không có thuộc tính khớp đúng), null nếu không có</summary>
+        private static string? FindCaseVariant(JsonElement element, string name)
+        {
+            foreach (JsonProperty property in element.EnumerateObject())
+            {
+                if (string.Equals(property.Name, name, StringComparison.OrdinalIgnoreCase) && !string.Equals(property.Name, name, StringComparison.Ordinal))
+                {
+                    return property.Name;
+                }
+            }
+            return null;
         }
 
         private static MappedBody Shape(DataSet data, string message) => new() { Data = data, ShapeError = message };

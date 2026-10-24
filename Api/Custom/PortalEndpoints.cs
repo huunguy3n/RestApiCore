@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Business;
 using Models;
 using Models.Options;
@@ -51,7 +51,7 @@ namespace Web.Custom
                 code = "SUCCESS",
                 success = true,
                 message = "",
-                request_id = context.Items["requestID"]?.ToString(),
+                requestId = context.Items["requestID"]?.ToString(),
                 accessToken = result.Token.AccessToken,
                 tokenType = "Bearer",
                 expiresIn = result.Token.ExpiresIn,
@@ -136,6 +136,8 @@ namespace Web.Custom
             description = form.Description,
             unitRequired = form.UnitRequired,
             unitAction = form.UnitAction,
+            jsonNaming = form.JsonNaming,
+            columnNaming = form.ColumnNaming,
             paging = form.Paging == null ? null : new { pageSize = form.Paging.PageSize, key = form.Paging.Key }
         };
 

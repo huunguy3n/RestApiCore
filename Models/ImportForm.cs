@@ -1,4 +1,4 @@
-namespace Models
+﻿namespace Models
 {
     /// <summary>
     /// Form v3 đã nạp và biên dịch từ App_Data/Form/{verb}{Resource}.xml (KE_HOACH mục 2). Bất biến: request không sửa được
@@ -22,6 +22,9 @@ namespace Models
         public required string UnitAction { get; init; }
         public bool Enable { get; init; } = true;
         public string Description { get; init; } = string.Empty;
+        /// <summary>Quy ước tên khai ở &lt;import&gt;: JSON camelCase (khối, field, response), cột SQL snake_case (fastName, cột query trả về)</summary>
+        public string JsonNaming { get; init; } = "camelCase";
+        public string ColumnNaming { get; init; } = "snake_case";
 
         /// <summary>Khối đầu tiên là khối gốc</summary>
         public required IReadOnlyList<ImportBlock> Blocks { get; init; }

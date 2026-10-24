@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -37,7 +37,7 @@ namespace Tests
         [InlineData("km_yn", "int", "TINYINT", null)]
         public void CoTable_TheoCotThat(string column, string type, string sqlType, int? maxLength)
         {
-            ImportField field = Resolve(Form($"<field name=\"A\" fastName=\"{column}\" type=\"{type}\"/>")).Root.Fields[0];
+            ImportField field = Resolve(Form($"<field name=\"a\" fastName=\"{column}\" type=\"{type}\"/>")).Root.Fields[0];
 
             Assert.Equal(sqlType, field.SqlType);
             Assert.Equal(maxLength, field.EffectiveMaxLength);
@@ -46,7 +46,7 @@ namespace Tests
         [Fact]
         public void MaxLengthLonHonCot_CanhBao_KiemTheoCot()
         {
-            ImportForm form = Resolve(Form("<field name=\"A\" fastName=\"ma_kh\" maxLength=\"36\"/><field name=\"B\" fastName=\"ong_ba\" maxLength=\"50\"/>"));
+            ImportForm form = Resolve(Form("<field name=\"a\" fastName=\"ma_kh\" maxLength=\"36\"/><field name=\"b\" fastName=\"ong_ba\" maxLength=\"50\"/>"));
 
             Assert.Equal(16, form.Root.Fields[0].EffectiveMaxLength);
             Assert.Equal(50, form.Root.Fields[1].EffectiveMaxLength);
@@ -56,7 +56,7 @@ namespace Tests
         [Fact]
         public void CotKhongCoTrongBang_DungTypeXml_CanhBao()
         {
-            ImportForm form = Resolve(Form("<field name=\"A\" fastName=\"id_doitac\" maxLength=\"36\"/>"));
+            ImportForm form = Resolve(Form("<field name=\"a\" fastName=\"id_doitac\" maxLength=\"36\"/>"));
 
             Assert.Equal("NVARCHAR(36) COLLATE DATABASE_DEFAULT", form.Root.Fields[0].SqlType);
             Assert.Contains(form.Warnings, w => w.Contains("không có cột id_doitac"));
@@ -72,7 +72,7 @@ namespace Tests
         [InlineData("bool", "", "BIT")]
         public void KhongTable_TheoTypeXml(string type, string extra, string sqlType)
         {
-            ImportForm form = Resolve(Form($"<field name=\"A\" fastName=\"a\" type=\"{type}\" {extra}/>", table: ""));
+            ImportForm form = Resolve(Form($"<field name=\"a\" fastName=\"a\" type=\"{type}\" {extra}/>", table: ""));
 
             Assert.Equal(sqlType, form.Root.Fields[0].SqlType);
             Assert.Empty(form.Warnings);
@@ -81,7 +81,7 @@ namespace Tests
         [Fact]
         public void BangKhongTonTai_LoiLucNap()
         {
-            var ex = Assert.Throws<ImportFormException>(() => Resolve(Form("<field name=\"A\" fastName=\"a\"/>", "table=\"khong_co\"")));
+            var ex = Assert.Throws<ImportFormException>(() => Resolve(Form("<field name=\"a\" fastName=\"a\"/>", "table=\"khong_co\"")));
             Assert.Contains("không tồn tại", ex.Message);
         }
     }
@@ -90,19 +90,19 @@ namespace Tests
     {
         private const string Xml = """
             <import xmlns="urn:schemas-fast-com:fast-api" type="Voucher">
-              <fields name="master" key="YourID">
-                <field name="YourID" fastName="id_doitac" maxLength="10" allowNull="false"/>
-                <field name="VoucherDate" fastName="ngay_ct" type="datetime" format="dd/MM/yyyy" allowNull="false"/>
-                <field name="CustomerID" fastName="ma_kh" upperCase="true" maxLength="8"/>
-                <field name="Note" fastName="dien_giai" checkIrregular="true"/>
-                <field name="Status" fastName="status" type="int" defaultValue="1"/>
-                <field name="Computed" fastName="ma_dvcs" hidden="true" allowNull="false"/>
+              <fields name="master" key="yourId">
+                <field name="yourId" fastName="id_doitac" maxLength="10" allowNull="false"/>
+                <field name="voucherDate" fastName="ngay_ct" type="datetime" format="dd/MM/yyyy" allowNull="false"/>
+                <field name="customerId" fastName="ma_kh" upperCase="true" maxLength="8"/>
+                <field name="note" fastName="dien_giai" checkIrregular="true"/>
+                <field name="status" fastName="status" type="int" defaultValue="1"/>
+                <field name="computed" fastName="ma_dvcs" hidden="true" allowNull="false"/>
               </fields>
               <fields name="detail">
-                <field name="ItemID" fastName="ma_vt" allowNull="false"/>
-                <field name="Quantity" fastName="so_luong" type="numeric"/>
-                <field name="Promotion" fastName="km_yn" type="bool"/>
-                <field name="CreatedAt" fastName="datetime0" type="unixtime"/>
+                <field name="itemId" fastName="ma_vt" allowNull="false"/>
+                <field name="quantity" fastName="so_luong" type="numeric"/>
+                <field name="promotion" fastName="km_yn" type="bool"/>
+                <field name="createdAt" fastName="datetime0" type="unixtime"/>
               </fields>
               <query><text>select 1</text></query>
             </import>
@@ -117,9 +117,9 @@ namespace Tests
         public void ChungTuDung_RaBangTheoKhoi()
         {
             MappedBody body = Map("""
-                { "master": { "YourID": "HD001", "VoucherDate": "21/10/2026", "CustomerID": "kh01", "Unknown": 1 },
-                  "detail": [ { "ItemID": "VT01", "Quantity": 2.5, "Promotion": true, "CreatedAt": 1792574400 },
-                              { "itemid": "VT02", "Quantity": "1" } ] }
+                { "master": { "yourId": "HD001", "voucherDate": "21/10/2026", "customerId": "kh01", "Unknown": 1 },
+                  "detail": [ { "itemId": "VT01", "quantity": 2.5, "promotion": true, "createdAt": 1792574400 },
+                              { "itemId": "VT02", "quantity": "1" } ] }
                 """);
 
             Assert.Null(body.ShapeError);
@@ -149,8 +149,8 @@ namespace Tests
         public void MangChungTu_ParentTheoChiSo()
         {
             MappedBody body = Map("""
-                [ { "master": { "YourID": "A", "VoucherDate": "2026-10-21" } },
-                  { "master": { "YourID": "B", "VoucherDate": "2026-10-22T08:30:00" }, "detail": [ { "ItemID": "X" } ] } ]
+                [ { "master": { "yourId": "a", "voucherDate": "2026-10-21" } },
+                  { "master": { "yourId": "b", "voucherDate": "2026-10-22T08:30:00" }, "detail": [ { "itemId": "X" } ] } ]
                 """);
 
             Assert.Empty(body.Errors);
@@ -158,36 +158,36 @@ namespace Tests
             Assert.Equal(1, body.Data.Tables["master"]!.Rows[1]["_row"]);
             Assert.Equal(new DateTime(2026, 10, 22, 8, 30, 0), body.Data.Tables["master"]!.Rows[1]["ngay_ct"]);
             Assert.Equal(1, body.Data.Tables["detail"]!.Rows[0]["_parent"]);
-            Assert.Equal("B", body.Data.Tables["detail"]!.Rows[0]["id_doitac"]);
+            Assert.Equal("b", body.Data.Tables["detail"]!.Rows[0]["id_doitac"]);
         }
 
         [Fact]
         public void LoiGiaTri_GomDu_CoViTri()
         {
             MappedBody body = Map("""
-                [ { "master": { "YourID": "", "VoucherDate": "31/02/2026", "CustomerID": "QUA_DAI_123", "Note": "a<b", "Status": "x" },
-                    "detail": [ { "Quantity": 1 }, { "ItemID": "VT", "Quantity": "abc", "Promotion": 2, "CreatedAt": "x" } ] } ]
+                [ { "master": { "yourId": "", "voucherDate": "31/02/2026", "customerId": "QUA_DAI_123", "note": "a<b", "status": "x" },
+                    "detail": [ { "quantity": 1 }, { "itemId": "VT", "quantity": "abc", "promotion": 2, "createdAt": "x" } ] } ]
                 """);
 
             Assert.Null(body.ShapeError);
             Assert.Equal(
             [
-                ("[0].master.YourID", "FIELD_REQUIRED"),
-                ("[0].master.VoucherDate", "INVALID_VALUE"),
-                ("[0].master.CustomerID", "VALUE_TOO_LONG"),
-                ("[0].master.Note", "INVALID_FIELD_IRREGULAR"),
-                ("[0].master.Status", "INVALID_VALUE"),
-                ("[0].detail[0].ItemID", "FIELD_REQUIRED"),
-                ("[0].detail[1].Quantity", "INVALID_VALUE"),
-                ("[0].detail[1].Promotion", "INVALID_VALUE"),
-                ("[0].detail[1].CreatedAt", "INVALID_VALUE")
+                ("[0].master.yourId", "FIELD_REQUIRED"),
+                ("[0].master.voucherDate", "INVALID_VALUE"),
+                ("[0].master.customerId", "VALUE_TOO_LONG"),
+                ("[0].master.note", "INVALID_FIELD_IRREGULAR"),
+                ("[0].master.status", "INVALID_VALUE"),
+                ("[0].detail[0].itemId", "FIELD_REQUIRED"),
+                ("[0].detail[1].quantity", "INVALID_VALUE"),
+                ("[0].detail[1].promotion", "INVALID_VALUE"),
+                ("[0].detail[1].createdAt", "INVALID_VALUE")
             ], body.Errors.Select(e => (e.Position, e.Code)));
         }
 
         [Fact]
         public void FieldHidden_KhongNhanTuJson_KhongBatBuoc()
         {
-            MappedBody body = Map("""{ "master": { "YourID": "A", "VoucherDate": "21/10/2026", "Computed": "CTY" } }""");
+            MappedBody body = Map("""{ "master": { "yourId": "a", "voucherDate": "21/10/2026", "computed": "CTY" } }""");
 
             Assert.Empty(body.Errors);
             Assert.Equal(DBNull.Value, body.Data.Tables["master"]!.Rows[0]["ma_dvcs"]);
@@ -197,11 +197,11 @@ namespace Tests
         [InlineData("", "thiếu khối gốc")]
         [InlineData("123", "object hoặc mảng")]
         [InlineData("[]", "rỗng")]
-        [InlineData("{ \"YourID\": \"A\" }", "thiếu khối gốc 'master'")]
-        [InlineData("{ \"master\": { \"YourID\": \"A\" }, \"detail\": {} }", "phải là mảng")]
-        [InlineData("{ \"master\": { \"YourID\": \"A\" }, \"detail\": [1] }", "phải là object")]
-        [InlineData("{ \"master\": { \"YourID\": \"A\" }, \"detail\": [ { \"YourID\": \"B\" } ] }", "khác khóa khối gốc")]
-        [InlineData("[ { \"master\": { \"YourID\": \"A\" } }, 5 ]", "[1]")]
+        [InlineData("{ \"yourId\": \"a\" }", "thiếu khối gốc 'master'")]
+        [InlineData("{ \"master\": { \"yourId\": \"a\" }, \"detail\": {} }", "phải là mảng")]
+        [InlineData("{ \"master\": { \"yourId\": \"a\" }, \"detail\": [1] }", "phải là object")]
+        [InlineData("{ \"master\": { \"yourId\": \"a\" }, \"detail\": [ { \"yourId\": \"b\" } ] }", "khác khóa khối gốc")]
+        [InlineData("[ { \"master\": { \"yourId\": \"a\" } }, 5 ]", "[1]")]
         [InlineData("{ \"master\": ", "JSON không hợp lệ")]
         public void SaiDang_InvalidShape(string json, string message)
         {
@@ -215,7 +215,7 @@ namespace Tests
         [Fact]
         public void QuaSoChungTu_InvalidShape()
         {
-            MappedBody body = Map("[ { \"master\": { \"YourID\": \"A\" } }, { \"master\": { \"YourID\": \"B\" } } ]", maxDocuments: 1);
+            MappedBody body = Map("[ { \"master\": { \"yourId\": \"a\" } }, { \"master\": { \"yourId\": \"b\" } } ]", maxDocuments: 1);
 
             Assert.Contains("tối đa 1", body.ShapeError);
         }
@@ -223,7 +223,7 @@ namespace Tests
         [Fact]
         public void KhoiConGuiKemKhoaTrung_ChapNhan()
         {
-            MappedBody body = Map("""{ "master": { "YourID": "A", "VoucherDate": "21/10/2026" }, "detail": [ { "YourID": "A", "ItemID": "X" } ] }""");
+            MappedBody body = Map("""{ "master": { "yourId": "a", "voucherDate": "21/10/2026" }, "detail": [ { "yourId": "a", "itemId": "X" } ] }""");
 
             Assert.Null(body.ShapeError);
             Assert.Empty(body.Errors);
@@ -235,14 +235,14 @@ namespace Tests
             ImportForm form = ColumnTypeResolver.Resolve(ImportFormLoader.Parse("getCustomer", XDocument.Parse("""
                 <import xmlns="urn:schemas-fast-com:fast-api" type="List">
                   <fields name="filter">
-                    <field name="FromDate" fastName="ngay_tu" type="datetime" format="dd/MM/yyyy"/>
-                    <field name="ToDate" fastName="ngay_den" type="datetime" format="dd/MM/yyyy"/>
+                    <field name="fromDate" fastName="ngay_tu" type="datetime" format="dd/MM/yyyy"/>
+                    <field name="toDate" fastName="ngay_den" type="datetime" format="dd/MM/yyyy"/>
                   </fields>
                   <query><text>select 1</text></query>
                 </import>
                 """)), _ => null);
 
-            foreach (string json in new[] { """{ "FromDate": "01/10/2026", "ToDate": "31/10/2026" }""", """{ "filter": { "FromDate": "01/10/2026", "ToDate": "31/10/2026" } }""" })
+            foreach (string json in new[] { """{ "fromDate": "01/10/2026", "toDate": "31/10/2026" }""", """{ "filter": { "fromDate": "01/10/2026", "toDate": "31/10/2026" } }""" })
             {
                 MappedBody body = JsonBodyMapper.Map(form, Encoding.UTF8.GetBytes(json), 10);
                 Assert.Null(body.ShapeError);
