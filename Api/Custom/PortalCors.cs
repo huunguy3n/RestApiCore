@@ -14,8 +14,7 @@ namespace Web.Custom
         public static readonly string[] AllowedHeaders =
         [
             "Authorization", "Content-Type",
-            SignatureMiddleware.UserHeader, SignatureMiddleware.TimestampHeader, SignatureMiddleware.NonceHeader,
-            SignatureMiddleware.ContentSha256Header, SignatureMiddleware.SignatureHeader, SignatureMiddleware.IdempotencyKeyHeader
+            SignatureMiddleware.NonceHeader, SignatureMiddleware.SignatureHeader, SignatureMiddleware.IdempotencyKeyHeader
         ];
 
         /// <summary>Header response trình duyệt cần đọc để kiểm chữ ký response</summary>

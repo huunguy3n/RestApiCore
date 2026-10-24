@@ -187,11 +187,6 @@
             get; set;
         }
 
-        public int checkTypeResponse
-        {
-            get; set;
-        }
-
         public int commandTimeout
         {
             get; set;
@@ -267,7 +262,6 @@
             maxRequestsPerMinute = 0;
             ipCheckCacheSeconds = 60;
             maxRowInResponse = 0;
-            checkTypeResponse = 1;
             commandTimeout = 360;
             cacheDurationInMinutes = 10;
             isDevState = false;

@@ -87,9 +87,7 @@ namespace Tests
         {
             var (response, entry) = await PostAsync("/api/customer/get?unitCode=CTY", "{}", request =>
             {
-                request.Headers.Add("X-Fast-Nonce", "nonce-0123456789ab");
-                request.Headers.Add("X-Fast-Timestamp", "1792574400");
-                request.Headers.Add("X-Fast-Content-SHA256", "abc");
+                request.Headers.Add("X-Fast-Nonce", "1792574400-0123456789ab");
                 request.Headers.Add("X-Fast-Signature", "chu-ky-bi-mat");
                 request.Headers.Add("Idempotency-Key", "key-1");
                 request.Headers.TryAddWithoutValidation("Authorization", "Bearer jwt-bi-mat");
@@ -98,7 +96,7 @@ namespace Tests
             Assert.Equal(Guid.Parse(response.Headers.GetValues("X-Request-ID").Single()), entry.ReqId);
             Assert.Equal(("POST", "/api/customer/get", "?unitCode=CTY"), (entry.Method, entry.Path, entry.QueryString));
             Assert.Equal((200, "SUCCESS", "getCustomer", "VALID"), (entry.StatusCode, entry.ResultCode, entry.Form, entry.SignatureResult));
-            Assert.Equal(("nonce-0123456789ab", 1792574400L, "abc", "key-1"), (entry.Nonce, entry.ClientTimestamp, entry.ContentSha256, entry.IdempotencyKey));
+            Assert.Equal(("1792574400-0123456789ab", 1792574400L, "key-1"), (entry.Nonce, entry.ClientTimestamp, entry.IdempotencyKey));
             Assert.Equal("{}", Encoding.UTF8.GetString(entry.RequestBody!));
             Assert.False(entry.IsAttack);
 
@@ -110,12 +108,11 @@ namespace Tests
         [Fact]
         public async Task AuthToken_KhongLuuBodyResponseChuaJwt()
         {
-            var (_, entry) = await PostAsync("/api/auth/token", """{"userName":"DOITAC"}""", request => request.Headers.Add("X-Fast-User", "DOITAC"));
+            var (_, entry) = await PostAsync("/api/auth/token", """{"userName":"DOITAC"}""");
 
             Assert.Null(entry.ResponseBody);
             Assert.Null(entry.ResponseSha256);
             Assert.True(entry.ResponseBytes > 0);
-            Assert.Equal("DOITAC", entry.UserName);
             Assert.Equal("""{"userName":"DOITAC"}""", Encoding.UTF8.GetString(entry.RequestBody!));
         }
 

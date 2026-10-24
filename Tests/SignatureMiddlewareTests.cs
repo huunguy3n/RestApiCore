@@ -62,6 +62,9 @@ namespace Tests
                         services.AddSingleton<IIpAccessManager, FakeIpAccess>();
                         services.AddSingleton<LoginLockout>();
                         services.AddSingleton<TimeProvider>(_time);
+                        services.AddSingleton(Jwt);
+                        services.AddSingleton<MessageAuthenticator>();
+                        services.AddSingleton<AccessTokenIssuer>();
                         services.AddRouting();
                     })
                     .Configure(app =>
@@ -116,17 +119,16 @@ namespace Tests
             return request;
         }
 
-        private HttpRequestMessage TokenRequest(string headerUser, string bodyUser, FastApiSigner? signer, out string nonce)
+        private HttpRequestMessage TokenRequest(string user, FastApiSigner? signer, out string nonce)
         {
             var request = new HttpRequestMessage(HttpMethod.Post, "http://localhost/api/auth/token");
-            request.Headers.Add("X-Fast-User", headerUser);
-            nonce = (signer ?? _client).Sign(request, Encoding.UTF8.GetBytes("{\"userName\":\"" + bodyUser + "\"}"), Now);
+            nonce = (signer ?? _client).Sign(request, Encoding.UTF8.GetBytes("{\"userName\":\"" + user + "\"}"), Now);
             return request;
         }
 
         private async Task<string> GetTokenAsync(string user = "DOITAC")
         {
-            var (response, code, verified) = await SendAsync(TokenRequest(user, user, null, out string nonce), nonce);
+            var (response, code, verified) = await SendAsync(TokenRequest(user, null, out string nonce), nonce);
             Assert.Equal("SUCCESS", code);
             Assert.True(verified);
             string body = await response.Content.ReadAsStringAsync();
@@ -156,8 +158,20 @@ namespace Tests
             Assert.Contains("HD001", await response.Content.ReadAsStringAsync());
         }
 
+        [Theory]
+        [InlineData("/api/cpanel")]
+        [InlineData("/api/document/get")]
+        public async Task TienToControllerRongDaBo_PhaiKy(string path)
+        {
+            // CPanelController/DocumentController rỗng đã xoá: hai tiền tố này không còn được miễn chữ ký
+            HttpResponseMessage response = await _http.PostAsync("http://localhost" + path, new ByteArrayContent(Body));
+
+            Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+            Assert.Equal("UNAUTHORIZED", System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync()).RootElement.GetProperty("code").GetString());
+        }
+
         [Fact]
-        public async Task SuaMotByteBody_ChecksumMismatch()
+        public async Task SuaMotByteBody_InvalidSignature()
         {
             var request = NewRequest();
             string nonce = _client.Sign(request, Body, Now);
@@ -165,35 +179,9 @@ namespace Tests
 
             var (response, code, verified) = await SendAsync(request, nonce);
 
-            Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-            Assert.Equal("CHECKSUM_MISMATCH", code);
-            Assert.True(verified, "lỗi sau khi biết khóa vẫn được ký");
-        }
-
-        [Fact]
-        public async Task DoiQuery_InvalidSignature()
-        {
-            var request = NewRequest();
-            string nonce = _client.Sign(request, Body, Now);
-            request.RequestUri = new Uri("http://localhost/api/_meta/ping?unitCode=CTY&dryRun=true");
-
-            var (response, code, _) = await SendAsync(request, nonce);
-
             Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
             Assert.Equal("INVALID_SIGNATURE", code);
-        }
-
-        [Fact]
-        public async Task DoiIdempotencyKey_InvalidSignature()
-        {
-            var request = NewRequest();
-            string nonce = _client.Sign(request, Body, Now, idempotencyKey: "key-1");
-            request.Headers.Remove("Idempotency-Key");
-            request.Headers.Add("Idempotency-Key", "key-2");
-
-            var (_, code, _) = await SendAsync(request, nonce);
-
-            Assert.Equal("INVALID_SIGNATURE", code);
+            Assert.True(verified, "lỗi sau khi biết khóa vẫn được ký");
         }
 
         [Fact]
@@ -225,11 +213,11 @@ namespace Tests
         public async Task DungLaiNonce_NonceReused()
         {
             var first = NewRequest();
-            string nonce = _client.Sign(first, Body, Now, nonce: "nonce-dung-lai-0001");
+            string nonce = _client.Sign(first, Body, Now, nonce: Now + "-dunglai0001");
             Assert.Equal("SUCCESS", (await SendAsync(first, nonce)).Code);
 
             var replay = NewRequest();
-            _client.Sign(replay, Body, Now, nonce: "nonce-dung-lai-0001");
+            _client.Sign(replay, Body, Now, nonce: Now + "-dunglai0001");
             var (response, code, _) = await SendAsync(replay, nonce);
 
             Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
@@ -240,17 +228,19 @@ namespace Tests
         public async Task ChuKySai_KhongDotNonce()
         {
             var forged = NewRequest();
-            new FastApiSigner(new byte[32]).Sign(forged, Body, Now, nonce: "nonce-bi-gia-mao-01");
-            Assert.Equal("INVALID_SIGNATURE", (await SendAsync(forged, "nonce-bi-gia-mao-01")).Code);
+            new FastApiSigner(new byte[32]).Sign(forged, Body, Now, nonce: Now + "-bigiamao01");
+            Assert.Equal("INVALID_SIGNATURE", (await SendAsync(forged, Now + "-bigiamao01")).Code);
 
             var genuine = NewRequest();
-            string nonce = _client.Sign(genuine, Body, Now, nonce: "nonce-bi-gia-mao-01");
+            string nonce = _client.Sign(genuine, Body, Now, nonce: Now + "-bigiamao01");
             Assert.Equal("SUCCESS", (await SendAsync(genuine, nonce)).Code);
         }
 
         [Theory]
         [InlineData("ngan")]
         [InlineData("co dau cach trong nonce")]
+        [InlineData("khong-co-thoi-gian-0001")]
+        [InlineData("1792574400dinhkemlien0001")]
         public async Task NonceSaiDang_MissingSignature(string nonce)
         {
             var request = NewRequest();
@@ -346,7 +336,7 @@ namespace Tests
         [Fact]
         public async Task AuthToken_KyDung_TraJwtV3_DungDuocChoRequestSau()
         {
-            var (response, code, verified) = await SendAsync(TokenRequest("DOITAC", "doitac", null, out string nonce), nonce);
+            var (response, code, verified) = await SendAsync(TokenRequest("doitac", null, out string nonce), nonce);
 
             Assert.Equal(HttpStatusCode.OK, response.StatusCode);
             Assert.Equal("SUCCESS", code);
@@ -368,18 +358,9 @@ namespace Tests
         }
 
         [Fact]
-        public async Task AuthToken_UserTrongBodyKhacHeader_UserMismatch()
-        {
-            var (_, code, verified) = await SendAsync(TokenRequest("DOITAC", "NGUOIKHAC", null, out string nonce), nonce);
-
-            Assert.Equal("USER_MISMATCH", code);
-            Assert.True(verified);
-        }
-
-        [Fact]
         public async Task AuthToken_IpKhongDuocPhep_AccessDenied()
         {
-            var (response, code, _) = await SendAsync(TokenRequest("BICHANIP", "BICHANIP", null, out string nonce), nonce);
+            var (response, code, _) = await SendAsync(TokenRequest("BICHANIP", null, out string nonce), nonce);
 
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
             Assert.Equal("ACCESS_DENIED", code);
@@ -391,7 +372,7 @@ namespace Tests
         [InlineData("")]
         public async Task AuthToken_UserKhongHopLe_UnauthorizedKhongKy(string user)
         {
-            var (response, code, _) = await SendAsync(TokenRequest(user, user, null, out string nonce), nonce);
+            var (response, code, _) = await SendAsync(TokenRequest(user, null, out string nonce), nonce);
 
             Assert.Equal("UNAUTHORIZED", code);
             Assert.False(response.Headers.Contains("X-Fast-Signature"));
@@ -403,10 +384,10 @@ namespace Tests
             var forger = new FastApiSigner(new byte[32]);
             for (int i = 0; i < 3; i++)
             {
-                Assert.Equal("INVALID_SIGNATURE", (await SendAsync(TokenRequest("DOITAC", "DOITAC", forger, out string forgedNonce), forgedNonce)).Code);
+                Assert.Equal("INVALID_SIGNATURE", (await SendAsync(TokenRequest("DOITAC", forger, out string forgedNonce), forgedNonce)).Code);
             }
 
-            var (response, code, verified) = await SendAsync(TokenRequest("DOITAC", "DOITAC", null, out string nonce), nonce);
+            var (response, code, verified) = await SendAsync(TokenRequest("DOITAC", null, out string nonce), nonce);
 
             Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
             Assert.Equal("ACCOUNT_LOCKED", code);
@@ -475,7 +456,8 @@ namespace Tests
 
         private sealed class FakeKeyStore : ISignerKeyStore
         {
-            private readonly Dictionary<string, SignerKeys> _keys = new();
+            // Như cột restApiUser.name trên SQL: không phân biệt hoa thường
+            private readonly Dictionary<string, SignerKeys> _keys = new(StringComparer.OrdinalIgnoreCase);
             public void Add(SignerKeys keys) => _keys[keys.Name] = keys;
             public int UId(string userName) => _keys.TryGetValue(userName, out var keys) ? keys.UId : 0;
             public Task<SignerKeys?> GetAsync(string userName, CancellationToken cancellationToken = default) =>

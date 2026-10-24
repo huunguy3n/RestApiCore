@@ -21,15 +21,15 @@ namespace Web.Custom
     }
 
     /// <summary>
-    /// Nạp App_Data/Form và gắn kiểu theo cột thật. Mỗi lần nạp đọc lại cấu trúc bảng (bảng có thể đã thêm cột)
+    /// Nạp App_Data/Form và gắn kiểu theo cột thật. Mỗi lần nạp đọc lại cấu trúc bảng (bảng có thể đã thêm cột).
+    /// Chạy đồng bộ (lúc khởi động và trên luồng của FormReloader), không chạy trong request
     /// </summary>
-    public sealed class FormLoader(AppConfig appConfig, ILogger<ImportFormCatalog> logger)
+    public sealed class FormLoader(AppConfig appConfig, ColumnSchemaRepository columns, ILogger<ImportFormCatalog> logger)
     {
         public string Directory => Path.Combine(appConfig.pathDirectory, "App_Data", "Form");
 
         public ImportFormCatalog Load()
         {
-            var columns = new ColumnSchemaRepository(appConfig);
             var schemaCache = new Dictionary<string, IReadOnlyDictionary<string, ColumnInfo>?>(StringComparer.OrdinalIgnoreCase);
 
             return ImportFormCatalog.LoadDirectory(Directory, logger,

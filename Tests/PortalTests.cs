@@ -83,6 +83,10 @@ namespace Tests
                         services.AddSingleton(_portalKey);
                         services.AddSingleton(new FormRuntime(catalog, null));
                         services.AddSingleton<TimeProvider>(TimeProvider.System);
+                        services.AddSingleton(Jwt);
+                        services.AddSingleton<MessageAuthenticator>();
+                        services.AddSingleton<AccessTokenIssuer>();
+                        services.AddSingleton<PortalLoginService>();
                         services.AddRouting();
                     })
                     .Configure(app =>

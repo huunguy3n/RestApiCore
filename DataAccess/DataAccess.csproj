@@ -7,6 +7,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Cài đặt các cổng lưu trữ của Business (Business/Persistence.cs, IFormExecutor, IIdempotencyStore, IRequestLogSink) -->
+    <ProjectReference Include="..\Business\Business.csproj" />
     <ProjectReference Include="..\Models\Models.csproj" />
     <ProjectReference Include="..\Provider\Provider.csproj" />
     <ProjectReference Include="..\Utilities\Utilities.csproj" />

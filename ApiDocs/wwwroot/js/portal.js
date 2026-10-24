@@ -146,7 +146,7 @@ async function login(userName, password) {
     const jwk = server.portalKey;
     const publicKey = await crypto.subtle.importKey("jwk", { kty: jwk.kty, n: jwk.n, e: jwk.e, alg: "RSA-OAEP-256", ext: true },
         { name: "RSA-OAEP", hash: "SHA-256" }, false, ["encrypt"]);
-    const plain = new TextEncoder().encode(JSON.stringify({ password, timestamp: server.serverTime, nonce: sign.newNonce() }));
+    const plain = new TextEncoder().encode(JSON.stringify({ password, timestamp: server.serverTime, nonce: sign.newNonce(server.serverTime) }));
     const credential = sign.toBase64(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, plain));
 
     const response = await fetch(apiBase + "/api/auth/portal", {
@@ -328,7 +328,7 @@ async function ensureApiToken(output) {
     if (tryIt.apiToken && tryIt.apiTokenExpires > Date.now()) return;
     await fetchServer();
     const userName = state.session.userName;
-    const result = await signedCall("POST", "/api/auth/token", JSON.stringify({ userName }), "", { "X-Fast-User": userName }, false);
+    const result = await signedCall("POST", "/api/auth/token", JSON.stringify({ userName }), "", {}, false);
     if (!result.json?.accessToken) {
         output.replaceChildren(callResult(result));
         throw new Error(`Không lấy được JWT API: ${result.json?.code || result.status} ${result.json?.message || ""}`);
@@ -339,7 +339,7 @@ async function ensureApiToken(output) {
 
 async function signedCall(method, pathAndQuery, bodyText, idempotencyKey, extraHeaders = {}, withToken = true) {
     const { keys, apiToken } = state.tryIt;
-    const signed = await sign.signRequest(keys, { method, url: apiBase + pathAndQuery, body: bodyText, timestamp: serverNow(), idempotencyKey });
+    const signed = await sign.signRequest(keys, { body: bodyText, timestamp: serverNow(), idempotencyKey });
     const headers = { "Content-Type": "application/json", ...signed.headers, ...extraHeaders };
     if (withToken) headers.Authorization = "Bearer " + apiToken;
 
@@ -361,7 +361,7 @@ async function signedCall(method, pathAndQuery, bodyText, idempotencyKey, extraH
     const shown = { ...headers };
     if (shown.Authorization) shown.Authorization = "Bearer …";
     return {
-        method, pathAndQuery, canonical: signed.canonical, requestHeaders: shown, status: response.status, verify,
+        method, pathAndQuery, message: signed.message, requestHeaders: shown, status: response.status, verify,
         signed: response.headers.has("X-Fast-Signature"), json, text
     };
 }
@@ -378,7 +378,7 @@ function callResult(r) {
             h("span", { class: `badge ${r.status < 300 ? "bg-success" : "bg-danger"}` }, r.status),
             h("code", {}, `${r.method} ${r.pathAndQuery}`)),
         h("div", { class: "mt-2" }, verdict),
-        h("details", { open: true }, h("summary", {}, "canonicalRequest (chuỗi đã ký)"), pre(r.canonical)),
+        h("details", { open: true }, h("summary", {}, "Thông điệp đã ký (md5(body) + nonce)"), pre(r.message)),
         h("details", {}, h("summary", {}, "Header request"), pre(headerText)),
         r.signed ? h("details", {}, h("summary", {}, "canonicalResponse (portal tự dựng để kiểm)"), pre(r.verify.canonical)) : null,
         h("h3", { class: "h6 mt-3" }, "Body response"),
@@ -440,34 +440,30 @@ async function samplesView() {
         ["private_key (base64)", v.privateKey],
         ["K_request = HMAC(private_key, \"FAST-API-V3-REQUEST\")", v.requestKeyHex],
         ["K_response = HMAC(private_key, \"FAST-API-V3-RESPONSE\")", v.responseKeyHex],
-        ["Request", `${v.method} ${v.url}`],
         ["Body", v.body],
-        ["X-Fast-Content-SHA256", v.bodySha256],
-        ["X-Fast-Timestamp", v.timestamp],
-        ["X-Fast-Nonce", v.nonce],
-        ["Idempotency-Key", v.idempotencyKey],
+        ["md5Hex(body)", v.bodyMd5],
+        ["X-Fast-Nonce = \"<unix giây>-<ngẫu nhiên>\"", v.nonce],
         ["X-Fast-Signature (request)", v.requestSignature],
         ["Response: status, X-Request-ID, X-Fast-Timestamp", `${v.responseStatus}, ${v.responseRequestId}, ${v.responseTimestamp}`],
         ["Response body", v.responseBody],
         ["X-Fast-Signature (response)", v.responseSignature]
     ];
-    const canonical = sign.canonicalRequest(v.method, "/api/sale-invoice", sign.canonicalQuery("unitCode=CTY&dryRun=false"), v.timestamp, v.nonce, v.idempotencyKey, v.bodySha256);
+    const message = v.bodyMd5 + v.nonce;
 
     render(
         h("h1", { class: "h4" }, "Ký request và kiểm chữ ký response"),
         h("ol", { class: "small" },
             h("li", {}, "Lấy giờ server: GET /api/_meta/server (serverTime) để tránh lệch giờ."),
             h("li", {}, "Dẫn xuất K_request, K_response từ private_key (HMAC-SHA256 với hai nhãn cố định)."),
-            h("li", {}, "Băm SHA-256 đúng các byte body gửi đi (body rỗng vẫn băm chuỗi rỗng)."),
-            h("li", {}, "Dựng canonicalRequest: thuật toán, METHOD, path chữ thường, query chuẩn hóa RFC 3986 và sắp xếp, timestamp, nonce, Idempotency-Key, SHA-256 body — nối bằng \\n."),
-            h("li", {}, "X-Fast-Signature = hex(HMAC-SHA256(K_request, canonicalRequest)). Lấy JWT ở POST /api/auth/token (header X-Fast-User), các request sau gửi kèm Authorization: Bearer."),
+            h("li", {}, "Dựng nonce = \"<serverTime>-<chuỗi ngẫu nhiên 8–48 ký tự A-Z a-z 0-9 _ ->\". Giây trong nonce phải lệch giờ server không quá clockSkewSeconds, mỗi nonce chỉ dùng một lần."),
+            h("li", {}, "X-Fast-Signature = hex(HMAC-SHA256(K_request, md5Hex(body) + nonce)); body là đúng các byte gửi đi (body rỗng vẫn md5 chuỗi rỗng). Request chỉ cần hai header X-Fast-Nonce và X-Fast-Signature. Lấy JWT ở POST /api/auth/token với body {\"userName\"}, các request sau gửi kèm Authorization: Bearer."),
             h("li", {}, "Kiểm response: HMAC-SHA256(K_response, canonicalResponse) với status, X-Request-ID, nonce của request, X-Fast-Timestamp, SHA-256 body. Sai thì không tin nội dung.")),
         h("h2", { class: "h5 mt-4" }, "Vector thử cố định"),
         h("p", { class: "small text-secondary" }, "Mọi code mẫu đều tự kiểm bằng vector này khi chạy không tham số. Code của bạn ra đúng các giá trị dưới đây là ký đúng."),
         h("div", { class: "table-responsive" }, h("table", { class: "table table-sm vector" },
             h("tbody", {}, ...rows.map(([k, val]) => h("tr", {}, h("th", {}, k), h("td", {}, h("code", {}, String(val)))))))),
-        h("h3", { class: "h6" }, "canonicalRequest của vector"),
-        pre(canonical),
+        h("h3", { class: "h6" }, "Thông điệp ký của vector (md5Hex(body) + nonce)"),
+        pre(message),
         h("p", { class: "small" }, "Trình duyệt này tự kiểm: ",
             ...checks.map(c => h("span", { class: `badge me-1 ${c.ok ? "bg-success" : "bg-danger"}` }, `${c.name} ${c.ok ? "đúng" : "SAI"}`))),
         h("h2", { class: "h5 mt-4" }, "Code mẫu"),

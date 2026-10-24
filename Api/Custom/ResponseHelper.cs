@@ -43,20 +43,5 @@ namespace Web.Custom
             }
             return controller.StatusCode(response.statusCode, response);
         }
-
-        /// <summary>
-        /// Sử dụng trong ActionFilter
-        /// </summary>
-        /// <param name="response"></param>
-        /// <returns></returns>
-        public static ContentResult ToContentResult(IResponse response)
-        {
-            return new ContentResult
-            {
-                StatusCode = response.statusCode,
-                Content = JsonConvert.SerializeObject(response),
-                ContentType = "application/json; charset=utf-8"
-            };
-        }
     }
 }

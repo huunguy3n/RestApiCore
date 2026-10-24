@@ -4,6 +4,7 @@ using System.Text.Json;
 using Business;
 using Business.Logging;
 using Models;
+using Security;
 
 namespace Web.Custom
 {
@@ -61,10 +62,6 @@ namespace Web.Custom
 
             var signer = context.Items[SignatureMiddleware.SignerItem] as SignerKeys;
             string? userName = signer?.Name ?? NullIfAnonymous(IpAccessMiddleware.GetUserName(context.User));
-            if (userName == null && isToken)
-            {
-                userName = request.Headers[SignatureMiddleware.UserHeader].ToString() is { Length: > 0 } header ? header : null;
-            }
 
             string? resultCode = ResultCode(context.Response.ContentType, responseBody);
             // auth/portal: request chứa mật khẩu mã hóa bằng khóa server, không lưu (người giữ khóa riêng giải được)
@@ -92,9 +89,8 @@ namespace Web.Custom
                 RequestSha256 = requestSha,
                 ResponseBody = keptResponse,
                 ResponseSha256 = responseSha,
-                ContentSha256 = Header(request, SignatureMiddleware.ContentSha256Header),
                 Nonce = Header(request, SignatureMiddleware.NonceHeader),
-                ClientTimestamp = long.TryParse(request.Headers[SignatureMiddleware.TimestampHeader], out long ts) ? ts : null,
+                ClientTimestamp = Header(request, SignatureMiddleware.NonceHeader) is { } nonce && MessageSignature.TryParseNonce(nonce, out long ts) ? ts : null,
                 SignatureResult = context.Items[SignatureResultItem] as string,
                 IdempotencyKey = Header(request, SignatureMiddleware.IdempotencyKeyHeader),
                 IsAttack = resultCode != null && AttackCodes.All.Contains(resultCode)

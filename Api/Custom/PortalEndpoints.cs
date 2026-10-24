@@ -1,12 +1,8 @@
-using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using Business;
 using Models;
 using Models.Options;
 using Newtonsoft.Json;
-using Security;
 
 namespace Web.Custom
 {
@@ -14,12 +10,9 @@ namespace Web.Custom
     /// Portal đối tác (KE_HOACH 5.3): đăng nhập POST /api/auth/portal bằng restApiUser.name + password mã hóa RSA-OAEP tại trình duyệt,
     /// và các route _meta đọc định nghĩa tài nguyên. JWT scope=portal chỉ gọi được GET /api/_meta/* (SignatureMiddleware chặn route khác)
     /// </summary>
-    public static partial class PortalEndpoints
+    public static class PortalEndpoints
     {
         public const string PortalPath = "/api/auth/portal";
-
-        [GeneratedRegex("^[A-Za-z0-9_-]{16,64}$")]
-        private static partial Regex NonceFormat();
 
         public static void MapPortal(this IEndpointRouteBuilder endpoints)
         {
@@ -30,14 +23,9 @@ namespace Web.Custom
         }
 
         private sealed record PortalLogin(string? userName, string? kid, string? credential);
-        private sealed record PortalCredential(string? password, long timestamp, string? nonce);
 
-        /// <summary>
-        /// Thứ tự kiểm như auth/token: tài khoản → khóa đăng nhập → IP → kid → giải RSA → timestamp + nonce → so mật khẩu (thời gian hằng).
-        /// Sai mật khẩu hoặc bản mã giải không được thì tính vào khóa đăng nhập
-        /// </summary>
-        private static async Task LoginAsync(HttpContext context, AppConfig appConfig, ResponseManager responseManager, ISignerKeyStore keyStore,
-            IPortalCredentialStore credentials, PortalKeyProvider portalKey, NonceStore nonceStore, LoginLockout lockout, IIpAccessManager ipAccess, TimeProvider time)
+        /// <summary>Kiểm dạng body ở đây; các bước xác thực ở PortalLoginService</summary>
+        private static async Task LoginAsync(HttpContext context, ResponseManager responseManager, PortalLoginService portalLogin)
         {
             PortalLogin? login = await ReadJsonAsync<PortalLogin>(context.Request);
             if (login is not { userName.Length: > 0 and <= 32, kid.Length: > 0, credential.Length: > 0 })
@@ -46,65 +34,17 @@ namespace Web.Custom
                 return;
             }
 
-            SignerKeys? account = await keyStore.GetAsync(login.userName, context.RequestAborted);
-            if (account == null || !account.IsActive)
+            PortalLoginResult result = await portalLogin.LoginAsync(login.userName, login.kid, login.credential,
+                context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW", context.RequestAborted);
+            if (result.AccountFound)
             {
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("UNAUTHORIZED"));
+                context.Items[RequestLogMiddleware.SignatureResultItem] = "PORTAL_LOGIN";
+            }
+            if (result.Token == null)
+            {
+                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse(result.Code));
                 return;
             }
-            context.Items[RequestLogMiddleware.SignatureResultItem] = "PORTAL_LOGIN";
-
-            if (lockout.IsLocked(account.UId))
-            {
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("ACCOUNT_LOCKED"));
-                return;
-            }
-
-            var ipResponse = await ipAccess.CheckAsync(context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW", account.Name, context.RequestAborted);
-            if (ipResponse.code != "SUCCESS")
-            {
-                await ResponseHelper.WriteJsonAsync(context, ipResponse);
-                return;
-            }
-
-            if (login.kid != portalKey.Kid)
-            {
-                // Trình duyệt dùng khóa công khai cũ (server đã đổi khóa): lấy lại /_meta/server
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("INVALID_KID"));
-                return;
-            }
-
-            PortalCredential? credential = Parse<PortalCredential>(portalKey.Decrypt(login.credential));
-            if (credential is not { password.Length: > 0, nonce: not null })
-            {
-                lockout.RecordFailure(account.UId);
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("INVALID_CREDENTIAL"));
-                return;
-            }
-
-            if (Math.Abs(time.GetUtcNow().ToUnixTimeSeconds() - credential.timestamp) > appConfig.clockSkewSeconds)
-            {
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("TIMESTAMP_EXPIRED"));
-                return;
-            }
-            if (!NonceFormat().IsMatch(credential.nonce) || !nonceStore.TryUse(account.UId, "portal:" + credential.nonce, TimeSpan.FromSeconds(2 * appConfig.clockSkewSeconds)))
-            {
-                // Phát lại gói đăng nhập đã bắt được
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("NONCE_REUSED"));
-                return;
-            }
-
-            if (!await PasswordMatchesAsync(credentials, appConfig, account.Name, credential.password, context.RequestAborted))
-            {
-                lockout.RecordFailure(account.UId);
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("INVALID_CREDENTIAL"));
-                return;
-            }
-
-            lockout.Reset(account.UId);
-            DateTime expires = time.GetUtcNow().UtcDateTime.AddMinutes(appConfig.portalTokenMinutes);
-            string accessToken = new JwtTokenService(appConfig.secretKey, appConfig.expiryToken, appConfig.issuerToken)
-                .GenerateToken(account.Name, account.UId, account.UserId!.Value, account.NameErp, Guid.NewGuid().ToString(), expires, scope: "portal");
 
             await WriteAsync(context, 200, new
             {
@@ -112,33 +52,11 @@ namespace Web.Custom
                 success = true,
                 message = "",
                 request_id = context.Items["requestID"]?.ToString(),
-                accessToken,
+                accessToken = result.Token.AccessToken,
                 tokenType = "Bearer",
-                expiresIn = appConfig.portalTokenMinutes * 60,
+                expiresIn = result.Token.ExpiresIn,
                 scope = "portal"
             });
-        }
-
-        /// <summary>
-        /// restApiUser.password giải bằng passwordKey rồi so theo thời gian hằng
-        /// </summary>
-        private static async Task<bool> PasswordMatchesAsync(IPortalCredentialStore credentials, AppConfig appConfig, string userName, string password, CancellationToken cancellationToken)
-        {
-            string? stored = await credentials.GetEncryptedPasswordAsync(userName, cancellationToken);
-            if (string.IsNullOrEmpty(stored))
-            {
-                return false;
-            }
-            string plain;
-            try
-            {
-                plain = EncryptionHelper.DecryptString(stored, appConfig.passwordKey);
-            }
-            catch (Exception ex) when (ex is CryptographicException or FormatException)
-            {
-                return false;
-            }
-            return CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(plain)), SHA256.HashData(Encoding.UTF8.GetBytes(password)));
         }
 
         /// <summary>Tài nguyên user được cấp quyền (restApiAllowForm)</summary>

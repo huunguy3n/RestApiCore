@@ -1,4 +1,3 @@
-using DataAccess;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Caching.Memory;
 using Models;
@@ -15,13 +14,13 @@ namespace Business
     /// JWT thu hồi: lưu SQL (restApiRevokedToken), tra qua HybridCache. Thu hồi ghi đè cache ngay nên có hiệu lực tức thì
     /// trên instance này (baseline một instance)
     /// </summary>
-    public class RevokedTokenStore(AppConfig appConfig, HybridCache cache) : IRevokedTokenStore
+    public class RevokedTokenStore(AppConfig appConfig, HybridCache cache, IRevokedTokenRepository repository) : IRevokedTokenStore
     {
         public async Task<bool> IsRevokedAsync(string jti, CancellationToken cancellationToken = default)
         {
             return await cache.GetOrCreateAsync(
                 Key(jti),
-                async token => await new RevokedTokenRepository(appConfig).IsRevokedAsync(jti, token),
+                async token => await repository.IsRevokedAsync(jti, token),
                 new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(appConfig.userCacheSeconds) },
                 cancellationToken: cancellationToken);
         }
@@ -29,7 +28,7 @@ namespace Business
         public async Task RevokeAsync(string jti, int uId, DateTime expiresAtUtc, CancellationToken cancellationToken = default)
         {
             // restApiRevokedToken.expires_at so với GETDATE() (giờ máy SQL) nên lưu giờ địa phương
-            await new RevokedTokenRepository(appConfig).RevokeAsync(jti, uId, expiresAtUtc.ToLocalTime(), cancellationToken);
+            await repository.RevokeAsync(jti, uId, expiresAtUtc.ToLocalTime(), cancellationToken);
             await cache.SetAsync(Key(jti), true, new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(appConfig.userCacheSeconds) }, cancellationToken: cancellationToken);
         }
 

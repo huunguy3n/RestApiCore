@@ -250,28 +250,25 @@ Tham số điều khiển:
 - Hai file ra cùng route hoặc tên không tách được → lỗi lúc nạp, bỏ qua file, ghi log.
 - URL không phân biệt hoa thường, chỉ nhận `[a-z0-9-]`. Sai method → `405` (`Allow: POST`). Không có resource/động từ → `404`.
 
-### 4.2. Bảo mật thông điệp: SHA-256 + HMAC-SHA256 hai chiều
+### 4.2. Bảo mật thông điệp: HMAC-SHA256 hai chiều
 
 #### 4.2.1. Mục tiêu và giới hạn
 
 | Yêu cầu | Cơ chế |
 |---|---|
-| **Toàn vẹn** request: body, query, tham số header không bị sửa | SHA-256 checksum body + HMAC-SHA256 trên chuỗi chuẩn hóa |
+| **Toàn vẹn** request: body không bị sửa | `md5(body)` nằm trong thông điệp được ký |
 | **Xác thực** client: request đúng do đối tác gửi | HMAC-SHA256 với khóa chỉ đối tác và server biết (`private_key`) |
 | **Xác thực** server: response đúng do server tạo, không bị sửa | HMAC-SHA256 trên response (chiều ngược lại) |
-| **Chống phát lại** | Timestamp + nonce, nonce lưu HybridCache |
+| **Chống phát lại** | Nonce mang giây Unix (`<unix giây>-<ngẫu nhiên>`), lệch giờ server quá `ClockSkewSeconds` thì loại; nonce còn hạn lưu HybridCache |
 
-**Giới hạn phải ghi rõ với khách:**
-- SHA-256 và HMAC **không mã hóa**. Ai bắt được gói tin trên HTTP vẫn đọc được dữ liệu. Bí mật nội dung do HTTPS/TLS đảm nhận; triển khai cho khách khuyến nghị bắt buộc HTTPS.
-- HMAC dựa trên khóa dùng chung: cả client lẫn server đều tạo được HMAC hợp lệ, nên **không chống chối bỏ** như chữ ký số bất đối xứng. Log chứng minh được "request khớp khóa của đối tác", không chứng minh được với bên thứ ba rằng chỉ đối tác mới tạo được.
+**Giản lược (23/10/2026):** request chỉ có hai header ký là `X-Fast-Nonce` và `X-Fast-Signature`. Không còn `X-Fast-User`, `X-Fast-Timestamp`, `X-Fast-Content-SHA256`. Method, path, query, `Idempotency-Key` **không nằm trong chữ ký**; đổi lại phần ràng buộc đó dựa vào JWT (xác định user) và TLS (không bị sửa trên đường truyền). Response giữ nguyên cách ký.
 
 #### 4.2.2. Bốn loại checksum/chữ ký
 
 | Thành phần | Công thức | Mục đích |
 |---|---|---|
-| Request checksum | `SHA256(rawBody)` | Tóm tắt chính xác byte body |
-| Request signature | `HMAC-SHA256(K_request, canonicalRequest)` | Xác thực client và toàn vẹn request |
-| Query/cache fingerprint | `SHA256(canonicalQuery)` | Cache key ổn định (cursor, idempotency) |
+| Request signature | `HMAC-SHA256(K_request, md5Hex(rawBody) + nonce)` | Xác thực client, toàn vẹn body, chống phát lại |
+| Query fingerprint (idempotency) | `SHA256(form + query sắp thô + SHA256(body))` | Cùng `Idempotency-Key` phải cùng request |
 | Response signature | `HMAC-SHA256(K_response, canonicalResponse)` | Xác minh response do server tạo |
 
 **Khóa.** Hai khóa dẫn xuất từ cùng `private_key`, tách mục đích để chữ ký request không dùng lại được làm chữ ký response:
@@ -289,35 +286,26 @@ POST /api/sale-invoice?unitCode=CTY&dryRun=false
 Authorization: Bearer <jwt>
 Content-Type: application/json
 Idempotency-Key: 6f1c…
-X-Fast-Timestamp: 1792574400
-X-Fast-Nonce: 9b2e4c…              (16–64 ký tự ngẫu nhiên)
-X-Fast-Content-SHA256: 3a7bd3e2…   (hex SHA256 byte thô của body)
-X-Fast-Signature: 5d41402a…        (hex HMAC-SHA256)
+X-Fast-Nonce: 1792574400-9b2e4c1f0a7d4e3b   (<unix giây>-<8–48 ký tự A-Z a-z 0-9 _ ->)
+X-Fast-Signature: 9f792345…                  (hex HMAC-SHA256)
 
 { "master": { … }, "detail": [ … ] }
 ```
 
 ```
-canonicalRequest =
-  "FAST-HMAC-SHA256"  + "\n" +
-  METHOD              + "\n" +   // POST
-  PATH                + "\n" +   // /api/sale-invoice, viết thường
-  canonicalQuery      + "\n" +   // tham số sắp theo tên (rồi theo giá trị), URL-encode RFC 3986, nối bằng &; không có thì rỗng
-  TIMESTAMP           + "\n" +
-  NONCE               + "\n" +
-  IDEMPOTENCY_KEY     + "\n" +   // không gửi thì rỗng
-  CONTENT_SHA256                 // hex chữ thường; body rỗng = SHA256 của chuỗi rỗng
+message   = md5Hex(rawBody) + NONCE        // hex chữ thường; body rỗng = d41d8cd98f00b204e9800998ecf8427e
+signature = hex(HMAC-SHA256(K_request, UTF8(message)))
 ```
 
 **Server kiểm theo thứ tự, sai bước nào dừng ở bước đó:**
 1. JWT hợp lệ, `jti` không nằm trong `restApiRevokedToken`. Lấy `u_id` → `private_key` (cache HybridCache, giải mã trong bộ nhớ).
-2. `|now − TIMESTAMP| ≤ ClockSkewSeconds` (mặc định 300). Nonce chưa gặp (HybridCache, TTL 2 × `ClockSkewSeconds`).
-3. Tự tính `SHA256(rawBody)`, so với `X-Fast-Content-SHA256` → sai: `400 CHECKSUM_MISMATCH`.
-4. Tự dựng `canonicalRequest`, tính HMAC bằng `K_request`, so với `X-Fast-Signature` bằng `CryptographicOperations.FixedTimeEquals` → sai: `401 INVALID_SIGNATURE`.
+2. Nonce đúng dạng `<unix giây>-<ngẫu nhiên>` và `|now − giây trong nonce| ≤ ClockSkewSeconds` (mặc định 300) → sai dạng: `401 MISSING_SIGNATURE`, quá hạn: `401 TIMESTAMP_EXPIRED`.
+3. Tự tính `HMAC-SHA256(K_request, md5Hex(rawBody) + nonce)`, so với `X-Fast-Signature` bằng `CryptographicOperations.FixedTimeEquals` → sai: `401 INVALID_SIGNATURE`.
+4. Nonce chưa gặp (HybridCache, TTL 2 × `ClockSkewSeconds`, chỉ ghi sau khi chữ ký đúng) → trùng: `401 NONCE_REUSED`.
 5. Parse JSON object (4.3) → sai dạng: `400 INVALID_SHAPE`.
 6. Phân quyền: user còn hiệu lực → IP → `restApiAllowForm` → `unitRequired`/`unitCode` → `restApi_CheckUnitRights`. Kết quả cache vài phút; đổi quyền thì xoá cache.
 
-Body đọc **một lần** (buffer có giới hạn `MaxRequestBodySize`), vừa băm vừa giữ để parse. Thay header `checksum` MD5 hiện tại (lỗi 1.4 #9).
+Body đọc **một lần** (buffer có giới hạn `MaxRequestBodySize`), vừa băm vừa giữ để parse.
 
 #### 4.2.4. Response
 
@@ -345,7 +333,7 @@ canonicalResponse =
 
 #### 4.2.5. Lấy token
 
-`POST /api/auth/token`, không có `Authorization`, có thêm header `X-Fast-User: <restApiUser.name>`. Ký y như 4.2.3, body `{ "userName": "<restApiUser.name>" }` phải khớp `X-Fast-User`. Server kiểm `restApiUser.status`, `name_erp = userinfo2.name` khớp một dòng `status = '1'`, IP, khoá đăng nhập sai nhiều lần (HybridCache). Response ký như 4.2.4, chứa `{ "accessToken": "<jwt>", "expiresIn": 3600 }`. JWT: `sub` = `restApiUser.name`, claim `u_id` = `restApiUser.id`, `user_id` = `sysdb..userinfo2.id`, `name_erp`, `jti`. JWT ký bằng `secretKey` của server (khác `private_key`).
+`POST /api/auth/token`, không có `Authorization`. Ký y như 4.2.3; user lấy từ `userName` trong body `{ "userName": "<restApiUser.name>" }` (không còn header `X-Fast-User`), server tìm khóa của user đó để kiểm chữ ký. Server kiểm `restApiUser.status`, `name_erp = userinfo2.name` khớp một dòng `status = '1'`, IP, khoá đăng nhập sai nhiều lần (HybridCache). Response ký như 4.2.4, chứa `{ "accessToken": "<jwt>", "expiresIn": 3600 }`. JWT: `sub` = `restApiUser.name`, claim `u_id` = `restApiUser.id`, `user_id` = `sysdb..userinfo2.id`, `name_erp`, `jti`. JWT ký bằng `secretKey` của server (khác `private_key`).
 
 #### 4.2.6. Rate limit
 Middleware ASP.NET Core, partition theo `u_id` (sau xác thực) và theo IP (trước xác thực, cho `auth/token`). In-process, phù hợp một instance.

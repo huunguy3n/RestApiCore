@@ -13,14 +13,14 @@ namespace Tests
         // private_key = byte 0x00..0x1f
         internal const string PrivateKeyBase64 = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
         internal const string Body = "{\"master\":{\"YourID\":\"HD001\"},\"detail\":[{\"ItemID\":\"VT01\",\"Quantity\":2}]}";
+        internal const string BodyMd5 = "8e0a0e9704e5282159769a91441af571";
         internal const string BodySha256 = "534275e0a5da4d457614f2f130e8db3dfe3a21cef90e3f5e13ae77c3d60ed12f";
-        internal const string Nonce = "9b2e4c1f0a7d4e3b";
-        internal const string IdempotencyKey = "6f1c2d3e-0000-4000-8000-000000000001";
-        internal const string RequestSignature = "4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b2";
+        internal const string Nonce = "1792574400-9b2e4c1f0a7d4e3b";
+        internal const string RequestSignature = "9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac";
 
         internal const string ResponseBody = "{\"code\":\"SUCCESS\"}";
         internal const string RequestId = "8c2f0000-0000-4000-8000-000000000002";
-        internal const string ResponseSignature = "1972c2ae0b53f37dd745becadfd19669a8da4d968fb282891ed43fddec17fd68";
+        internal const string ResponseSignature = "ad5353907e543ef9429cfe159bdaf1ded0ae2c37a27208110bbc2a47ef902bac";
 
         private static byte[] PrivateKey => Convert.FromBase64String(PrivateKeyBase64);
 
@@ -39,12 +39,19 @@ namespace Tests
         }
 
         [Fact]
+        public void Md5Hex_KhopVector()
+        {
+            Assert.Equal(BodyMd5, MessageSignature.Md5Hex(Encoding.UTF8.GetBytes(Body)));
+            Assert.Equal("d41d8cd98f00b204e9800998ecf8427e", MessageSignature.Md5Hex([]));
+        }
+
+        [Fact]
         public void RequestSignature_KhopVector()
         {
-            string canonical = MessageSignature.CanonicalRequest("post", "/API/Sale-Invoice", MessageSignature.CanonicalQuery("?unitCode=CTY&dryRun=false"),
-                1792574400, Nonce, IdempotencyKey, BodySha256);
+            string message = MessageSignature.RequestMessage(Encoding.UTF8.GetBytes(Body), Nonce);
 
-            Assert.Equal(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), canonical));
+            Assert.Equal(BodyMd5 + Nonce, message);
+            Assert.Equal(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), message));
         }
 
         [Fact]
@@ -62,49 +69,39 @@ namespace Tests
 
             // Ký bằng K_request (khóa của client) ra chữ ký khác, client không giả được response
             string forged = MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), canonical);
-            Assert.Equal("1b2180546cede2586822fdb2dad04d418c004e50c83fdfc869f93290bebbee0b", forged);
+            Assert.Equal("40d2309d1cbd8c5f30a800c90d4609f9df10809f8b8ee6a358b9b571316f9430", forged);
             Assert.False(MessageSignature.SignatureEquals(ResponseSignature, forged));
         }
 
         [Theory]
-        [InlineData(null, "")]
-        [InlineData("", "")]
-        [InlineData("?", "")]
-        [InlineData("unitCode=CTY&dryRun=false", "dryRun=false&unitCode=CTY")]
-        [InlineData("b=2&a=1&a=0&c", "a=0&a=1&b=2&c=")]
-        [InlineData("name=Nguy%E1%BB%85n+V%C4%83n", "name=Nguy%E1%BB%85n%20V%C4%83n")]
-        [InlineData("name=Nguy%e1%bb%85n%20V%c4%83n", "name=Nguy%E1%BB%85n%20V%C4%83n")]
-        [InlineData("x=a%2Bb&y=~-._", "x=a%2Bb&y=~-._")]
-        [InlineData("Z=1&a=1", "Z=1&a=1")]
-        public void CanonicalQuery_ChuanHoa(string? raw, string expected)
+        [InlineData("1792574400-9b2e4c1f0a7d4e3b", true, 1792574400)]
+        [InlineData("1792574400-ab_CD-12", true, 1792574400)]
+        [InlineData("1792574400-ngan", false, 0)]
+        [InlineData("9b2e4c1f0a7d4e3b", false, 0)]
+        [InlineData("1792574400dinhkem0001", false, 0)]
+        [InlineData("abc1234567-9b2e4c1f0a7d4e3b", false, 0)]
+        [InlineData("1792574400-co dau cach", false, 0)]
+        [InlineData("-9b2e4c1f0a7d4e3b", false, 0)]
+        public void TryParseNonce_ChiNhanDangGiayNgauNhien(string nonce, bool expected, long seconds)
         {
-            Assert.Equal(expected, MessageSignature.CanonicalQuery(raw));
+            Assert.Equal(expected, MessageSignature.TryParseNonce(nonce, out long actual));
+            Assert.Equal(seconds, actual);
         }
 
         [Fact]
         public void SuaMotByteBody_ChuKySai()
         {
             byte[] tampered = Encoding.UTF8.GetBytes(Body.Replace("\"Quantity\":2", "\"Quantity\":3"));
-            string canonical = MessageSignature.CanonicalRequest("POST", "/api/sale-invoice", "dryRun=false&unitCode=CTY",
-                1792574400, Nonce, IdempotencyKey, MessageSignature.Sha256Hex(tampered));
+            string message = MessageSignature.RequestMessage(tampered, Nonce);
 
-            Assert.False(MessageSignature.SignatureEquals(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), canonical)));
-        }
-
-        [Fact]
-        public void DoiQuery_ChuKySai()
-        {
-            string canonical = MessageSignature.CanonicalRequest("POST", "/api/sale-invoice", MessageSignature.CanonicalQuery("unitCode=CTY&dryRun=true"),
-                1792574400, Nonce, IdempotencyKey, BodySha256);
-
-            Assert.False(MessageSignature.SignatureEquals(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), canonical)));
+            Assert.False(MessageSignature.SignatureEquals(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), message)));
         }
 
         [Theory]
         [InlineData(RequestSignature, true)]
-        [InlineData("4588C91A82467E239600B66FD21E08E18F626037CC91FF4197AA9CF137DC81B2", true)]
-        [InlineData("4588c91a82467e239600b66fd21e08e18f626037cc91ff4197aa9cf137dc81b3", false)]
-        [InlineData("4588c91a", false)]
+        [InlineData("9F79234564E12B262C72B20339C00B520874F00EFE9678CF5BE7052C920339AC", true)]
+        [InlineData("9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ad", false)]
+        [InlineData("9f792345", false)]
         [InlineData(null, false)]
         public void SignatureEquals_ThoiGianHang(string? actual, bool expected)
         {

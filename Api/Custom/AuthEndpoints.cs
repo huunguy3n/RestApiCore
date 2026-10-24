@@ -1,10 +1,7 @@
 using Business;
-using Models;
 using Newtonsoft.Json;
-using Security;
 using System.IdentityModel.Tokens.Jwt;
 using System.Text;
-using System.Text.Json;
 
 namespace Web.Custom
 {
@@ -20,23 +17,9 @@ namespace Web.Custom
             endpoints.MapPost("/api/auth/revoke", RevokeAsync);
         }
 
-        private static async Task IssueTokenAsync(HttpContext context, AppConfig appConfig, ResponseManager responseManager,
-            IIpAccessManager ipAccess, LoginLockout lockout, TimeProvider time)
+        private static async Task IssueTokenAsync(HttpContext context, IIpAccessManager ipAccess, LoginLockout lockout, AccessTokenIssuer tokens)
         {
             var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;
-
-            // Body { "userName": "<restApiUser.name>" } phải khớp X-Fast-User (đã ký)
-            string? bodyUser = ReadUserName((byte[])context.Items[SignatureMiddleware.RawBodyItem]!);
-            if (bodyUser == null)
-            {
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("INVALID_SHAPE"));
-                return;
-            }
-            if (!string.Equals(bodyUser.Trim(), signer.Name, StringComparison.OrdinalIgnoreCase))
-            {
-                await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("USER_MISMATCH"));
-                return;
-            }
 
             // IP theo restApiAllowIp của chính user này (IpAccessMiddleware chạy trước khi biết user)
             string ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "UNKNOW";
@@ -48,10 +31,7 @@ namespace Web.Custom
             }
 
             lockout.Reset(signer.UId);
-
-            DateTime expires = time.GetUtcNow().UtcDateTime.AddMinutes(appConfig.tokenMinutes);
-            string accessToken = new JwtTokenService(appConfig.secretKey, appConfig.expiryToken, appConfig.issuerToken)
-                .GenerateToken(signer.Name, signer.UId, signer.UserId!.Value, signer.NameErp, Guid.NewGuid().ToString(), expires);
+            IssuedToken token = tokens.IssueApiToken(signer);
 
             await WriteJsonAsync(context, new
             {
@@ -59,9 +39,9 @@ namespace Web.Custom
                 success = true,
                 message = "",
                 request_id = context.Items["requestID"]?.ToString(),
-                accessToken,
+                accessToken = token.AccessToken,
                 tokenType = "Bearer",
-                expiresIn = appConfig.tokenMinutes * 60
+                expiresIn = token.ExpiresIn
             });
         }
 
@@ -77,23 +57,6 @@ namespace Web.Custom
             await revokedTokens.RevokeAsync(jti, signer.UId, DateTimeOffset.FromUnixTimeSeconds(exp).UtcDateTime, context.RequestAborted);
 
             await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("SUCCESS"));
-        }
-
-        private static string? ReadUserName(byte[] body)
-        {
-            try
-            {
-                using JsonDocument json = JsonDocument.Parse(body);
-                return json.RootElement.ValueKind == JsonValueKind.Object
-                    && json.RootElement.TryGetProperty("userName", out JsonElement userName)
-                    && userName.ValueKind == JsonValueKind.String
-                    ? userName.GetString()
-                    : null;
-            }
-            catch (System.Text.Json.JsonException)
-            {
-                return null;
-            }
         }
 
         private static async Task WriteJsonAsync(HttpContext context, object value)

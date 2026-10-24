@@ -1,11 +1,10 @@
-﻿using Business.Interface;
-using Models.Form;
+﻿using Models.Form;
 using Models.Interface;
 using Models.Request;
 
-namespace Business.FormMethod
+namespace Web.Legacy
 {
-    public class FormMethodCache(ResponseManager responseManager) : IFormMethod
+    public class FormMethodCache(LegacyResponseManager responseManager) : IFormMethod
     {
         public IResponse ExecuteForm(RequestQuery request, Form form)
         {

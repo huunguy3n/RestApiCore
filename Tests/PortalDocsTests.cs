@@ -110,8 +110,8 @@ namespace Tests
 
             foreach (string value in new[]
             {
-                MessageSignatureTests.PrivateKeyBase64, MessageSignatureTests.BodySha256, MessageSignatureTests.Nonce,
-                MessageSignatureTests.IdempotencyKey, MessageSignatureTests.RequestSignature, MessageSignatureTests.RequestId,
+                MessageSignatureTests.PrivateKeyBase64, MessageSignatureTests.BodyMd5, MessageSignatureTests.Nonce,
+                MessageSignatureTests.RequestSignature, MessageSignatureTests.RequestId,
                 MessageSignatureTests.ResponseSignature, "1792574400", "1792574401"
             })
             {

@@ -1,16 +1,19 @@
-﻿using Business;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using Models;
 using Models.Request;
 using System.Collections.Concurrent;
 using Web.Custom;
+using Web.Legacy;
 
 namespace Web.Controllers
 {
+    /// <summary>
+    /// Engine v2 cũ: POST api/auth/{userName} (không ký HMAC, xem SignatureMiddleware.IsLegacyController)
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
-    public class AuthController(AppConfig appConfig, ResponseManager responseManager) : ControllerBase
+    public class AuthController(AppConfig appConfig, LegacyResponseManager responseManager, AuthManager authManager) : ControllerBase
     {
         // Thay Dictionary bằng ConcurrentDictionary
         private static readonly ConcurrentDictionary<string, long> _lastReceivedTimes = new();
@@ -77,8 +80,7 @@ namespace Web.Controllers
                 return ResponseHelper.ToActionResult(this, responseManager.GetResponse("INVALID_TIME_GREATER"));
             }
 
-            AuthManager authManager = new(appConfig);
-            string token = authManager.AuthenticateUser(requestAuth);
+            string? token = authManager.AuthenticateUser(requestAuth);
 
             if (string.IsNullOrEmpty(token))
             {

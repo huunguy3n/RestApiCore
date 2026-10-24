@@ -9,10 +9,12 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Caching.Abstractions" Version="10.0.13" />
     <PackageReference Include="Microsoft.Extensions.Caching.Hybrid" Version="10.11.0" />
+    <!-- Trước đây đến gián tiếp qua DataAccess → Utilities; cùng phiên bản với Utilities -->
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\DataAccess\DataAccess.csproj" />
+    <!-- Không tham chiếu DataAccess/Provider: nghiệp vụ chỉ biết các cổng trong Persistence.cs, DataAccess cài đặt -->
     <ProjectReference Include="..\Models\Models.csproj" />
     <ProjectReference Include="..\Security\Security.csproj" />
   </ItemGroup>

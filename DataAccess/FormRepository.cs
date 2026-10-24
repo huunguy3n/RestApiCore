@@ -11,17 +11,26 @@ using Utilities;
 
 namespace DataAccess
 {
+    /// <summary>
+    /// Engine v2 cũ (QueryController): đọc XML &lt;form xmlns="urn:schemas-fast-com:rest-api"&gt;, dựng #struct, chạy Checking rồi Processing.
+    /// Đóng băng: còn lỗi đã biết KE_HOACH 1.4 #2 (unit ghép vào SQL) và #4 (form cache bị sửa theo request). v3 dùng ImportFormLoader + FormExecutor
+    /// </summary>
     public class FormRepository
     {
-        private static readonly ConcurrentDictionary<string, Form> _forms = new();
+        // Đăng ký singleton: cache form theo tên dùng chung cả tiến trình như bản static trước đây
+        private readonly ConcurrentDictionary<string, Form> _forms = new();
 
         private readonly AppConfig _appConfig;
         private readonly Options _options;
+        private readonly SqlDatabase _database;
+        private readonly ServerRepository _serverRepository;
 
-        public FormRepository(AppConfig appConfig, Options options)
+        public FormRepository(AppConfig appConfig, Options options, SqlDatabase database, ServerRepository serverRepository)
         {
             _appConfig = appConfig;
             _options = options;
+            _database = database;
+            _serverRepository = serverRepository;
         }
 
         #region Get Form
@@ -32,9 +41,7 @@ namespace DataAccess
 
             if (File.Exists(pathFile))
             {
-                ServerRepository serverRepository = new(_appConfig);
-
-                if (!serverRepository.CheckFormRights(name, userName))
+                if (!_serverRepository.CheckFormRights(name, userName))
                 {
                     throw new ArgumentNullException(name, "ACCESS_DENIED");
                 }
@@ -236,24 +243,24 @@ namespace DataAccess
         {
             if (string.IsNullOrEmpty(table)) return null;
             string sql = $"select COLUMN_NAME as [name], DATA_TYPE + case when DATA_TYPE like '%char%' then '(' + cast(CHARACTER_MAXIMUM_LENGTH as varchar) + ')' when DATA_TYPE in ('numeric', 'decimal') then '(' + cast(NUMERIC_PRECISION AS varchar) + ',' + cast(NUMERIC_SCALE AS varchar) + ')' else '' end as [type], CHARACTER_MAXIMUM_LENGTH as maxLength from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME = '{table}' order by ORDINAL_POSITION";
-            return Provider.Provider.Retrieve(_appConfig.appConnectionString, sql).Tables[0];
+            return _database.Retrieve(sql).Tables[0];
         }
 
         public DataSet ExecuteForm(DataSet dsJson, Form form, RequestQuery request)
         {
-            using var connnection = Provider.Provider.OpenConn(_appConfig.appConnectionString);
+            using var connnection = _database.OpenConnection();
 
             foreach (Struct @struct in form.Structs)
             {
                 //Tạo bảng cấu trúc sql
-                Provider.Provider.Execute(connnection, $"create table #{@struct.Name}(" + string.Join(",", @struct.Fields.Select(o => o.Mapping + " " + o.SqlType)) + ", stt int identity(1, 1))");
+                _database.Execute(connnection, $"create table #{@struct.Name}(" + string.Join(",", @struct.Fields.Select(o => o.Mapping + " " + o.SqlType)) + ", stt int identity(1, 1))");
 
                 //Bulk insert
-                Provider.Provider.Bulk(connnection, dsJson.Tables[@struct.Name], $"#{@struct.Name}");
+                _database.Bulk(connnection, dsJson.Tables[@struct.Name], $"#{@struct.Name}");
 
                 if (request.debug)
                 {
-                    Provider.Provider.Execute(connnection, $"exec restApi_TableDebug '{@struct.Name}', '{form.Name}';");
+                    _database.Execute(connnection, $"exec restApi_TableDebug '{@struct.Name}', '{form.Name}';");
                 }
             }
 
@@ -261,9 +268,9 @@ namespace DataAccess
             GetScriptCheck(form);
 
             //Thực thi query
-            DataSet dsChecking = Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Checking], form, request));
+            DataSet dsChecking = _database.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Checking], form, request));
 
-            if (dsChecking.Tables.Count == 0) return Provider.Provider.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Processing], form, request));
+            if (dsChecking.Tables.Count == 0) return _database.Retrieve(connnection, ReplaceDefaultVaraible(form.Queries[QueryAction.Processing], form, request));
             else return dsChecking;
         }
 

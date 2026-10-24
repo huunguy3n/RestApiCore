@@ -1,39 +1,20 @@
 using System.Data;
+using Business;
 using Microsoft.Data.SqlClient;
 using Models;
+using Provider;
 
-namespace Business
+namespace DataAccess
 {
-    public enum IdempotencyState
-    {
-        /// <summary>Lần đầu: đã giữ chỗ, chạy request rồi gọi CompleteAsync (hoặc ReleaseAsync nếu lỗi)</summary>
-        Reserved,
-        /// <summary>Đã có kết quả: trả lại response cũ</summary>
-        Replay,
-        /// <summary>Cùng key nhưng body/query/form khác → 409</summary>
-        Conflict,
-        /// <summary>Request đầu với key này vẫn đang chạy → 409</summary>
-        InProgress
-    }
-
-    public sealed record IdempotencyResult(IdempotencyState State, int StatusCode = 0, string ResponseBody = "");
-
-    public interface IIdempotencyStore
-    {
-        Task<IdempotencyResult> ReserveAsync(int uId, string key, string form, string requestSha256, CancellationToken cancellationToken = default);
-        Task CompleteAsync(int uId, string key, int statusCode, string responseBody, CancellationToken cancellationToken = default);
-        Task ReleaseAsync(int uId, string key);
-    }
-
     /// <summary>
     /// Idempotency-Key trên restApiIdempotency (KE_HOACH 4.3): giữ response idempotencyHours giờ.
     /// Giữ chỗ bằng INSERT có điều kiện dưới khóa UPDLOCK + HOLDLOCK nên hai request cùng key chỉ một chạy
     /// </summary>
-    public class IdempotencyStore(AppConfig appConfig) : IIdempotencyStore
+    public class IdempotencyRepository(AppConfig appConfig, SqlDatabase database) : IIdempotencyStore
     {
         public async Task<IdempotencyResult> ReserveAsync(int uId, string key, string form, string requestSha256, CancellationToken cancellationToken = default)
         {
-            var ds = await Provider.Provider.RetrieveAsync(appConfig.appConnectionString, """
+            var ds = await database.RetrieveAsync("""
                 SET NOCOUNT ON
                 BEGIN TRANSACTION
                     DELETE FROM restApiIdempotency WHERE u_id = @u_id AND idempotency_key = @key AND expires_at < GETDATE()
@@ -74,7 +55,7 @@ namespace Business
 
         public async Task CompleteAsync(int uId, string key, int statusCode, string responseBody, CancellationToken cancellationToken = default)
         {
-            await Provider.Provider.ExecuteAsync(appConfig.appConnectionString,
+            await database.ExecuteAsync(
                 "UPDATE restApiIdempotency SET status_code = @status, response_body = @body WHERE u_id = @u_id AND idempotency_key = @key",
                 cancellationToken,
                 new SqlParameter("@status", SqlDbType.Int) { Value = statusCode },
@@ -88,7 +69,7 @@ namespace Business
         /// </summary>
         public async Task ReleaseAsync(int uId, string key)
         {
-            await Provider.Provider.ExecuteAsync(appConfig.appConnectionString,
+            await database.ExecuteAsync(
                 "DELETE FROM restApiIdempotency WHERE u_id = @u_id AND idempotency_key = @key AND status_code IS NULL",
                 default,
                 new SqlParameter("@u_id", SqlDbType.Int) { Value = uId },

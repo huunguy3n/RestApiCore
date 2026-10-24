@@ -2,21 +2,22 @@ using Business;
 using Models;
 using Models.Interface;
 using Security;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 
 namespace Web.Custom
 {
     /// <summary>
-    /// Kiểm chữ ký request và ký response cho /api (KE_HOACH 4.2.3, 4.2.4).
-    /// Lỗi trước khi biết khóa của user thì trả không ký; từ khi có khóa, mọi response (kể cả lỗi) đều ký
+    /// Điều phối chữ ký cho /api (KE_HOACH 4.2.3, 4.2.4): route nào phải ký, xác định user và khóa (body auth/token hoặc JWT + thu hồi),
+    /// chính sách JWT portal, đếm khóa đăng nhập, đọc body có giới hạn, đệm và ký response. Kiểm nonce/HMAC/phát lại và tính chữ ký
+    /// response ở MessageAuthenticator. Lỗi trước khi biết khóa của user thì trả không ký; từ khi có khóa, mọi response (kể cả lỗi) đều ký
     /// </summary>
-    public partial class SignatureMiddleware(RequestDelegate next, AppConfig appConfig, ISignerKeyStore keyStore, NonceStore nonceStore,
-        IRevokedTokenStore revokedTokens, LoginLockout lockout, ResponseManager responseManager, TimeProvider timeProvider)
+    public class SignatureMiddleware(RequestDelegate next, AppConfig appConfig, ISignerKeyStore keyStore, IRevokedTokenStore revokedTokens,
+        LoginLockout lockout, ResponseManager responseManager, MessageAuthenticator authenticator)
     {
-        public const string UserHeader = "X-Fast-User";
         public const string TokenPath = "/api/auth/token";
-        public const string TimestampHeader = "X-Fast-Timestamp";
         public const string NonceHeader = "X-Fast-Nonce";
+        /// <summary>Chỉ dùng cho response (client kiểm chữ ký response); request không gửi hai header này</summary>
+        public const string TimestampHeader = "X-Fast-Timestamp";
         public const string ContentSha256Header = "X-Fast-Content-SHA256";
         public const string SignatureHeader = "X-Fast-Signature";
         public const string IdempotencyKeyHeader = "Idempotency-Key";
@@ -25,12 +26,9 @@ namespace Web.Custom
         public const string RawBodyItem = "rawBody";
         public const string SignerItem = "signer";
 
-        [GeneratedRegex("^[A-Za-z0-9_-]{16,64}$")]
-        private static partial Regex NonceFormat();
-
-        /// <summary>Controller kiểu cũ (AuthController, QueryController...) dùng JWT theo IP, không ký HMAC</summary>
+        /// <summary>Controller kiểu cũ (AuthController, QueryController) dùng JWT theo IP, không ký HMAC</summary>
         private static bool IsLegacyController(PathString path) =>
-            path.StartsWithSegments("/api/query") || path.StartsWithSegments("/api/cpanel") || path.StartsWithSegments("/api/document")
+            path.StartsWithSegments("/api/query")
             || path.StartsWithSegments("/api/auth") && !path.Equals(TokenPath, StringComparison.OrdinalIgnoreCase)
                 && !path.Equals("/api/auth/revoke", StringComparison.OrdinalIgnoreCase) && !path.Equals(PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase);
 
@@ -140,12 +138,37 @@ namespace Web.Custom
             HttpMethods.IsPost(context.Request.Method) && context.Request.Path.Equals(TokenPath, StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
-        /// auth/token chưa có JWT: user lấy từ X-Fast-User, request phải ký bằng khóa của user đó
+        /// auth/token chưa có JWT: user lấy từ userName trong body, request phải ký bằng khóa của user đó.
+        /// Body được đọc ở đây và để lại trong Items cho bước kiểm chữ ký
         /// </summary>
         private async Task<SignerKeys?> GetTokenRequestSignerAsync(HttpContext context)
         {
-            string userName = context.Request.Headers[UserHeader].ToString().Trim();
+            byte[]? body = await ReadBodyAsync(context.Request, appConfig.maxRequestBodyBytes, context.RequestAborted);
+            if (body == null)
+            {
+                return null;
+            }
+            context.Items[RawBodyItem] = body;
+
+            string userName = ReadUserName(body)?.Trim() ?? "";
             return userName.Length is 0 or > 32 ? null : await keyStore.GetAsync(userName, context.RequestAborted);
+        }
+
+        private static string? ReadUserName(byte[] body)
+        {
+            try
+            {
+                using JsonDocument json = JsonDocument.Parse(body);
+                return json.RootElement.ValueKind == JsonValueKind.Object
+                    && json.RootElement.TryGetProperty("userName", out JsonElement userName)
+                    && userName.ValueKind == JsonValueKind.String
+                    ? userName.GetString()
+                    : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
         }
 
         /// <summary>
@@ -171,27 +194,21 @@ namespace Web.Custom
             return signer?.UId == uId ? signer : null;
         }
 
+        /// <summary>
+        /// Thứ tự: nonce + độ lệch giờ → đọc body (giới hạn maxRequestBodyBytes) → HMAC + nonce dùng một lần
+        /// </summary>
         private async Task<IResponse?> VerifyAsync(HttpContext context, SignerKeys signer, string nonce)
         {
-            var headers = context.Request.Headers;
-            string timestampText = headers[TimestampHeader].ToString();
-            string contentSha256 = headers[ContentSha256Header].ToString().Trim();
-            string signature = headers[SignatureHeader].ToString();
+            string signature = context.Request.Headers[SignatureHeader].ToString();
 
-            if (!long.TryParse(timestampText, out long timestamp) || !NonceFormat().IsMatch(nonce) || contentSha256.Length == 0 || signature.Length == 0)
+            if (authenticator.CheckFreshness(nonce, signature) is string stale)
             {
-                return responseManager.GetResponse("MISSING_SIGNATURE");
+                return responseManager.GetResponse(stale);
             }
 
-            // Bước 2: timestamp trong ClockSkewSeconds
-            long now = timeProvider.GetUtcNow().ToUnixTimeSeconds();
-            if (Math.Abs(now - timestamp) > appConfig.clockSkewSeconds)
-            {
-                return responseManager.GetResponse("TIMESTAMP_EXPIRED");
-            }
-
-            // Bước 3: đọc body một lần (có giới hạn), tự băm rồi so checksum
-            byte[]? body = await ReadBodyAsync(context.Request, appConfig.maxRequestBodyBytes, context.RequestAborted);
+            // Đọc body một lần (có giới hạn); auth/token đã đọc ở bước 1
+            byte[]? body = context.Items[RawBodyItem] as byte[]
+                ?? await ReadBodyAsync(context.Request, appConfig.maxRequestBodyBytes, context.RequestAborted);
             if (body == null)
             {
                 return responseManager.GetResponse("PAYLOAD_TOO_LARGE");
@@ -199,47 +216,19 @@ namespace Web.Custom
             context.Items[RawBodyItem] = body;
             context.Request.Body = new MemoryStream(body, writable: false);
 
-            string actualSha256 = MessageSignature.Sha256Hex(body);
-            if (!MessageSignature.SignatureEquals(actualSha256, contentSha256))
-            {
-                return responseManager.GetResponse("CHECKSUM_MISMATCH");
-            }
-
-            // Bước 4: dựng canonicalRequest, so HMAC theo thời gian hằng
-            string canonical = MessageSignature.CanonicalRequest(
-                context.Request.Method,
-                context.Request.PathBase.Add(context.Request.Path).Value ?? "",
-                MessageSignature.CanonicalQuery(context.Request.QueryString.Value),
-                timestamp,
-                nonce,
-                headers[IdempotencyKeyHeader].ToString(),
-                actualSha256);
-
-            if (!MessageSignature.SignatureEquals(MessageSignature.HmacHex(signer.RequestKey!, canonical), signature))
-            {
-                return responseManager.GetResponse("INVALID_SIGNATURE");
-            }
-
-            // Nonce ghi sau khi chữ ký đúng: request giả không đốt được nonce của đối tác
-            if (!nonceStore.TryUse(signer.UId, nonce, TimeSpan.FromSeconds(2 * appConfig.clockSkewSeconds)))
-            {
-                return responseManager.GetResponse("NONCE_REUSED");
-            }
-
-            return null;
+            return authenticator.VerifySignature(signer, body, nonce, signature) is string invalid
+                ? responseManager.GetResponse(invalid)
+                : null;
         }
 
         private void SignResponse(HttpContext context, SignerKeys signer, string requestNonce, byte[] body)
         {
-            long timestamp = timeProvider.GetUtcNow().ToUnixTimeSeconds();
             string requestId = context.Items["requestID"]?.ToString() ?? context.TraceIdentifier;
-            string contentSha256 = MessageSignature.Sha256Hex(body);
+            ResponseSignature signature = authenticator.SignResponse(signer, context.Response.StatusCode, requestId, requestNonce, body);
 
-            string canonical = MessageSignature.CanonicalResponse(context.Response.StatusCode, requestId, requestNonce, timestamp, contentSha256);
-
-            context.Response.Headers[TimestampHeader] = timestamp.ToString();
-            context.Response.Headers[ContentSha256Header] = contentSha256;
-            context.Response.Headers[SignatureHeader] = MessageSignature.HmacHex(signer.ResponseKey!, canonical);
+            context.Response.Headers[TimestampHeader] = signature.Timestamp.ToString();
+            context.Response.Headers[ContentSha256Header] = signature.ContentSha256;
+            context.Response.Headers[SignatureHeader] = signature.Signature;
             context.Response.ContentLength = body.Length;
         }
 

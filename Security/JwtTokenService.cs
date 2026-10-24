@@ -80,7 +80,8 @@ namespace Security
         /// <summary>
         /// Nhận token kiểu cũ (audience = IP) và token v3 (audience = fast-api). Route v3 tự đòi claim u_id
         /// </summary>
-        public ClaimsPrincipal ValidateJWTToken(string token, string ipAddress)
+        /// <returns>null nếu token sai chữ ký, sai issuer/audience hoặc hết hạn</returns>
+        public ClaimsPrincipal? ValidateJWTToken(string token, string ipAddress)
         {
             try
             {

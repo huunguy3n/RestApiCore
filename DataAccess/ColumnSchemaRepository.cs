@@ -1,5 +1,6 @@
 using Microsoft.Data.SqlClient;
 using Models;
+using Provider;
 using System.Data;
 
 namespace DataAccess
@@ -7,12 +8,12 @@ namespace DataAccess
     /// <summary>
     /// Đọc cấu trúc cột bảng FBO cho form v3 (KE_HOACH 2.3). Kiểu do người dùng định nghĩa quy về kiểu gốc
     /// </summary>
-    public class ColumnSchemaRepository(AppConfig appConfig)
+    public class ColumnSchemaRepository(SqlDatabase database)
     {
         /// <returns>null nếu bảng không tồn tại</returns>
         public async Task<IReadOnlyDictionary<string, ColumnInfo>?> GetColumnsAsync(string table, CancellationToken cancellationToken = default)
         {
-            var ds = await Provider.Provider.RetrieveAsync(appConfig.appConnectionString, """
+            var ds = await database.RetrieveAsync("""
                 SELECT a.name, b.name AS type_name, a.max_length, a.precision, a.scale
                     FROM sys.columns a
                     JOIN sys.types b ON b.user_type_id = a.system_type_id

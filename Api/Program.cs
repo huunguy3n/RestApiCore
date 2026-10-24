@@ -43,7 +43,6 @@ var portalKey = portalKeyPath.Length > 0
         : Security.PortalKeyProvider.Ephemeral();
 
 appConfig.pathDirectory = builder.Environment.ContentRootPath;
-Provider.Provider.Configure(appConfig.commandTimeout);
 
 // Log file chẩn đoán vận hành: ngoài thư mục release, cuộn theo ngày và dung lượng
 if (string.IsNullOrWhiteSpace(appConfig.logDirectory))
@@ -63,54 +62,9 @@ builder.Services.AddSerilog(config => config
         retainedFileCountLimit: 31,
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {RequestId} {SourceContext} {Message:lj}{NewLine}{Exception}"));
 
-// Register DI
-builder.Services.AddSingleton(appConfig);
-builder.Services.AddSingleton<Options, OptionsRepository>();
-builder.Services.AddSingleton<LogManager>();
-builder.Services.AddSingleton<ResponseManager>();
-builder.Services.AddSingleton<IIpAccessManager, IpAccessManager>();
-builder.Services.AddSingleton(privateKeyProtector);
-builder.Services.AddSingleton(portalKey);
-builder.Services.AddPortalCors(appConfig.portalOrigins);
-builder.Services.AddSingleton<Business.IPortalCredentialStore, Business.PortalCredentialStore>();
-builder.Services.AddSingleton<ISignerKeyStore, SignerKeyStore>();
-builder.Services.AddSingleton<NonceStore>();
-builder.Services.AddSingleton<IRevokedTokenStore, RevokedTokenStore>();
-builder.Services.AddSingleton<LoginLockout>();
-builder.Services.AddSingleton<Business.IUnitRightsChecker, Business.UnitRightsChecker>();
-builder.Services.AddSingleton<Business.IFormExecutor, Business.FormExecutor>();
-builder.Services.AddSingleton<Business.IIdempotencyStore, Business.IdempotencyStore>();
-builder.Services.AddSingleton<Business.ICursorStore, Business.CursorStore>();
-// Log v3: request chỉ đẩy vào hàng đợi, LogWorker ghi SQL theo lô, SQL lỗi thì spool ra logDirectory/spool
-builder.Services.AddSingleton<Business.Logging.RequestLogQueue>();
-builder.Services.AddSingleton<Business.Logging.IRequestLogSink, Business.Logging.SqlRequestLogSink>();
-builder.Services.AddSingleton(new Business.Logging.RequestLogSpool(Path.Combine(appConfig.logDirectory, "spool")));
-builder.Services.AddHostedService<LogWorker>();
-// Form v3: nạp App_Data/Form lúc khởi động, gắn kiểu theo cột thật; file đổi thì FormReloader nạp lại
-builder.Services.AddSingleton<FormLoader>();
-builder.Services.AddSingleton(services =>
-{
-    string irregular = services.GetRequiredService<Options>().Irregular.Trim();
-    return new FormRuntime(services.GetRequiredService<FormLoader>().Load(), irregular.Length > 0 ? new System.Text.RegularExpressions.Regex(irregular) : null);
-});
-builder.Services.AddHostedService(services =>
-{
-    var loader = services.GetRequiredService<FormLoader>();
-    return new FormReloader(services.GetRequiredService<FormRuntime>(), loader.Load, loader.Directory, services.GetRequiredService<ILogger<FormReloader>>());
-});
-builder.Services.AddSingleton(TimeProvider.System);
-
-builder.Services.AddControllers(options =>
-{
-    options.Filters.Add<LogActionFilter>();
-});
-builder.Services.AddMemoryCache();
-// HybridCache chỉ dùng bộ nhớ: không đăng ký IDistributedCache (không Redis/Garnet)
-builder.Services.AddHybridCache(options =>
-{
-    // Trang phân trang (JSON nén) có thể vượt mặc định 1 MB; mục quá cỡ HybridCache bỏ qua không báo lỗi
-    options.MaximumPayloadBytes = 16 * 1024 * 1024;
-});
+// Dịch vụ ứng dụng: Web.Custom.ServiceRegistration (dùng chung với ServiceRegistrationTests)
+builder.Services.AddFastApi(appConfig, privateKeyProtector, portalKey);
+builder.Services.AddControllers();
 
 // Rate limit in-process: theo user đã xác thực, chưa xác thực thì theo IP
 builder.Services.AddRateLimiter(options =>
@@ -184,11 +138,10 @@ app.UseExceptionHandler(builder =>
 {
     builder.Run(async context =>
     {
-        LogManager logManager = context.RequestServices.GetRequiredService<LogManager>();
         var exception = context.Features.Get<IExceptionHandlerFeature>()?.Error;
         context.RequestServices.GetRequiredService<ILogger<Program>>().LogError(exception, "Lỗi chưa xử lý tại {Path}", context.Request.Path);
-        
-        await logManager.WriteLogErrorAsync(context.Request.Path, exception?.Message ?? "An error occurred during execution", exception?.StackTrace ?? "");
+
+        await context.RequestServices.GetRequiredService<LogRepository>().WriteAsync(context.Request.Path, exception?.Message ?? "An error occurred during execution", exception?.StackTrace ?? "");
 
         await ResponseHelper.WriteJsonAsync(context,
             new Models.Response.Response
@@ -210,7 +163,7 @@ app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Con
 app.MapGet("/api/_meta/server", (TimeProvider time) => Results.Json(new
 {
     serverTime = time.GetUtcNow().ToUnixTimeSeconds(),
-    signatureVersion = Security.MessageSignature.RequestAlgorithm,
+    signatureVersion = "HMAC-SHA256(md5(body)+nonce)",
     clockSkewSeconds = appConfig.clockSkewSeconds,
     // Khóa công khai RSA-OAEP-256 để trình duyệt mã hóa mật khẩu đăng nhập portal (5.3)
     portalKey = portalKey.PublicJwk()

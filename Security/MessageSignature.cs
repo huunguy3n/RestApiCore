@@ -4,13 +4,12 @@ using System.Text;
 namespace Security
 {
     /// <summary>
-    /// Ký và kiểm thông điệp v3 (KE_HOACH mục 4.2): SHA-256 checksum body, HMAC-SHA256 hai chiều.
+    /// Ký và kiểm thông điệp v3 (KE_HOACH mục 4.2): HMAC-SHA256 hai chiều (request ký md5(body)+nonce, response ký canonical).
     /// Phần thuần, không phụ thuộc ASP.NET, dùng chung cho server, client mẫu và vector thử
     /// </summary>
     public static class MessageSignature
     {
-        public const string RequestAlgorithm = "FAST-HMAC-SHA256";
-        public const string ResponseAlgorithm = "FAST-HMAC-SHA256-RESPONSE";
+                public const string ResponseAlgorithm = "FAST-HMAC-SHA256-RESPONSE";
 
         private static readonly byte[] RequestLabel = Encoding.ASCII.GetBytes("FAST-API-V3-REQUEST");
         private static readonly byte[] ResponseLabel = Encoding.ASCII.GetBytes("FAST-API-V3-RESPONSE");
@@ -40,44 +39,24 @@ namespace Security
             return CryptographicOperations.FixedTimeEquals(expected, actual);
         }
 
+        /// <summary>Hex chữ thường của MD5(byte thô); body rỗng = d41d8cd98f00b204e9800998ecf8427e</summary>
+        public static string Md5Hex(ReadOnlySpan<byte> data) => Convert.ToHexStringLower(MD5.HashData(data));
+
         /// <summary>
-        /// canonicalQuery: giải mã query thô, encode lại tên và giá trị theo RFC 3986, sắp theo tên rồi theo giá trị (ordinal), nối bằng &amp;.
-        /// Không có query thì chuỗi rỗng. Tham số không có giá trị viết "ten="
+        /// Thông điệp ký request: md5Hex(body) + nonce. Chữ ký = HMAC-SHA256(K_request, thông điệp)
         /// </summary>
-        public static string CanonicalQuery(string? rawQuery)
+        public static string RequestMessage(ReadOnlySpan<byte> body, string nonce) => Md5Hex(body) + nonce;
+
+        /// <summary>
+        /// Nonce có dạng "&lt;unix giây&gt;-&lt;chuỗi ngẫu nhiên&gt;"; trả giây ở đầu nonce, sai dạng trả false
+        /// </summary>
+        public static bool TryParseNonce(string nonce, out long unixSeconds)
         {
-            if (string.IsNullOrEmpty(rawQuery))
-            {
-                return string.Empty;
-            }
-
-            string query = rawQuery.StartsWith('?') ? rawQuery[1..] : rawQuery;
-
-            var pairs = query.Split('&', StringSplitOptions.RemoveEmptyEntries)
-                .Select(part =>
-                {
-                    int index = part.IndexOf('=');
-                    string name = index < 0 ? part : part[..index];
-                    string value = index < 0 ? string.Empty : part[(index + 1)..];
-                    return (Name: Rfc3986(FormDecode(name)), Value: Rfc3986(FormDecode(value)));
-                })
-                .OrderBy(p => p.Name, StringComparer.Ordinal)
-                .ThenBy(p => p.Value, StringComparer.Ordinal);
-
-            return string.Join("&", pairs.Select(p => $"{p.Name}={p.Value}"));
-        }
-
-        public static string CanonicalRequest(string method, string path, string canonicalQuery, long timestamp, string nonce, string? idempotencyKey, string contentSha256)
-        {
-            return string.Join("\n",
-                RequestAlgorithm,
-                method.ToUpperInvariant(),
-                path.ToLowerInvariant(),
-                canonicalQuery,
-                timestamp.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                nonce,
-                idempotencyKey ?? string.Empty,
-                contentSha256.ToLowerInvariant());
+            unixSeconds = 0;
+            int dash = nonce.IndexOf('-');
+            return dash is >= 9 and <= 12 && nonce.Length - dash - 1 is >= 8 and <= 48
+                && nonce.All(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_')
+                && long.TryParse(nonce.AsSpan(0, dash), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out unixSeconds);
         }
 
         public static string CanonicalResponse(int statusCode, string requestId, string requestNonce, long timestamp, string contentSha256)
@@ -90,31 +69,5 @@ namespace Security
                 timestamp.ToString(System.Globalization.CultureInfo.InvariantCulture),
                 contentSha256.ToLowerInvariant());
         }
-
-        /// <summary>
-        /// Encode RFC 3986: giữ A-Z a-z 0-9 - . _ ~, còn lại %XX (hex hoa) trên byte UTF-8
-        /// </summary>
-        public static string Rfc3986(string value)
-        {
-            StringBuilder sb = new();
-            foreach (byte b in Encoding.UTF8.GetBytes(value))
-            {
-                char c = (char)b;
-                if (c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '.' or '_' or '~')
-                {
-                    sb.Append(c);
-                }
-                else
-                {
-                    sb.Append('%').Append(b.ToString("X2"));
-                }
-            }
-            return sb.ToString();
-        }
-
-        /// <summary>
-        /// Giải mã như ASP.NET đọc query: '+' là dấu cách, %XX theo UTF-8
-        /// </summary>
-        private static string FormDecode(string value) => Uri.UnescapeDataString(value.Replace('+', ' '));
     }
 }

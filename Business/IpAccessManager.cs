@@ -1,4 +1,3 @@
-using DataAccess;
 using Microsoft.Extensions.Caching.Hybrid;
 using Models;
 using Models.Interface;
@@ -14,7 +13,7 @@ namespace Business
     /// Kiểm IP theo restApi_CheckIPAddress, kết quả cache HybridCache để không gọi proc ở mọi request.
     /// Đếm số request đã chuyển sang ASP.NET Core Rate Limiting (Program.cs)
     /// </summary>
-    public class IpAccessManager(AppConfig appConfig, HybridCache cache, ResponseManager responseManager) : IIpAccessManager
+    public class IpAccessManager(AppConfig appConfig, HybridCache cache, ResponseManager responseManager, IIpAccessRepository repository) : IIpAccessManager
     {
         public const string CacheTag = "ip-access";
 
@@ -22,7 +21,7 @@ namespace Business
         {
             bool allowed = await cache.GetOrCreateAsync(
                 $"ip-access:{userName}:{clientIp}",
-                async token => await new ServerRepository(appConfig).CheckIPAddressAsync(clientIp, userName, token),
+                async token => await repository.CheckIPAddressAsync(clientIp, userName, token),
                 new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(appConfig.ipCheckCacheSeconds) },
                 [CacheTag],
                 cancellationToken);

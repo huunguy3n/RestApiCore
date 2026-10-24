@@ -62,6 +62,7 @@ namespace Tests
         private readonly FakeUnitRights _units = new();
         private readonly FakeIdempotency _idempotency = new();
         private SignerKeys _signer = new(7, "DOITAC", true, new byte[32], new byte[32], 1, "ADMIN") { AllowForms = new HashSet<string>(["setSaleInvoice", "getCustomer", "getInvoice", "transferInvoice"], StringComparer.OrdinalIgnoreCase) };
+        private bool _withoutSigner;
         private IHost _host = null!;
         private HttpClient _http = null!;
 
@@ -85,6 +86,8 @@ namespace Tests
                         services.AddSingleton<IIdempotencyStore>(_idempotency);
                         services.AddHybridCache();
                         services.AddSingleton<ICursorStore, CursorStore>();
+                        services.AddSingleton<FormRequestService>();
+                        services.AddSingleton<FormResponseWriter>();
                         services.AddRouting();
                     })
                     .Configure(app =>
@@ -96,7 +99,10 @@ namespace Tests
                             using MemoryStream memory = new();
                             await context.Request.Body.CopyToAsync(memory);
                             context.Items[SignatureMiddleware.RawBodyItem] = memory.ToArray();
-                            context.Items[SignatureMiddleware.SignerItem] = _signer;
+                            if (!_withoutSigner)
+                            {
+                                context.Items[SignatureMiddleware.SignerItem] = _signer;
+                            }
                             await next(context);
                         });
                         app.UseRouting();
@@ -587,6 +593,20 @@ namespace Tests
                 dir = dir.Parent;
             }
             return Path.Combine(dir!.FullName, "Api");
+        }
+
+        [Fact]
+        public async Task ThieuSigner_Unauthorized_KhongChayForm_RouteKhongCoVan404()
+        {
+            // Route lọt khỏi SignatureMiddleware (cấu hình pipeline sai) không được chạy form với signer null
+            _withoutSigner = true;
+
+            var (status, json, _) = await PostAsync("/api/customer/get", "{}");
+            Assert.Equal(HttpStatusCode.Unauthorized, status);
+            Assert.Equal("UNAUTHORIZED", json.GetProperty("code").GetString());
+            Assert.Equal(0, _executor.Calls);
+
+            Assert.Equal(HttpStatusCode.NotFound, (await PostAsync("/api/khong-co", "{}")).Status);
         }
 
         private sealed class FakeExecutor : IFormExecutor

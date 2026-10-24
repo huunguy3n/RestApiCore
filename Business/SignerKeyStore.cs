@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Security.Cryptography;
-using DataAccess;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Logging;
 using Models;
@@ -35,7 +34,7 @@ namespace Business
     /// <summary>
     /// Tra restApi_GetUserRights, giải private_key bằng PrivateKeyProtector, cache HybridCache userCacheSeconds
     /// </summary>
-    public class SignerKeyStore(AppConfig appConfig, HybridCache cache, PrivateKeyProtector protector, ILogger<SignerKeyStore> logger) : ISignerKeyStore
+    public class SignerKeyStore(AppConfig appConfig, HybridCache cache, PrivateKeyProtector protector, IUserRightsRepository users, ILogger<SignerKeyStore> logger) : ISignerKeyStore
     {
         public const string CacheTag = "signer-keys";
 
@@ -56,7 +55,7 @@ namespace Business
 
         private async Task<SignerKeys?> LoadAsync(string userName, CancellationToken cancellationToken)
         {
-            UserRights? rights = await new UserRepository(appConfig).GetUserRightsAsync(userName, cancellationToken);
+            UserRights? rights = await users.GetUserRightsAsync(userName, cancellationToken);
             if (rights == null)
             {
                 return null;
@@ -84,29 +83,6 @@ namespace Business
                 ErpAdmin = rights.ErpAdmin,
                 AllowForms = new HashSet<string>(rights.AllowForms, StringComparer.OrdinalIgnoreCase)
             };
-        }
-    }
-
-    /// <summary>
-    /// Nonce đã dùng theo u_id, giữ 2 × clockSkewSeconds. Kiểm và ghi nguyên tử (một instance, in-process)
-    /// </summary>
-    public class NonceStore(Microsoft.Extensions.Caching.Memory.IMemoryCache cache)
-    {
-        private readonly object _lock = new();
-
-        /// <returns>false nếu nonce đã dùng</returns>
-        public bool TryUse(int uId, string nonce, TimeSpan ttl)
-        {
-            string key = $"nonce:{uId}:{nonce}";
-            lock (_lock)
-            {
-                if (cache.TryGetValue(key, out _))
-                {
-                    return false;
-                }
-                Microsoft.Extensions.Caching.Memory.CacheExtensions.Set(cache, key, true, ttl);
-                return true;
-            }
         }
     }
 }

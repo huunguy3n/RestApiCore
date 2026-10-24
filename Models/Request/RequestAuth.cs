@@ -1,8 +1,6 @@
-﻿using Models.Interface;
-
-namespace Models.Request
+﻿namespace Models.Request
 {
-    public class RequestAuth : IRequest
+    public class RequestAuth
     {
         private DateTime _timeStamp;
         private string _ipAddress, _userName, _key;

@@ -9,14 +9,13 @@ namespace Web.Custom
     /// <summary>
     /// /health/ready: mở được kết nối SQL và chạy SELECT 1
     /// </summary>
-    public class SqlHealthCheck(AppConfig appConfig) : IHealthCheck
+    public class SqlHealthCheck(Provider.SqlDatabase database) : IHealthCheck
     {
         public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
         {
             try
             {
-                await using var connection = new SqlConnection(appConfig.appConnectionString);
-                await connection.OpenAsync(cancellationToken);
+                await using var connection = await database.OpenConnectionAsync(cancellationToken);
 
                 await using var command = new SqlCommand("SELECT 1", connection) { CommandTimeout = 5 };
                 await command.ExecuteScalarAsync(cancellationToken);

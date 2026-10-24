@@ -1,7 +1,4 @@
-﻿using Business.Interface;
-using DataAccess;
-using Microsoft.Extensions.Caching.Memory;
-using Models;
+﻿using DataAccess;
 using Models.Form;
 using Models.Interface;
 using Models.Options;
@@ -9,17 +6,15 @@ using Models.Request;
 using System.Data;
 using Utilities;
 
-namespace Business.FormMethod
+namespace Web.Legacy
 {
-    public class FormMethodBase(AppConfig appConfig, Options options, ResponseManager responseManager) : IFormMethod
+    public class FormMethodBase(Options options, FormRepository formRepository, LegacyResponseManager responseManager) : IFormMethod
     {
 
         //Lấy struct lưu vào cache
         //Làm file struct ký hiệu
         public IResponse ExecuteForm(RequestQuery request, Form form)
         {
-            FormRepository formRepository = new(appConfig, options);
-
             //Lấy cấu trúc sqlType
             foreach (Struct @struct in form.Structs)
             {

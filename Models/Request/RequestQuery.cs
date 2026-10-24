@@ -1,5 +1,4 @@
-﻿using Models.Interface;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Models.Request
 {
-    public class RequestQuery : IRequest
+    public class RequestQuery
     {
         private DateTime _timeStamp;
         private string _ipAddress, _userName, _formName, _unit, _cacheID, _userERP;

@@ -19,16 +19,14 @@
 	<message code="NONE" success="0" httpStatusCode="200" httpMessage=""/>
 	<message code="ERROR" success="0" httpStatusCode="500" httpMessage="Exception"/>
 	<!-- v3: chữ ký HMAC-SHA256 (KE_HOACH 4.2) -->
-	<message code="MISSING_SIGNATURE" success="0" httpStatusCode="401" httpMessage="Missing X-Fast-Timestamp, X-Fast-Nonce, X-Fast-Content-SHA256 or X-Fast-Signature header"/>
-	<message code="TIMESTAMP_EXPIRED" success="0" httpStatusCode="401" httpMessage="X-Fast-Timestamp is outside the allowed clock skew"/>
+	<message code="MISSING_SIGNATURE" success="0" httpStatusCode="401" httpMessage="Missing or malformed X-Fast-Nonce (unixSeconds-random) or X-Fast-Signature header"/>
+	<message code="TIMESTAMP_EXPIRED" success="0" httpStatusCode="401" httpMessage="The time in X-Fast-Nonce is outside the allowed clock skew"/>
 	<message code="NONCE_REUSED" success="0" httpStatusCode="401" httpMessage="X-Fast-Nonce has already been used"/>
-	<message code="CHECKSUM_MISMATCH" success="0" httpStatusCode="400" httpMessage="X-Fast-Content-SHA256 does not match the request body"/>
 	<message code="INVALID_SIGNATURE" success="0" httpStatusCode="401" httpMessage="Invalid X-Fast-Signature"/>
 	<message code="KEY_NOT_ISSUED" success="0" httpStatusCode="403" httpMessage="No signing key has been issued for this account"/>
 	<message code="PAYLOAD_TOO_LARGE" success="0" httpStatusCode="413" httpMessage="Request body is too large"/>
 	<message code="ACCOUNT_LOCKED" success="0" httpStatusCode="403" httpMessage="Too many failed sign-in attempts, try again later"/>
 	<message code="INVALID_SHAPE" success="0" httpStatusCode="400" httpMessage="Request body does not have the expected shape"/>
-	<message code="USER_MISMATCH" success="0" httpStatusCode="400" httpMessage="userName in body does not match X-Fast-User"/>
 	<message code="NOT_FOUND" success="0" httpStatusCode="404" httpMessage="Resource or verb not found"/>
 	<message code="METHOD_NOT_ALLOWED" success="0" httpStatusCode="405" httpMessage="Only POST is allowed"/>
 	<message code="UNIT_REQUIRED" success="0" httpStatusCode="400" httpMessage="unitCode is required for this resource"/>

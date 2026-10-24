@@ -1,19 +1,20 @@
-﻿using Business;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Models;
 using Models.Interface;
-using Models.Options;
 using Models.Request;
 using Security;
 using Web.Custom;
+using Web.Legacy;
 
 namespace Web.Controllers
 {
+    /// <summary>
+    /// Engine v2 cũ: POST api/query/{name}, checksum MD5, JWT audience = IP. Đối tác mới dùng route v3 (FormEndpoint)
+    /// </summary>
     [Route("api/[controller]")]
     [ApiController]
     [Authorize]
-    public class QueryController(AppConfig appConfig, Options options, ResponseManager responseManager) : ControllerBase
+    public class QueryController(LegacyResponseManager responseManager, FormManager formManager) : ControllerBase
     {
         //POST api/query/controllerName?cacheID=123&pageIndex=1
         //header: unit, debug
@@ -64,7 +65,6 @@ namespace Web.Controllers
                 return ResponseHelper.ToActionResult(this, responseManager.GetResponse("INVALID_CHECKSUM"));
             }
 
-            FormManager formManager = new(appConfig, options, responseManager);
             IResponse response = formManager.ExecuteFrom(controllerName, requestQuery);
 
             return ResponseHelper.ToActionResult(this, response);
