@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.RegularExpressions;
-using ApiDocs.ControlPlane;
+using WebPortal.ControlPlane;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -438,7 +438,7 @@ namespace Tests
 
             string editUrl = "/Admin/Forms/Edit?project=1&form=getCustomer";
             string token = await TokenFromAsync(http, editUrl);
-            string template = ApiDocs.ControlPlane.FormManagementService.NewFormTemplate;
+            string template = WebPortal.ControlPlane.FormManagementService.NewFormTemplate;
             FormUrlEncodedContent Body(string t) => new(new Dictionary<string, string> { ["content"] = template, ["baseRevision"] = "", ["__RequestVerificationToken"] = t });
 
             // Không có antiforgery token: bị từ chối, không lưu gì
@@ -475,7 +475,7 @@ namespace Tests
         public async Task Customer_cannot_open_the_form_editor_save_or_download_even_with_a_valid_token()
         {
             FakeStore store = AdminStore();
-            await store.AddRevisionAsync(1, "getCustomer", null, ApiDocs.ControlPlane.FormManagementService.NewFormTemplate, "x", "published", 1);
+            await store.AddRevisionAsync(1, "getCustomer", null, WebPortal.ControlPlane.FormManagementService.NewFormTemplate, "x", "published", 1);
             using AdminFactory factory = new(store);
             using HttpClient http = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
             await SignInAsync(http, "khach1", "MatKhau-Dai-12345");
@@ -491,7 +491,7 @@ namespace Tests
             string token = await TokenFromAsync(http, "/Admin/Password");
             HttpResponseMessage save = await http.PostAsync("/Admin/Forms/Edit?handler=Save&project=1&form=getCustomer", new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["content"] = ApiDocs.ControlPlane.FormManagementService.NewFormTemplate, ["baseRevision"] = "1", ["__RequestVerificationToken"] = token
+                ["content"] = WebPortal.ControlPlane.FormManagementService.NewFormTemplate, ["baseRevision"] = "1", ["__RequestVerificationToken"] = token
             }));
             Assert.NotEqual(HttpStatusCode.Redirect, save.StatusCode);
             Assert.Single(store.Revisions);
@@ -510,10 +510,10 @@ namespace Tests
             static IConfiguration Config(params (string Key, string Value)[] values) =>
                 new ConfigurationBuilder().AddInMemoryCollection(values.Select(v => new KeyValuePair<string, string?>(v.Key, v.Value))).Build();
 
-            Assert.Equal("", ApiDocs.ControlPlane.ControlPlaneConfig.ConnectionString(Config()));
-            Assert.Equal("A", ApiDocs.ControlPlane.ControlPlaneConfig.ConnectionString(Config(("connectionStrings:appConnectionString", " A "))));
-            Assert.Equal("B", ApiDocs.ControlPlane.ControlPlaneConfig.ConnectionString(Config(("ControlPlane:ConnectionString", "B"), ("connectionStrings:appConnectionString", "A"))));
-            Assert.Equal("A", ApiDocs.ControlPlane.ControlPlaneConfig.ConnectionString(Config(("ControlPlane:ConnectionString", "  "), ("connectionStrings:appConnectionString", "A"))));
+            Assert.Equal("", WebPortal.ControlPlane.ControlPlaneConfig.ConnectionString(Config()));
+            Assert.Equal("A", WebPortal.ControlPlane.ControlPlaneConfig.ConnectionString(Config(("connectionStrings:appConnectionString", " A "))));
+            Assert.Equal("B", WebPortal.ControlPlane.ControlPlaneConfig.ConnectionString(Config(("ControlPlane:ConnectionString", "B"), ("connectionStrings:appConnectionString", "A"))));
+            Assert.Equal("A", WebPortal.ControlPlane.ControlPlaneConfig.ConnectionString(Config(("ControlPlane:ConnectionString", "  "), ("connectionStrings:appConnectionString", "A"))));
         }
     }
 }

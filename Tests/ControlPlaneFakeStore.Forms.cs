@@ -1,4 +1,4 @@
-using ApiDocs.ControlPlane;
+using WebPortal.ControlPlane;
 
 namespace Tests
 {

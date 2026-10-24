@@ -1,0 +1,50 @@
+@page
+@model WebPortal.Pages.Admin.Packages.IndexModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Gói DEV → PROD";
+    ViewData["Crumb"] = "Gói gồm các form đang hiệu lực; áp lên môi trường bằng Cli apply-package";
+    ViewData["Nav"] = "packages";
+}
+<partial name="_Flash" model="@((Model.Flash, Model.FlashError))" />
+<div class="adm__bar">
+    @foreach (var p in Model.Projects)
+    {
+        <a class="adm__btn @(p.Id == Model.ProjectId ? "" : "adm__btn--ghost")" asp-page="Index" asp-route-project="@p.Id">@p.Code</a>
+    }
+</div>
+@if (Model.Packages != null)
+{
+    @if (Model.CanPublish)
+    {
+        <form method="post" asp-page-handler="Create" asp-route-project="@Model.ProjectId" class="adm__bar">
+            <button type="submit" class="adm__btn">Tạo gói từ các form đang hiệu lực</button>
+        </form>
+    }
+    <p class="adm__crumb">Khi áp gói, người mang gói nhập SHA-256 manifest bên dưới vào lệnh (nhập tay từ màn hình này, không lấy từ chính file gói) để chắc gói không bị thay.</p>
+    <table class="adm__table">
+        <thead><tr><th>Gói</th><th>Tạo lúc</th><th>Người tạo</th><th>Số form</th><th>SHA-256 manifest</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var k in Model.Packages)
+        {
+            <tr>
+                <td>#@k.Id</td>
+                <td>@k.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@k.CreatedBy</td>
+                <td>@k.FormCount</td>
+                <td><code class="adm__code">@k.ManifestSha256</code></td>
+                <td>
+                    @if (Model.CanPublish)
+                    {
+                        <a asp-page-handler="Download" asp-route-project="@Model.ProjectId" asp-route-id="@k.Id">Tải gói</a>
+                    }
+                </td>
+            </tr>
+        }
+        @if (Model.Packages.Count == 0)
+        {
+            <tr><td colspan="6" class="adm__empty">Chưa có gói nào.</td></tr>
+        }
+        </tbody>
+    </table>
+}

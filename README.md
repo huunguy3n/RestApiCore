@@ -14,7 +14,7 @@ REST API tích hợp đối tác với Fast Business Online (FBO), viết bằng
 |---|---|
 | `Api` | Host HTTP: auth, chữ ký, form, health, portal meta |
 | `Business` / `DataAccess` / `Models` / `Security` / `Provider` | Logic form, SQL, mô hình, mã hóa/ký, ADO.NET |
-| `ApiDocs` | Cổng đối tác (đăng nhập RSA, xem tài nguyên, gọi thử, code mẫu) |
+| `WebPortal` | Cổng đối tác (đăng nhập RSA, xem tài nguyên, gọi thử, code mẫu) |
 | `Cli` | Công cụ quản trị: cấp khóa, mã hóa lại mật khẩu, nâng XML v2 → v3 |
 | `CallbackWorker` | Worker callback/notify (ngoài phạm vi giai đoạn hiện tại) |
 | `Tests` | Unit / integration / vector chữ ký |
@@ -88,7 +88,7 @@ Kiểm nhanh:
 ### 4. Portal (tuỳ chọn)
 
 ```powershell
-dotnet run --project ApiDocs --launch-profile http
+dotnet run --project WebPortal --launch-profile http
 ```
 
 Khai `appSettings:portalOrigins` trên Api (vd `http://localhost:5225`) để CORS cho phép trình duyệt gọi `/api`.
@@ -170,7 +170,7 @@ dotnet run --project Cli -- --help
 
 ## Code mẫu ký HMAC
 
-Trong `ApiDocs/wwwroot/samples/`:
+Trong `WebPortal/wwwroot/samples/`:
 
 - `FastSign.cs`, `fast_sign.py`, `FastSign.java`, `fast-sign.mjs`, `fast-sign.sh`
 

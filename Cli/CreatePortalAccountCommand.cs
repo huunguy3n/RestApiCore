@@ -90,7 +90,7 @@ namespace Cli
                 .AddJsonFile(Path.GetFullPath(configPath), optional: false)
                 .AddEnvironmentVariables()
                 .Build();
-            // Cùng quy ước với portal (ApiDocs): ưu tiên ControlPlane:ConnectionString, không có thì connectionStrings:appConnectionString
+            // Cùng quy ước với portal (WebPortal): ưu tiên ControlPlane:ConnectionString, không có thì connectionStrings:appConnectionString
             string connectionString = config["ControlPlane:ConnectionString"] is { Length: > 0 } dedicated ? dedicated : config["connectionStrings:appConnectionString"] ?? "";
             if (connectionString.Length == 0)
             {

@@ -57,7 +57,7 @@ The v2 engine was removed as a whole; v3 (`/api/auth/token`, `/api/auth/portal`,
 | `UserRights.IsIpAllowed`, `MatchIp`, `AllowIps`, `BlackListIps` | DUPLICATED | Production uses `restApi_CheckIPAddress`; only `UserRightsTests` call it | Decide which implementation is authoritative |
 | `SignerKeyStore.InvalidateAsync`, `IpAccessManager.InvalidateAsync` | UNKNOWN | No caller | Needs an admin endpoint or a decision that the TTL is enough |
 | `CallbackWorker` project | placeholder | Planned component | — |
-| `ApiDocs` template leftovers (`site.js`, `_ValidationScriptsPartial.cshtml`, `wwwroot/lib/*`) | UNKNOWN | Not in scope of this class audit | Needs a portal asset review |
+| `WebPortal` template leftovers (`site.js`, `_ValidationScriptsPartial.cshtml`, `wwwroot/lib/*`) | UNKNOWN | Not in scope of this class audit | Needs a portal asset review |
 
 ## Behavior changes caused by removal
 

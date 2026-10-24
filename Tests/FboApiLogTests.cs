@@ -1,10 +1,10 @@
 using System.Collections.Specialized;
 using System.Text.Json.Nodes;
-using FboWeb.ApiLog;
+using WebProject.ApiLog;
 
 namespace Tests
 {
-    /// <summary>FboWeb (trang FBO xem log, .NET Framework): file nguồn link vào đây vì không phụ thuộc System.Web</summary>
+    /// <summary>WebProject (trang FBO xem log, .NET Framework): file nguồn link vào đây vì không phụ thuộc System.Web</summary>
     public sealed class FboLogRedactorTests
     {
         private static string Redact(string json)

@@ -1,7 +1,7 @@
 namespace Models
 {
     /// <summary>
-    /// Quy tắc gán vai trò theo loại tài khoản portal, dùng chung cho đọc quyền (ApiDocs) và tạo tài khoản (Cli):
+    /// Quy tắc gán vai trò theo loại tài khoản portal, dùng chung cho đọc quyền (WebPortal) và tạo tài khoản (Cli):
     /// khách hàng chỉ vai trò phạm vi customer (partner) và bắt buộc gắn một dự án; staff chỉ vai trò phạm vi staff,
     /// không gắn dự án (mọi dự án) chỉ khi là administrator
     /// </summary>

@@ -4,7 +4,7 @@ Trạng thái: **mới xong Phase 0 (khảo sát) và Phase 3 (nền phân quy�
 
 ## 1. Hiện trạng đã xác nhận trong code
 
-- `ApiDocs` là Razor Pages **tĩnh**: một trang `Index.cshtml` + `portal.js` (SPA định tuyến hash). Không có handler nghiệp vụ, không DB, không thấy bí mật nào. CSP `script-src 'self'`, mật khẩu mã hóa RSA-OAEP bằng WebCrypto.
+- `WebPortal` là Razor Pages **tĩnh**: một trang `Index.cshtml` + `portal.js` (SPA định tuyến hash). Không có handler nghiệp vụ, không DB, không thấy bí mật nào. CSP `script-src 'self'`, mật khẩu mã hóa RSA-OAEP bằng WebCrypto.
 - Đăng nhập: `POST /api/auth/portal` (restApiUser.name + mật khẩu RSA) → JWT `scope=portal`, hạn `portalTokenMinutes`, giữ trong `sessionStorage`. `SignatureMiddleware.PortalMayCall` chỉ cho portal token gọi `GET /api/_meta/*`.
 - Quyền form API: `UserRights.CanAccessForm` = `ErpAdmin || AllowForms.Count == 0 || AllowForms.Contains(form)`. **Không có dòng `restApiAllowForm` nào = mọi form.** (`docs/HUONG_DAN_SU_DUNG.md` dòng ~115 ghi ngược lại, là tài liệu cũ; code và `KE_HOACH.md` dòng 62 là đúng.)
 - `ImportFormCatalog`: bất biến, dựng từ `App_Data/Form/*.xml`, `FormReloader` theo dõi file và thay nguyên catalog. Không có revision, không ghi file từ portal.
@@ -61,7 +61,7 @@ Hiện chỉ `forms.permissions.manage` và `users.read` được ép ở endpoi
 
 ## 5. Chưa làm (cố ý hoãn, theo phase)
 
-- **Phase 1/2 giao diện**: layout mới, sidebar theo quyền, dark mode, API Explorer, trang Authentication/Code Samples. Chưa động vào `ApiDocs`. `/api/_portal/me` đã sẵn để dựng menu.
+- **Phase 1/2 giao diện**: layout mới, sidebar theo quyền, dark mode, API Explorer, trang Authentication/Code Samples. Chưa động vào `WebPortal`. `/api/_portal/me` đã sẵn để dựng menu.
 - Quản lý user (tạo/sửa/khóa/xóa), gán vai trò, xem audit: cần thêm endpoint trên nền này; tạo user/cấp khóa nên gọi lại logic của `Cli` qua service dùng chung, không gọi tiến trình.
 - **Form editor**: cần thiết kế revision + ghi file nguyên tử + khóa lạc quan; hiện `FormReloader` nạp lại khi file đổi nên publish = ghi file an toàn.
 - Controller management: chỉ có ý nghĩa với metadata form (route, enable, paging); chưa chốt danh sách thuộc tính được sửa.

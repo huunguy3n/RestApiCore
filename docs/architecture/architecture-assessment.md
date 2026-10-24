@@ -26,7 +26,7 @@ Api ──► Business ──► DataAccess ──► Provider (static ADO.NET, 
  ├──► DataAccess
  └──► Models
 Cli ──► Provider, Security, Business          CallbackWorker (template, no references)
-ApiDocs (Razor portal, no references)         Tests ──► Api, Business, Security, Utilities, Models
+WebPortal (Razor portal, no references)         Tests ──► Api, Business, Security, Utilities, Models
 ```
 
 The direction is a classic "layered" chain where the **application layer (Business) depends on the data layer (DataAccess) and on SQL directly**. Nothing stops SQL from appearing in Business, and it does.

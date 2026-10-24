@@ -77,7 +77,7 @@ Chưa làm: màn hình trên portal (bảng lọc, chi tiết, so request/respon
 
 ## 8. Thứ tự làm tiếp
 
-1. Host control plane: biến `ApiDocs` thành server-side có DB riêng, đăng nhập bằng cookie HttpOnly + CSRF (bỏ JWT trong `sessionStorage` cho phần quản trị), rate limit đăng nhập.
+1. Host control plane: biến `WebPortal` thành server-side có DB riêng, đăng nhập bằng cookie HttpOnly + CSRF (bỏ JWT trong `sessionStorage` cho phần quản trị), rate limit đăng nhập.
 2. Dịch vụ phân quyền theo membership + test (khách không thấy dự án khác, staff chỉ trong dự án được gán).
 3. Client gọi project agent (ký HMAC) + đăng ký dự án + kiểm kết nối.
 4. Quản lý tài khoản (tạo staff/khách, gán dự án) và giao diện theo quyền.
@@ -91,15 +91,15 @@ Chưa làm: màn hình trên portal (bảng lọc, chi tiết, so request/respon
 |---|---|
 | Băm mật khẩu PBKDF2-HMAC-SHA256 310.000 vòng, salt riêng, so thời gian hằng | `Security/PortalPasswordHasher.cs` |
 | Quy tắc vai trò theo loại tài khoản (dùng chung portal + CLI) | `Models/PortalMembershipRules.cs` |
-| Quyền theo dự án từ tài khoản + membership (deny mặc định, dòng sai quy tắc bị bỏ qua) | `ApiDocs/ControlPlane/ControlPlane.cs` (`ProjectAccessService`) |
+| Quyền theo dự án từ tài khoản + membership (deny mặc định, dòng sai quy tắc bị bỏ qua) | `WebPortal/ControlPlane/ControlPlane.cs` (`ProjectAccessService`) |
 | Đăng nhập: một thông báo lỗi chung, khóa 5 lần / 15 phút (kể cả tên không tồn tại), băm giả cho tên lạ | `AccountLoginService` |
-| Kho SQL cho DB portal | `ApiDocs/ControlPlane/SqlControlPlaneStore.cs` |
-| Trang `/Admin` (đăng nhập, tổng quan theo dự án, đăng xuất), cookie `HttpOnly` + `SameSite=Strict` + `Secure` (trừ Development), CSRF qua antiforgery của Razor Pages, chống open redirect, `Cache-Control: no-store`, CSP cho phép `form-action 'self'` riêng `/Admin` | `ApiDocs/Pages/Admin/*`, `Program.cs` |
+| Kho SQL cho DB portal | `WebPortal/ControlPlane/SqlControlPlaneStore.cs` |
+| Trang `/Admin` (đăng nhập, tổng quan theo dự án, đăng xuất), cookie `HttpOnly` + `SameSite=Strict` + `Secure` (trừ Development), CSRF qua antiforgery của Razor Pages, chống open redirect, `Cache-Control: no-store`, CSP cho phép `form-action 'self'` riêng `/Admin` | `WebPortal/Pages/Admin/*`, `Program.cs` |
 | Quyền KHÔNG nằm trong cookie: tính lại từ DB mỗi request (khóa tài khoản hoặc thu hồi membership có hiệu lực ngay) | `Pages/Admin/Index.cshtml.cs` |
 | CLI `create-portal-account` (kiểm thử mặc định, `--apply` mới ghi, mật khẩu qua biến môi trường) | `Cli/CreatePortalAccountCommand.cs` |
 | Seed quyền theo vai trò | `sql/portal/003_portalSeed.sql` |
 
-**Quản trị tài khoản / membership / dự án trên `/Admin`** (`ApiDocs/ControlPlane/AccountAdminService.cs`, trang `Pages/Admin/Accounts/*`, `Projects/*`, `Password`), có test `Tests/AccountAdminTests.cs` và luồng trang trong `ControlPlaneTests`:
+**Quản trị tài khoản / membership / dự án trên `/Admin`** (`WebPortal/ControlPlane/AccountAdminService.cs`, trang `Pages/Admin/Accounts/*`, `Projects/*`, `Password`), có test `Tests/AccountAdminTests.cs` và luồng trang trong `ControlPlaneTests`:
 
 | Ai | Được làm | Không được |
 |---|---|---|
@@ -109,9 +109,9 @@ Chưa làm: màn hình trên portal (bảng lọc, chi tiết, so request/respon
 
 Ràng buộc: tên đăng nhập `[A-Za-z0-9._@-]{3,64}`, mật khẩu ban đầu ≥ 12 ký tự (băm PBKDF2, không ghi audit); khách luôn là `partner` gắn một dự án còn hoạt động; ngoài phạm vi thì chi tiết trả "không tìm thấy" (không dò được ID). Địa chỉ Api dự án chỉ nhận https (http chỉ cho localhost), không user:pass/query/fragment. Mọi thao tác, kể cả bị từ chối, ghi `portalAudit` (người thao tác, dự án, đối tượng, kết quả, không có bí mật). Khóa tài khoản hoặc gỡ membership có hiệu lực ngay ở request kế tiếp vì quyền tính lại mỗi lần.
 
-**Nhật ký và dashboard** (`ApiDocs/ControlPlane/AuditViewService.cs`, trang `Pages/Admin/Audit/*` và `Pages/Admin/Index`, test `Tests/AuditViewTests.cs`): xem `portalAudit` lọc theo khoảng ngày (tối đa 92 ngày), dự án, người/đối tượng, tiền tố hành động, kết quả; 50 dòng/trang. Phạm vi theo `audit.read`: administrator trung tâm thấy mọi dòng (kể cả đăng nhập, vốn không thuộc dự án); người chỉ có quyền ở vài dự án chỉ thấy dòng của các dự án đó và không chọn được dự án khác; deployment, khách hàng không thấy gì. Chuỗi lọc chỉ giữ chữ-số và vài ký tự an toàn, truy vấn hoàn toàn bằng tham số. Dashboard `/Admin` lấy số liệu thật từ bảng portal: tài khoản nội bộ/khách (hoạt động, bị khóa), từng dự án (khách, nhân viên gắn dự án, số lần bị từ chối 7 ngày), tổng số thao tác bị từ chối 7 ngày, đăng nhập sai 24 giờ (chỉ người xem được mọi dòng audit), 8 hoạt động gần nhất; mỗi khối chỉ hiện khi người xem có `users.read` / `audit.read` tương ứng. Chưa có chỉ số đồng bộ DEV→PROD hay request API vì chưa có dữ liệu thật cho chúng. Mốc thời gian so với `GETDATE()` của máy SQL, nên giờ máy ứng dụng và máy SQL nên cùng múi giờ.
+**Nhật ký và dashboard** (`WebPortal/ControlPlane/AuditViewService.cs`, trang `Pages/Admin/Audit/*` và `Pages/Admin/Index`, test `Tests/AuditViewTests.cs`): xem `portalAudit` lọc theo khoảng ngày (tối đa 92 ngày), dự án, người/đối tượng, tiền tố hành động, kết quả; 50 dòng/trang. Phạm vi theo `audit.read`: administrator trung tâm thấy mọi dòng (kể cả đăng nhập, vốn không thuộc dự án); người chỉ có quyền ở vài dự án chỉ thấy dòng của các dự án đó và không chọn được dự án khác; deployment, khách hàng không thấy gì. Chuỗi lọc chỉ giữ chữ-số và vài ký tự an toàn, truy vấn hoàn toàn bằng tham số. Dashboard `/Admin` lấy số liệu thật từ bảng portal: tài khoản nội bộ/khách (hoạt động, bị khóa), từng dự án (khách, nhân viên gắn dự án, số lần bị từ chối 7 ngày), tổng số thao tác bị từ chối 7 ngày, đăng nhập sai 24 giờ (chỉ người xem được mọi dòng audit), 8 hoạt động gần nhất; mỗi khối chỉ hiện khi người xem có `users.read` / `audit.read` tương ứng. Chưa có chỉ số đồng bộ DEV→PROD hay request API vì chưa có dữ liệu thật cho chúng. Mốc thời gian so với `GETDATE()` của máy SQL, nên giờ máy ứng dụng và máy SQL nên cùng múi giờ.
 
-**Form editor, gói DEV→PROD, nhật ký đồng bộ** (`Business/FormDefinitionValidator.cs`, `FormPackage.cs`, `FormPackageApplier.cs`; `ApiDocs/ControlPlane/FormManagementService.cs`; trang `Admin/Forms/*`, `Packages`, `Sync`; `Cli apply-package`; test `FormDeliveryTests`, `FormManagementTests`):
+**Form editor, gói DEV→PROD, nhật ký đồng bộ** (`Business/FormDefinitionValidator.cs`, `FormPackage.cs`, `FormPackageApplier.cs`; `WebPortal/ControlPlane/FormManagementService.cs`; trang `Admin/Forms/*`, `Packages`, `Sync`; `Cli apply-package`; test `FormDeliveryTests`, `FormManagementTests`):
 
 - **Soạn và kiểm.** Mỗi lần lưu là một revision bất biến trong `portalFormRevision` (không sửa tại chỗ). Lưu hợp lệ → `validated`; còn lỗi → `draft` (lưu để soạn tiếp, không publish được). Bộ kiểm dùng chung portal và CLI: tên file `{động từ}{Resource}` ≤ 32 ký tự; XML tối đa 256 KB, **cấm DTD/entity ngoài** (không SYSTEM/PUBLIC, `XmlResolver` null, giới hạn bung entity 64 KB) nhưng vẫn dùng được entity nội bộ như `&And;`; luật nghiệp vụ của `ImportFormLoader` (khối, field, check, paging...); rà SQL trong `<query>` chặn lệnh cấp máy chủ (`xp_*`, `sp_OA*`, `OPENROWSET`, `BULK INSERT`, `GRANT`, `DROP/TRUNCATE` bảng thật, tạo/sửa đối tượng CSDL...) và cảnh báo SQL động. Đây là lưới an toàn, không thay thế việc người publish đọc SQL: SQL động và hàm hệ thống không chặn được hết; vẫn phải để tài khoản DB của Api ít quyền.
 - **Xung đột.** Khóa lạc quan: lưu phải kèm revision gốc đúng bằng revision lớn nhất hiện có (transaction `SERIALIZABLE`, khóa `UPDLOCK`), lệch thì `CONFLICT` và không ghi gì; giao diện giữ nguyên chữ người dùng đã gõ. Hai tên form chỉ khác chữ hoa/thường bị từ chối (cùng một file trên Windows).

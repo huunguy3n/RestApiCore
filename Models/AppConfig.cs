@@ -72,7 +72,7 @@
         }
 
         /// <summary>
-        /// Origin của portal ApiDocs được gọi /api từ trình duyệt (CORS), vd "https://docs.congty.vn". Rỗng: không mở CORS
+        /// Origin của portal WebPortal được gọi /api từ trình duyệt (CORS), vd "https://docs.congty.vn". Rỗng: không mở CORS
         /// </summary>
         public string[] portalOrigins
         {

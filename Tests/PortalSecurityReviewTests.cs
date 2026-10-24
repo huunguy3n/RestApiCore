@@ -1,6 +1,6 @@
 using System.Net;
 using System.Text.RegularExpressions;
-using ApiDocs.ControlPlane;
+using WebPortal.ControlPlane;
 using Business;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;

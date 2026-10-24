@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Fast.PortalApp</AssemblyName>
+    <RootNamespace>PortalApp</RootNamespace>
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <Version>2.0.0</Version>
+    <!-- Control tu ve khong dung designer, khong can serialize property -->
+    <NoWarn>$(NoWarn);WFO1000</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- PortalApp chi la vo bao quanh: goi thang cac lenh cua Cli, khong lap lai logic -->
+    <ProjectReference Include="..\Cli\Cli.csproj" />
+  </ItemGroup>
+
+</Project>

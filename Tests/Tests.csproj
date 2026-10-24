@@ -21,17 +21,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- FboWeb là .NET Framework: chỉ link các lớp không phụ thuộc System.Web để test -->
-    <Compile Include="..\FboWeb\ApiLog\LogRedactor.cs" Link="FboWeb\LogRedactor.cs" />
-    <Compile Include="..\FboWeb\ApiLog\ApiLogQuery.cs" Link="FboWeb\ApiLogQuery.cs" />
+    <!-- WebProject là .NET Framework: chỉ link các lớp không phụ thuộc System.Web để test -->
+    <Compile Include="..\WebProject\ApiLog\LogRedactor.cs" Link="WebProject\LogRedactor.cs" />
+    <Compile Include="..\WebProject\ApiLog\ApiLogQuery.cs" Link="WebProject\ApiLogQuery.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Security\Security.csproj" />
     <ProjectReference Include="..\Utilities\Utilities.csproj" />
     <ProjectReference Include="..\Models\Models.csproj" />
-    <ProjectReference Include="..\Api\Api.csproj" />
-    <ProjectReference Include="..\ApiDocs\ApiDocs.csproj" />
+    <ProjectReference Include="..\WebApi\WebApi.csproj" />
+    <ProjectReference Include="..\WebPortal\WebPortal.csproj" />
     <ProjectReference Include="..\Business\Business.csproj" />
   </ItemGroup>
 

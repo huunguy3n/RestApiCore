@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Text;
-using ApiDocs.ControlPlane;
+using WebPortal.ControlPlane;
 using Business;
 
 namespace Tests
@@ -19,12 +19,12 @@ namespace Tests
             Assert.True(FormDefinitionValidator.Validate("getCustomer", Valid).IsValid);
 
             DirectoryInfo? dir = new(AppContext.BaseDirectory);
-            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "Api", "App_Data", "Form")))
+            while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "WebApi", "App_Data", "Form")))
             {
                 dir = dir.Parent;
             }
             // setTemplate.xml là mẫu cho người soạn (không phải form chạy được), nên chỉ kiểm các form v3 thật
-            string[] samples = new[] { "getCustomer", "setSaleInvoice" }.Select(n => Path.Combine(dir!.FullName, "Api", "App_Data", "Form", n + ".xml")).ToArray();
+            string[] samples = new[] { "getCustomer", "setSaleInvoice" }.Select(n => Path.Combine(dir!.FullName, "WebApi", "App_Data", "Form", n + ".xml")).ToArray();
             Assert.All(samples, f => Assert.True(File.Exists(f), f));
             foreach (string file in samples)
             {

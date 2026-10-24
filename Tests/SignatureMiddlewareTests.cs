@@ -326,11 +326,11 @@ namespace Tests
         private static string ApiDirectory()
         {
             DirectoryInfo? dir = new(AppContext.BaseDirectory);
-            while (dir != null && !File.Exists(System.IO.Path.Combine(dir.FullName, "Api", "App_Data", "Options", "Message.xml")))
+            while (dir != null && !File.Exists(System.IO.Path.Combine(dir.FullName, "WebApi", "App_Data", "Options", "Message.xml")))
             {
                 dir = dir.Parent;
             }
-            return System.IO.Path.Combine(dir?.FullName ?? throw new DirectoryNotFoundException("Không tìm thấy Api/App_Data"), "Api");
+            return System.IO.Path.Combine(dir?.FullName ?? throw new DirectoryNotFoundException("Không tìm thấy WebApi/App_Data"), "WebApi");
         }
 
         [Fact]

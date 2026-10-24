@@ -1,0 +1,80 @@
+@page
+@model WebPortal.Pages.Admin.Forms.EditModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = Model.Form ?? "Form";
+    ViewData["Crumb"] = "Mỗi lần lưu là một revision mới; chỉ revision hợp lệ mới publish được";
+    ViewData["Nav"] = "forms";
+}
+<partial name="_Flash" model="@((Model.Flash, Model.FlashError))" />
+@if (Model.View != null)
+{
+    var v = Model.View;
+    @if (Model.Validation is { } validation)
+    {
+        <section class="adm__panel" aria-live="polite">
+            <h2>Kết quả kiểm tra: @(validation.IsValid ? "hợp lệ" : "có lỗi")</h2>
+            @foreach (var e in validation.Errors)
+            {
+                <p class="adm__alert">@(e.Line > 0 ? $"Dòng {e.Line}, cột {e.Column}: " : "")@e.Message</p>
+            }
+            @foreach (var w in validation.Warnings)
+            {
+                <p class="adm__warn">@(w.Line > 0 ? $"Dòng {w.Line}: " : "")@w.Message</p>
+            }
+            @if (validation.IsValid && validation.Form is { } form)
+            {
+                <p class="adm__crumb">Route: POST @form.Route · loại @form.Type · @form.Blocks.Count khối</p>
+            }
+        </section>
+    }
+
+    @if (v.CanEdit)
+    {
+        <form method="post" class="adm__form adm__form--wide">
+            <input type="hidden" name="baseRevision" value="@Model.BaseRevision" />
+            <label for="content">Nội dung XML @(v.Current != null && v.Current.Info.Revision != v.LatestRevision ? $"(đang soạn từ revision {v.Current.Info.Revision}, lưu sẽ thành revision mới)" : "")</label>
+            <textarea id="content" name="content" class="adm__editor" rows="32" spellcheck="false" wrap="off">@Model.Content</textarea>
+            <div class="adm__bar">
+                <button type="submit" asp-page-handler="Validate" asp-route-project="@Model.Project" asp-route-form="@Model.Form" class="adm__btn adm__btn--ghost">Kiểm tra</button>
+                <button type="submit" asp-page-handler="Save" asp-route-project="@Model.Project" asp-route-form="@Model.Form" class="adm__btn">Lưu revision mới</button>
+            </div>
+        </form>
+    }
+    else
+    {
+        <pre class="adm__editor">@Model.Content</pre>
+    }
+
+    <h2 class="adm__h2">Lịch sử revision</h2>
+    <table class="adm__table">
+        <thead><tr><th>Revision</th><th>Trạng thái</th><th>Người lưu</th><th>Thời gian</th><th>Publish</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var r in v.History)
+        {
+            <tr>
+                <td>@r.Revision @(r.BaseRevision != null ? $"(từ {r.BaseRevision})" : "")</td>
+                <td><span class="adm__chip">@r.Status</span></td>
+                <td>@r.CreatedBy</td>
+                <td>@r.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                <td>@(r.PublishedAt != null ? $"{r.PublishedBy} {r.PublishedAt:yyyy-MM-dd HH:mm}" : "")</td>
+                <td>
+                    <a asp-page="Edit" asp-route-project="@Model.Project" asp-route-form="@Model.Form" asp-route-revision="@r.Revision">Mở</a>
+                    @if (r.Revision > 1)
+                    {
+                        <a asp-page="Diff" asp-route-project="@Model.Project" asp-route-form="@Model.Form" asp-route-from="@(r.Revision - 1)" asp-route-to="@r.Revision">So với bản trước</a>
+                    }
+                    @if (v.CanPublish && r.Status == "validated")
+                    {
+                        <form method="post" asp-page-handler="Publish" asp-route-project="@Model.Project" asp-route-form="@Model.Form" class="adm__inline">
+                            <input type="hidden" name="revision" value="@r.Revision" />
+                            <button type="submit" class="adm__btn adm__btn--small">Publish</button>
+                        </form>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+<p><a asp-page="Index" asp-route-project="@Model.Project">← Danh sách form</a></p>

@@ -1,0 +1,102 @@
+@page
+@model WebPortal.Pages.Admin.IndexModel
+@{
+    Layout = "_AdminLayout";
+    ViewData["Title"] = "Tổng quan";
+    ViewData["Crumb"] = "Số liệu từ bảng portal và dự án bạn được phép truy cập";
+    ViewData["Nav"] = "overview";
+}
+@if (Model.Message != null)
+{
+    <p class="adm__alert" role="alert">@Model.Message</p>
+}
+else if (Model.Access!.Projects.Count == 0 && Model.Dashboard == null)
+{
+    <p class="adm__empty">Tài khoản chưa được gán dự án nào. Liên hệ quản trị để được cấp quyền.</p>
+}
+else
+{
+    @if (Model.Dashboard is { } d)
+    {
+        <section class="adm__stats" aria-label="Số liệu tổng quan">
+            @if (d.Accounts is { } a)
+            {
+                <article class="adm__stat"><span>Nhân viên hoạt động</span><strong>@a.StaffActive</strong><small>@a.StaffLocked bị khóa</small></article>
+                <article class="adm__stat"><span>Khách hàng hoạt động</span><strong>@a.CustomerActive</strong><small>@a.CustomerLocked bị khóa</small></article>
+            }
+            @if (d.Denied7Days is int denied)
+            {
+                <article class="adm__stat"><span>Thao tác bị từ chối (7 ngày)</span><strong>@denied</strong></article>
+            }
+            @if (d.FailedLogins24Hours is int failed)
+            {
+                <article class="adm__stat"><span>Đăng nhập sai (24 giờ)</span><strong>@failed</strong></article>
+            }
+        </section>
+
+        @if (d.Projects.Count > 0)
+        {
+            <h2 class="adm__h2">Theo dự án</h2>
+            <table class="adm__table">
+                <thead><tr><th>Dự án</th><th>Trạng thái</th><th>Khách hàng</th><th>Nhân viên gắn dự án</th>@if (d.Denied7Days != null) { <th>Bị từ chối (7 ngày)</th> }</tr></thead>
+                <tbody>
+                @foreach (var p in d.Projects)
+                {
+                    <tr>
+                        <td>@p.Code - @p.Name</td>
+                        <td>@(p.Active ? "Hoạt động" : "Ngừng")</td>
+                        <td>@p.ActiveCustomers</td>
+                        <td>@p.ActiveStaff</td>
+                        @if (d.Denied7Days != null) { <td>@p.Denied7Days</td> }
+                    </tr>
+                }
+                </tbody>
+            </table>
+        }
+
+        @if (d.Recent is { Count: > 0 } recent)
+        {
+            <h2 class="adm__h2">Hoạt động gần đây</h2>
+            <table class="adm__table">
+                <thead><tr><th>Thời gian</th><th>Người</th><th>Hành động</th><th>Đối tượng</th><th>Kết quả</th></tr></thead>
+                <tbody>
+                @foreach (var e in recent)
+                {
+                    <tr>
+                        <td>@e.At.ToString("yyyy-MM-dd HH:mm")</td>
+                        <td>@(e.ActorLogin ?? "(không xác định)")</td>
+                        <td>@e.Action</td>
+                        <td>@e.Target</td>
+                        <td><span class="adm__chip adm__chip--@e.Outcome.ToLowerInvariant()">@e.Outcome</span></td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+            <p><a asp-page="/Admin/Audit/Index">Xem toàn bộ nhật ký →</a></p>
+        }
+    }
+
+    @if (Model.Access.Projects.Count > 0)
+    {
+        <h2 class="adm__h2">Quyền của bạn</h2>
+        <section class="adm__cards">
+            @foreach (var grant in Model.Access.Projects)
+            {
+                <article class="adm__panel">
+                    <h2>@grant.Project.Name <span class="adm__chip">@grant.Project.Code</span></h2>
+                    <p class="adm__crumb">Vai trò: @string.Join(", ", grant.Roles.Order())</p>
+                    @if (grant.ProjectUserName != null)
+                    {
+                        <p class="adm__crumb">Tài khoản API: @grant.ProjectUserName</p>
+                    }
+                    <p class="adm__perms">
+                        @foreach (var permission in grant.Permissions.Order())
+                        {
+                            <span class="adm__chip">@permission</span>
+                        }
+                    </p>
+                </article>
+            }
+        </section>
+    }
+}

@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.14.36301.6
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Api", "Api\Api.csproj", "{128BE412-10D1-40A2-AF2D-AB97C4CF29AA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebApi", "WebApi\WebApi.csproj", "{128BE412-10D1-40A2-AF2D-AB97C4CF29AA}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Business", "Business\Business.csproj", "{A73C0132-58AA-4D6C-8CF0-25A9599A693D}"
 EndProject
@@ -19,15 +19,15 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CallbackWorker", "CallbackW
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Provider", "Provider\Provider.csproj", "{ACE1FA84-866D-4333-9EDE-ADD1C9D4E6F8}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ApiDocs", "ApiDocs\ApiDocs.csproj", "{95DB1D32-A3E9-4CB0-B3D0-27704FCC452B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebPortal", "WebPortal\WebPortal.csproj", "{95DB1D32-A3E9-4CB0-B3D0-27704FCC452B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tests", "Tests\Tests.csproj", "{A6A06F18-2EC5-488B-AEC0-E50EA44A6528}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cli", "Cli\Cli.csproj", "{703E6180-3C76-45E2-A5C6-E93CEC7030A4}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gui", "Gui\Gui.csproj", "{DCC820E1-9CC2-4719-9ADC-6157269DD0A7}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PortalApp", "PortalApp\PortalApp.csproj", "{DCC820E1-9CC2-4719-9ADC-6157269DD0A7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FboWeb", "FboWeb\FboWeb.csproj", "{4355B9F3-D548-46F5-832F-00325B16E485}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebProject", "WebProject\WebProject.csproj", "{4355B9F3-D548-46F5-832F-00325B16E485}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

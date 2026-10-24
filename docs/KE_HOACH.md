@@ -27,7 +27,7 @@
 | Bí mật nội dung | SHA-256/HMAC **không mã hóa**. **HTTPS/TLS lo phần mã hóa body**. Không có lớp mã hóa body riêng (bỏ `encryptData`), API không dùng khóa bất đối xứng |
 | `unitCode` | Query string `?unitCode=` (được ký). Form khai `unitRequired="true"` thì bắt buộc. Kiểm quyền đơn vị bằng hàm FBO có sẵn |
 | Truyền tệp | **Ngoài giai đoạn này** (Phụ lục A) |
-| Cổng đối tác | Phát triển từ project `ApiDocs`. **Dùng luôn tài khoản `restApiUser`** (không bảng/cờ riêng): đăng nhập bằng `name` + `password`. Mật khẩu **mã hóa tại client** bằng khóa công khai RSA của server, server giải bằng khóa riêng rồi kiểm (5.3). `private_key` chỉ lo phần API |
+| Cổng đối tác | Phát triển từ project `WebPortal`. **Dùng luôn tài khoản `restApiUser`** (không bảng/cờ riêng): đăng nhập bằng `name` + `password`. Mật khẩu **mã hóa tại client** bằng khóa công khai RSA của server, server giải bằng khóa riêng rồi kiểm (5.3). `private_key` chỉ lo phần API |
 | Cấu trúc code | Giữ `Api` / `Business` / `DataAccess` / `Models` / `Security` / `Provider`. Provider ADO.NET giữ, không bắt buộc Dapper |
 
 ---
@@ -44,7 +44,7 @@
 | `Models` | `Form`, `Struct`, `Field`, `FieldReference`, `FieldCheck`, `Message`, `Update` | Giữ, bổ sung `Paging`, `UnitRequired`, `Verb`. `FieldCheck` đổi sang 4 danh sách song song kiểu Upload. Bỏ `FieldReference`, `Update` |
 | `App_Data/Options` | `Message.xml` (mã lỗi ↔ HTTP status), `Update.xml` (script cho `reference`), `Irregular.txt` | Giữ `Message.xml`, `Irregular.txt`. `Update.xml` không dùng nữa |
 | `Security` | JWT HS256 (audience = IP), `GenerateAuthKey` (MD5 + `positions` như v2), AES cho mật khẩu | Giữ JWT. Thay MD5 bằng SHA-256 checksum + HMAC-SHA256 hai chiều (4.2). AES dùng để mã hóa `private_key` khi lưu |
-| `ApiDocs` | Khung Razor Pages, dữ liệu giả | Thành cổng đối tác |
+| `WebPortal` | Khung Razor Pages, dữ liệu giả | Thành cổng đối tác |
 | `CallbackWorker` | Worker mẫu | Callback/notify, ngoài giai đoạn này |
 | `Provider` | ADO.NET tĩnh, đồng bộ, `CommandTimeout` static dùng chung | Chuyển async, timeout theo cấu hình |
 
@@ -394,7 +394,7 @@ Middleware đẩy vào `Channel`, `LogWorker` ghi theo lô vào bảng log mới
 
 **Serilog** ghi file chẩn đoán vận hành: rolling theo ngày, giới hạn dung lượng, path ngoài thư mục release. `X-Request-ID` = `req_id` để tra log file và SQL.
 
-### 5.3. Cổng đối tác (`ApiDocs`)
+### 5.3. Cổng đối tác (`WebPortal`)
 
 **Ai vào được:** mọi tài khoản `restApiUser` còn hiệu lực (`status = '1'`), đăng nhập bằng `name` + `password`. Không có bảng hay cờ riêng.
 
@@ -417,7 +417,7 @@ Server chỉ giữ một cặp khóa RSA cho cả instance, không cần đối 
 
 Cài và nâng cấp chỉ qua **một CLI**. NSD chỉ khai tham số, CLI làm hết phần còn lại: copy toàn bộ dll, exe, XML từ **gói gốc** vào thư mục dự án; tạo table, view, proc trên DB khách; dựng site IIS. Không còn bộ `Install.ps1`/`Update.ps1` riêng.
 
-**Gói gốc** (`--source`): thư mục release do build tạo ra, gồm `bin/` (Api, ApiDocs, Cli đã `dotnet publish`), `sql/` (script đánh số thứ tự `NNN_ten.sql`), `App_Data/` (Form, Options) và `setup.manifest.json` (phiên bản, danh sách tệp + SHA-256, thứ tự script).
+**Gói gốc** (`--source`): thư mục release do build tạo ra, gồm `bin/` (Api, WebPortal, Cli đã `dotnet publish`), `sql/` (script đánh số thứ tự `NNN_ten.sql`), `App_Data/` (Form, Options) và `setup.manifest.json` (phiên bản, danh sách tệp + SHA-256, thứ tự script).
 
 **NSD khai** (hỏi tương tác, hoặc `--config setup.json` để chạy lại không hỏi):
 
@@ -426,7 +426,7 @@ Cài và nâng cấp chỉ qua **một CLI**. NSD chỉ khai tham số, CLI làm
 | Thư mục | Thư mục cài (dự án), thư mục log, thư mục dữ liệu (khóa PFX, spool) |
 | SQL | Server, DB app, DB sys, kiểu đăng nhập (Windows / SQL + tài khoản) |
 | IIS | Tên site, App Pool, hostname, port, chứng chỉ HTTPS (thumbprint) |
-| Phạm vi | Danh sách XML form cài (mặc định: tất cả trong gói); có cài portal `ApiDocs` không |
+| Phạm vi | Danh sách XML form cài (mặc định: tất cả trong gói); có cài portal `WebPortal` không |
 | Tùy chọn | Tạo tài khoản `restApiUser` đầu tiên (`name`, `name_erp`) |
 
 **CLI tự làm**, theo thứ tự:
@@ -526,12 +526,12 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 
 **Pha 5 — Log mới**: Middleware → Channel → worker → bảng log mới, spool file, `restApi_LogCleanup`, `restApi_LogSearch`. *Nghiệm thu:* bật log không làm tăng đáng kể độ trễ; SQL tắt thì spool rồi đẩy lại được.
 
-**Pha 6 — Portal**: cặp khóa RSA server (PFX / Certificate Store) + công bố qua `/_meta/server`, `POST /auth/portal` (giải RSA-OAEP, so `password`, chống phát lại), JWT phạm vi `portal`; `ApiDocs` theo 5.3, code mẫu 5 ngôn ngữ dùng chung vector thử. *Nghiệm thu:* một người ngoài nhóm tự tích hợp được một endpoint chỉ bằng portal.
+**Pha 6 — Portal**: cặp khóa RSA server (PFX / Certificate Store) + công bố qua `/_meta/server`, `POST /auth/portal` (giải RSA-OAEP, so `password`, chống phát lại), JWT phạm vi `portal`; `WebPortal` theo 5.3, code mẫu 5 ngôn ngữ dùng chung vector thử. *Nghiệm thu:* một người ngoài nhóm tự tích hợp được một endpoint chỉ bằng portal.
 
 **Pha 7 — Setup CLI** (`Fast.Api.Cli setup`, thiết kế ở 5.4)
 | Việc | Đầu ra |
 |---|---|
-| Lệnh `pack`: `dotnet publish` Api, ApiDocs, Cli + gom `sql/`, `App_Data/` + sinh `setup.manifest.json` (phiên bản, SHA-256 từng tệp, thứ tự script) | Gói gốc tái tạo được từ một commit |
+| Lệnh `pack`: `dotnet publish` Api, WebPortal, Cli + gom `sql/`, `App_Data/` + sinh `setup.manifest.json` (phiên bản, SHA-256 từng tệp, thứ tự script) | Gói gốc tái tạo được từ một commit |
 | Khai tham số: hỏi tương tác hoặc `--config setup.json`; kiểm giá trị (đường dẫn, port, kết nối SQL) trước khi chạy | NSD chỉ trả lời câu hỏi |
 | Preflight (5.4 bước 1) | Báo đủ lỗi môi trường một lần, chưa ghi gì |
 | Sinh bí mật + `appsettings.Local.json` + PFX RSA, ACL | Không bí mật nào nằm trong gói hay log |
@@ -659,11 +659,11 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | `GET /_meta/resources` (form được cấp quyền), `GET /_meta/resources/{form}` (tóm tắt, khối, field hiện được — bỏ `hidden` và khóa tự thêm —, kiểu, độ dài thật, bắt buộc, format, mã lỗi của check, **mẫu body**: nhiều khối có tên khối, một khối dạng phẳng), `GET /_meta/errors` (bảng mã lỗi từ `Message.xml`). Không có quyền → `FORBIDDEN`, không có → `NOT_FOUND` | Xong 23/10/2026 |
 | Mã lỗi mới `INVALID_KID`, `INVALID_CREDENTIAL`, `PORTAL_TOKEN_NOT_ALLOWED`; hai mã sau vào danh sách tấn công của log. 20 test mới (271/271), client test mã hóa bằng JWK lấy từ `/_meta/server` như WebCrypto | Xong 23/10/2026 |
 | End-to-end trên DB dev (Api thật): `_meta/server` → sai mật khẩu 401 → đăng nhập 200 → phát lại gói 401 `NONCE_REUSED` → `_meta/resources`, `_meta/resources/setSaleInvoice`, `_meta/errors` (49 mã) → token portal gọi `sale-invoice` 403 → form không cấp quyền 403. Dữ liệu thử đã trả lại (mật khẩu `ADMIN` về chuỗi rỗng như trước, quyền form, log) | Xong 23/10/2026 |
-| `ApiDocs` viết lại thành trang một màn (bỏ trang dữ liệu giả): đăng nhập (WebCrypto RSA-OAEP với JWK của `/_meta/server`), danh sách/chi tiết tài nguyên (khối, field, mã lỗi, body mẫu), bảng mã lỗi. Mọi lời gọi đi thẳng từ trình duyệt tới Api (`Portal:ApiBaseUrl`, rỗng = cùng origin); site portal không thấy bí mật nào. CSP chỉ cho script của chính site, dựng DOM bằng `textContent`. JWT portal giữ trong `sessionStorage`; `private_key` và JWT API chỉ trong bộ nhớ trang | Xong 23/10/2026 |
+| `WebPortal` viết lại thành trang một màn (bỏ trang dữ liệu giả): đăng nhập (WebCrypto RSA-OAEP với JWK của `/_meta/server`), danh sách/chi tiết tài nguyên (khối, field, mã lỗi, body mẫu), bảng mã lỗi. Mọi lời gọi đi thẳng từ trình duyệt tới Api (`Portal:ApiBaseUrl`, rỗng = cùng origin); site portal không thấy bí mật nào. CSP chỉ cho script của chính site, dựng DOM bằng `textContent`. JWT portal giữ trong `sessionStorage`; `private_key` và JWT API chỉ trong bộ nhớ trang | Xong 23/10/2026 |
 | Gọi thử: dán `private_key` → trình duyệt ký `auth/token` lấy JWT API → ký request form, kiểm chữ ký response, hiện `canonicalRequest`/`canonicalResponse`/header. Form `List`/`Report`: nút "Gọi"; `Voucher`/`Transfer`: "Kiểm tra (dryRun)" và "Gửi thật" (hỏi xác nhận, kèm `Idempotency-Key`); "Trang tiếp" theo `cursor`/`page` | Xong 23/10/2026 |
 | Api: CORS cho portal khác origin, chỉ trên `/api`, theo `appSettings:portalOrigins` (rỗng = không mở): cho phép header `X-Fast-*`, `Idempotency-Key`, `Authorization`; lộ `X-Request-ID`, `X-Fast-Timestamp`, `X-Fast-Content-SHA256`, `X-Fast-Signature`; không cookie. Preflight trả trước log và chữ ký | Xong 23/10/2026 |
-| Code mẫu `ApiDocs/wwwroot/samples`: cURL (bash + OpenSSL), C#, JavaScript (Node), Python, Java; chạy không tham số tự kiểm vector thử của `MessageSignatureTests`, có tham số thì lấy token rồi gọi `_meta/ping` và kiểm chữ ký response (trừ cURL). Lõi ký trình duyệt `wwwroot/js/fast-sign.js` cũng tự kiểm vector trên trang Code mẫu. Test `PortalDocsTests`: CORS + mọi mẫu chứa đúng vector (282/282) | Xong 23/10/2026 |
-| End-to-end trên DB dev (Api :5299 + ApiDocs :5225 khác origin, khóa tạm qua biến môi trường): sai mật khẩu → lỗi; đăng nhập → 2 form được cấp; gọi thử `getCustomer` 200, chữ ký response hợp lệ; `setSaleInvoice` dryRun ra `VALIDATION_FAILED` đúng field (DB dev không có vật tư hoạt động); mã lỗi, code mẫu, đăng xuất. Mẫu Python/Node/bash/C# gọi thật Api đạt. **Mẫu Java chưa chạy** (máy dev không có JDK). Chưa bấm "Gửi thật" trên giao diện. Dữ liệu thử đã trả lại | Xong 23/10/2026 |
+| Code mẫu `WebPortal/wwwroot/samples`: cURL (bash + OpenSSL), C#, JavaScript (Node), Python, Java; chạy không tham số tự kiểm vector thử của `MessageSignatureTests`, có tham số thì lấy token rồi gọi `_meta/ping` và kiểm chữ ký response (trừ cURL). Lõi ký trình duyệt `wwwroot/js/fast-sign.js` cũng tự kiểm vector trên trang Code mẫu. Test `PortalDocsTests`: CORS + mọi mẫu chứa đúng vector (282/282) | Xong 23/10/2026 |
+| End-to-end trên DB dev (Api :5299 + WebPortal :5225 khác origin, khóa tạm qua biến môi trường): sai mật khẩu → lỗi; đăng nhập → 2 form được cấp; gọi thử `getCustomer` 200, chữ ký response hợp lệ; `setSaleInvoice` dryRun ra `VALIDATION_FAILED` đúng field (DB dev không có vật tư hoạt động); mã lỗi, code mẫu, đăng xuất. Mẫu Python/Node/bash/C# gọi thật Api đạt. **Mẫu Java chưa chạy** (máy dev không có JDK). Chưa bấm "Gửi thật" trên giao diện. Dữ liệu thử đã trả lại | Xong 23/10/2026 |
 | Form mẫu `setSaleInvoice`: check `so_luong <= 0` chuyển từ field `Promotion` sang `Quantity` (trước đó lỗi `INVALID_QUANTITY` báo nhầm field). Test `RequestLogTests.GhiTheoLo_GioiHanKichThuocLo` chập chờn (dọn log chạy sau lô cuối) đã sửa | Xong 23/10/2026 |
 | *Nghiệm thu pha 6* "người ngoài nhóm tự tích hợp được một endpoint chỉ bằng portal": cần người thật thử | Chưa |
 

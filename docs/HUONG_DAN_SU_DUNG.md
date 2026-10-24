@@ -50,7 +50,7 @@ copy Api\appsettings.Local.example.json Api\appsettings.Local.json
 | `connectionStrings:appConnectionString` | Chuỗi kết nối DB app |
 | `Security:KeyEncryptionKey` | Base64 32 byte — mã hóa `private_key` trong DB |
 | `Security:PortalKeyPath` | (Tuỳ chọn) PFX khóa RSA portal. Không khai → khóa tạm (đổi mỗi lần restart) |
-| `appSettings:portalOrigins` | Origin ApiDocs được CORS, vd `["http://localhost:5225"]` |
+| `appSettings:portalOrigins` | Origin WebPortal được CORS, vd `["http://localhost:5225"]` |
 
 Ví dụ đầy đủ hơn:
 
@@ -97,7 +97,7 @@ Giả định đã có bảng nền `restApiUser`, `restApiAllowForm`, `restApiA
 dotnet run --project Api --launch-profile http
 # http://localhost:5143
 
-dotnet run --project ApiDocs --launch-profile http
+dotnet run --project WebPortal --launch-profile http
 # http://localhost:5225
 ```
 
@@ -173,7 +173,7 @@ Remove-Item Env:RESTAPI_PASSWORD
 
 Giao cho đối tác:
 
-1. `name` + mật khẩu portal (vào ApiDocs).
+1. `name` + mật khẩu portal (vào WebPortal).
 2. `private_key` (base64) — kênh an toàn; dùng ký HMAC / lấy JWT API.
 
 Đổi mật khẩu portal sau này:
@@ -247,7 +247,7 @@ Response **không có** chữ ký (thường lỗi JWT/user sớm) → không ti
 
 ### 4.4. Vector thử cố định
 
-Dùng để kiểm client tự viết (cùng giá trị trong `Tests/MessageSignatureTests.cs` và `ApiDocs/wwwroot/samples/`):
+Dùng để kiểm client tự viết (cùng giá trị trong `Tests/MessageSignatureTests.cs` và `WebPortal/wwwroot/samples/`):
 
 | Thành phần | Giá trị |
 |---|---|
@@ -260,7 +260,7 @@ Chạy mẫu C# (file top-level statements; tạo project tạm hoặc chạy th
 
 ```powershell
 # Vector thử (không cần server):
-#   mở ApiDocs/wwwroot/samples/FastSign.cs — hàm TestVector() chạy khi start
+#   mở WebPortal/wwwroot/samples/FastSign.cs — hàm TestVector() chạy khi start
 # Gọi thật:
 #   dotnet run -- <base_url> <user> <private_key_base64>
 ```
@@ -421,15 +421,15 @@ Một số mã lỗi thường gặp: `INVALID_SIGNATURE`, `TIMESTAMP_EXPIRED`, 
 
 ---
 
-## 7. Portal đối tác (ApiDocs)
+## 7. Portal đối tác (WebPortal)
 
-1. Mở ApiDocs (vd `http://localhost:5225`), cấu hình base URL API nếu trang yêu cầu.
+1. Mở WebPortal (vd `http://localhost:5225`), cấu hình base URL API nếu trang yêu cầu.
 2. Đăng nhập bằng `restApiUser.name` + mật khẩu: trình duyệt lấy `portalKey` từ `/api/_meta/server`, mã hóa RSA-OAEP, gọi `POST /api/auth/portal`.
 3. JWT `scope=portal` **chỉ** đọc `/api/_meta/*` — không gọi nghiệp vụ.
 4. Xem danh sách tài nguyên, chi tiết field, mẫu JSON, bảng lỗi.
 5. **Gọi thử:** dán `private_key` vào ô (chỉ giữ trong bộ nhớ trang) → lấy JWT API → ký HMAC → gửi `dryRun` hoặc gửi thật.
 
-Code mẫu tải từ trang portal hoặc thư mục `ApiDocs/wwwroot/samples/`.
+Code mẫu tải từ trang portal hoặc thư mục `WebPortal/wwwroot/samples/`.
 
 ---
 
@@ -525,7 +525,7 @@ Production checklist ngắn:
 |---|---|
 | Đặc tả đầy đủ | [KE_HOACH.md](KE_HOACH.md) |
 | README repo | [../README.md](../README.md) |
-| Mẫu ký C#/Python/… | `ApiDocs/wwwroot/samples/` |
+| Mẫu ký C#/Python/… | `WebPortal/wwwroot/samples/` |
 | Vector chữ ký trong test | `Tests/MessageSignatureTests.cs` |
 | Client mẫu trong test | `Tests/Sample/FastApiSigner.cs` |
 | Script DB | `sql/` |

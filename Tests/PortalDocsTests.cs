@@ -9,7 +9,7 @@ using Web.Custom;
 namespace Tests
 {
     /// <summary>
-    /// Portal ApiDocs (KE_HOACH 5.3): CORS cho trình duyệt ký request từ origin khác, và code mẫu dùng đúng vector thử
+    /// Portal WebPortal (KE_HOACH 5.3): CORS cho trình duyệt ký request từ origin khác, và code mẫu dùng đúng vector thử
     /// </summary>
     public class PortalDocsTests
     {
@@ -106,7 +106,7 @@ namespace Tests
         [MemberData(nameof(SampleFiles))]
         public void CodeMau_DungChungVectorThu(string file)
         {
-            string text = File.ReadAllText(Path.Combine(SolutionDirectory(), "ApiDocs", "wwwroot", file));
+            string text = File.ReadAllText(Path.Combine(SolutionDirectory(), "WebPortal", "wwwroot", file));
 
             foreach (string value in new[]
             {

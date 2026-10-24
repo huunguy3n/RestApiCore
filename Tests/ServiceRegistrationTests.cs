@@ -36,11 +36,11 @@ namespace Tests
         private static string ApiDirectory()
         {
             DirectoryInfo? dir = new(AppContext.BaseDirectory);
-            while (dir != null && !File.Exists(Path.Combine(dir.FullName, "Api", "App_Data", "Options", "Message.xml")))
+            while (dir != null && !File.Exists(Path.Combine(dir.FullName, "WebApi", "App_Data", "Options", "Message.xml")))
             {
                 dir = dir.Parent;
             }
-            return Path.Combine(dir!.FullName, "Api");
+            return Path.Combine(dir!.FullName, "WebApi");
         }
 
         /// <summary>Tham số do host/route cấp, không phải dịch vụ của ứng dụng</summary>
