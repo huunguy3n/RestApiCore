@@ -24,7 +24,7 @@
         }
 
         /// <summary>
-        /// Độ lệch tối đa (giây) giữa X-Fast-Timestamp và giờ server; nonce giữ 2 lần khoảng này
+        /// Độ lệch tối đa (giây) giữa giây trong X-Fast-Nonce và giờ server; nonce giữ 2 lần khoảng này
         /// </summary>
         public int clockSkewSeconds
         {

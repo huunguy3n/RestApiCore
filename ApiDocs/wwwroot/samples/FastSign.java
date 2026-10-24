@@ -33,10 +33,6 @@ public class FastSign {
         return hmac(Base64.getDecoder().decode(privateKeyBase64), label.getBytes(StandardCharsets.US_ASCII));
     }
 
-    static String sha256Hex(byte[] data) throws Exception {
-        return hex(MessageDigest.getInstance("SHA-256").digest(data));
-    }
-
     static String md5Hex(byte[] data) throws Exception {
         return hex(MessageDigest.getInstance("MD5").digest(data));
     }
@@ -54,11 +50,9 @@ public class FastSign {
         return headers;
     }
 
-    static boolean verifyResponse(byte[] responseKey, int status, String requestId, String requestNonce, String timestamp, String contentSha256, String signature, byte[] body) throws Exception {
-        String actualSha256 = sha256Hex(body);
-        String canonical = String.join("\n", "FAST-HMAC-SHA256-RESPONSE", Integer.toString(status), requestId, requestNonce, timestamp, actualSha256);
-        return MessageDigest.isEqual(actualSha256.getBytes(), contentSha256.toLowerCase().getBytes())
-            && MessageDigest.isEqual(hmacHex(responseKey, canonical).getBytes(), signature.trim().toLowerCase().getBytes());
+    /** X-Fast-Signature = HMAC-SHA256(K_response, md5Hex(body) + nonce của request) */
+    static boolean verifyResponse(byte[] responseKey, String requestNonce, String signature, byte[] body) throws Exception {
+        return MessageDigest.isEqual(hmacHex(responseKey, md5Hex(body) + requestNonce).getBytes(), signature.trim().toLowerCase().getBytes());
     }
 
     static void check(boolean ok, String name) {
@@ -77,8 +71,7 @@ public class FastSign {
         check(signRequest(requestKey, body, nonce, "").get("X-Fast-Signature").equals("9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac"), "Chu ky request");
 
         byte[] response = "{\"code\":\"SUCCESS\"}".getBytes(StandardCharsets.UTF_8);
-        check(verifyResponse(responseKey, 200, "8c2f0000-0000-4000-8000-000000000002", nonce, "1792574401", sha256Hex(response),
-            "ad5353907e543ef9429cfe159bdaf1ded0ae2c37a27208110bbc2a47ef902bac", response), "Chu ky response");
+        check(verifyResponse(responseKey, nonce, "0736896e2b8b43d7215b2e4366f133f2a4d1f4ff472fc089f08365fc79bbd50f", response), "Chu ky response");
         System.out.println("Vector thu: dat");
     }
 
@@ -101,8 +94,7 @@ public class FastSign {
 
         HttpResponse<byte[]> response = HTTP.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray());
         java.util.function.Function<String, String> header = name -> response.headers().firstValue(name).orElse("");
-        check(verifyResponse(deriveKey(privateKey, "FAST-API-V3-RESPONSE"), response.statusCode(), header.apply("X-Request-ID"), nonce,
-            header.apply("X-Fast-Timestamp"), header.apply("X-Fast-Content-SHA256"), header.apply("X-Fast-Signature"), response.body()),
+        check(verifyResponse(deriveKey(privateKey, "FAST-API-V3-RESPONSE"), nonce, header.apply("X-Fast-Signature"), response.body()),
             "Chu ky response: khong tin noi dung nay");
         return new String(response.body(), StandardCharsets.UTF_8);
     }

@@ -4,13 +4,11 @@ using System.Text;
 namespace Security
 {
     /// <summary>
-    /// Ký và kiểm thông điệp v3 (KE_HOACH mục 4.2): HMAC-SHA256 hai chiều (request ký md5(body)+nonce, response ký canonical).
+    /// Ký và kiểm thông điệp v3 (KE_HOACH mục 4.2): HMAC-SHA256 hai chiều (request và response cùng ký md5(body)+nonce, khác khóa).
     /// Phần thuần, không phụ thuộc ASP.NET, dùng chung cho server, client mẫu và vector thử
     /// </summary>
     public static class MessageSignature
     {
-                public const string ResponseAlgorithm = "FAST-HMAC-SHA256-RESPONSE";
-
         private static readonly byte[] RequestLabel = Encoding.ASCII.GetBytes("FAST-API-V3-REQUEST");
         private static readonly byte[] ResponseLabel = Encoding.ASCII.GetBytes("FAST-API-V3-RESPONSE");
 
@@ -43,9 +41,10 @@ namespace Security
         public static string Md5Hex(ReadOnlySpan<byte> data) => Convert.ToHexStringLower(MD5.HashData(data));
 
         /// <summary>
-        /// Thông điệp ký request: md5Hex(body) + nonce. Chữ ký = HMAC-SHA256(K_request, thông điệp)
+        /// Thông điệp ký: md5Hex(body) + nonce. Request ký bằng K_request với nonce của request;
+        /// response ký bằng K_response với nonce của request tương ứng (không phát lại được cho request khác)
         /// </summary>
-        public static string RequestMessage(ReadOnlySpan<byte> body, string nonce) => Md5Hex(body) + nonce;
+        public static string Message(ReadOnlySpan<byte> body, string nonce) => Md5Hex(body) + nonce;
 
         /// <summary>
         /// Nonce có dạng "&lt;unix giây&gt;-&lt;chuỗi ngẫu nhiên&gt;"; trả giây ở đầu nonce, sai dạng trả false
@@ -57,17 +56,6 @@ namespace Security
             return dash is >= 9 and <= 12 && nonce.Length - dash - 1 is >= 8 and <= 48
                 && nonce.All(c => c is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' or '-' or '_')
                 && long.TryParse(nonce.AsSpan(0, dash), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out unixSeconds);
-        }
-
-        public static string CanonicalResponse(int statusCode, string requestId, string requestNonce, long timestamp, string contentSha256)
-        {
-            return string.Join("\n",
-                ResponseAlgorithm,
-                statusCode.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                requestId,
-                requestNonce,
-                timestamp.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                contentSha256.ToLowerInvariant());
         }
     }
 }

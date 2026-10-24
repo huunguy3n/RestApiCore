@@ -32,9 +32,9 @@ namespace Models
         public bool IsActive => Status == '1' && UserId != null && ErpStatus == '1';
 
         /// <summary>
-        /// v3 mặc định từ chối: không có dòng restApiAllowForm nào thì không có quyền form nào
+        /// Admin FBO (admin = 1) hoặc không có dòng restApiAllowForm nào thì mọi form; chỉ kiểm khi có khai
         /// </summary>
-        public bool CanAccessForm(string form) => AllowForms.Contains(form);
+        public bool CanAccessForm(string form) => ErpAdmin || AllowForms.Count == 0 || AllowForms.Contains(form);
 
         /// <summary>
         /// Như restApi_CheckIPAddress: IP bị chặn thì từ chối; user không khai IP thì cho mọi IP; "255" là wildcard

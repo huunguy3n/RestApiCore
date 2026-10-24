@@ -12,7 +12,6 @@ export function deriveKeys(privateKeyBase64) {
 }
 
 const md5Hex = data => createHash("md5").update(data).digest("hex");
-const sha256Hex = data => createHash("sha256").update(data).digest("hex");
 const hmacHex = (key, text) => createHmac("sha256", key).update(text, "utf8").digest("hex");
 const same = (a, b) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
@@ -26,12 +25,9 @@ export function signRequest(keys, { body, nonce, idempotencyKey = "" }) {
     return headers;
 }
 
-export function verifyResponse(keys, { status, headers, requestNonce, body }) {
-    const contentSha256 = sha256Hex(body);
-    const canonical = ["FAST-HMAC-SHA256-RESPONSE", String(status), headers["x-request-id"] || "", requestNonce,
-        headers["x-fast-timestamp"] || "", contentSha256].join("\n");
-    return same(contentSha256, (headers["x-fast-content-sha256"] || "").toLowerCase())
-        && same(hmacHex(keys.response, canonical), (headers["x-fast-signature"] || "").trim().toLowerCase());
+// X-Fast-Signature = HMAC-SHA256(K_response, md5Hex(body) + nonce của request)
+export function verifyResponse(keys, { headers, requestNonce, body }) {
+    return same(hmacHex(keys.response, md5Hex(body) + requestNonce), (headers["x-fast-signature"] || "").trim().toLowerCase());
 }
 
 function assertEqual(actual, expected, name) {
@@ -47,13 +43,7 @@ function testVector() {
     assertEqual(md5Hex(body), "8e0a0e9704e5282159769a91441af571", "MD5 body");
     assertEqual(signRequest(keys, { body, nonce })["X-Fast-Signature"], "9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac", "Chu ky request");
     const response = "{\"code\":\"SUCCESS\"}";
-    const ok = verifyResponse(keys, {
-        status: 200, requestNonce: nonce, body: response,
-        headers: {
-            "x-request-id": "8c2f0000-0000-4000-8000-000000000002", "x-fast-timestamp": "1792574401", "x-fast-content-sha256": sha256Hex(response),
-            "x-fast-signature": "ad5353907e543ef9429cfe159bdaf1ded0ae2c37a27208110bbc2a47ef902bac"
-        }
-    });
+    const ok = verifyResponse(keys, { requestNonce: nonce, body: response, headers: { "x-fast-signature": "0736896e2b8b43d7215b2e4366f133f2a4d1f4ff472fc089f08365fc79bbd50f" } });
     assertEqual(ok, true, "Chu ky response");
     console.log("Vector thu: dat");
 }
@@ -64,7 +54,7 @@ async function send(baseUrl, keys, method, path, body, extraHeaders = {}) {
     const headers = { ...signRequest(keys, { body, nonce }), "Content-Type": "application/json", ...extraHeaders };
     const response = await fetch(baseUrl + path, { method, headers, body });
     const bytes = Buffer.from(await response.arrayBuffer());
-    if (!verifyResponse(keys, { status: response.status, headers: Object.fromEntries(response.headers), requestNonce: nonce, body: bytes })) {
+    if (!verifyResponse(keys, { headers: Object.fromEntries(response.headers), requestNonce: nonce, body: bytes })) {
         throw new Error("Chu ky response sai: khong tin noi dung nay");
     }
     return JSON.parse(bytes.toString("utf8"));

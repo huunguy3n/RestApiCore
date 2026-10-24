@@ -1,8 +1,8 @@
 // Ký và kiểm thông điệp Fast API bằng WebCrypto (KE_HOACH 4.2), cùng thuật toán với Security/MessageSignature.cs.
 // Request: X-Fast-Signature = HMAC-SHA256(K_request, md5Hex(body) + nonce), nonce = "<unix giây>-<ngẫu nhiên>".
+// Response: X-Fast-Signature = HMAC-SHA256(K_response, md5Hex(body) + nonce của request).
 // Dùng được trong trình duyệt và Node 20+ (globalThis.crypto). private_key chỉ nằm trong bộ nhớ, không gửi đi đâu.
 
-export const RESPONSE_ALGORITHM = "FAST-HMAC-SHA256-RESPONSE";
 
 const subtle = globalThis.crypto.subtle;
 const utf8 = new TextEncoder();
@@ -23,11 +23,6 @@ export function toBase64(bytes) {
 export function fromBase64Url(text) {
     const base64 = text.replace(/-/g, "+").replace(/_/g, "/");
     return fromBase64(base64 + "=".repeat((4 - base64.length % 4) % 4));
-}
-
-export async function sha256Hex(data) {
-    const bytes = typeof data === "string" ? utf8.encode(data) : data;
-    return toHex(await subtle.digest("SHA-256", bytes));
 }
 
 async function hmac(keyBytes, message) {
@@ -80,10 +75,6 @@ export function md5Hex(data) {
     return toHex(out.buffer);
 }
 
-export function canonicalResponse(statusCode, requestId, requestNonce, timestamp, contentSha256) {
-    return [RESPONSE_ALGORITHM, String(statusCode), requestId, requestNonce, String(timestamp), contentSha256.toLowerCase()].join("\n");
-}
-
 /** Nonce "<unix giây>-<16 ký tự hex ngẫu nhiên>"; giây lấy từ serverTime của /api/_meta/server */
 export function newNonce(timestamp) {
     return `${timestamp}-${toHex(globalThis.crypto.getRandomValues(new Uint8Array(8)))}`;
@@ -105,16 +96,11 @@ export async function signRequest(keys, { body = "", timestamp, nonce = newNonce
     return { headers, message, nonce };
 }
 
-/** Kiểm chữ ký response; bodyBytes là byte thô nhận được */
-export async function verifyResponse(keys, { status, requestId, requestNonce, timestamp, contentSha256, signature, bodyBytes }) {
-    const actualSha256 = await sha256Hex(bodyBytes);
-    const canonical = canonicalResponse(status, requestId || "", requestNonce, timestamp || "", actualSha256);
-    const expected = await hmacHex(keys.response, canonical);
-    return {
-        canonical,
-        checksumOk: actualSha256 === (contentSha256 || "").toLowerCase(),
-        signatureOk: expected === (signature || "").trim().toLowerCase()
-    };
+/** Kiểm chữ ký response; bodyBytes là byte thô nhận được, requestNonce là nonce của request tương ứng */
+export async function verifyResponse(keys, { requestNonce, signature, bodyBytes }) {
+    const message = md5Hex(bodyBytes) + requestNonce;
+    const expected = await hmacHex(keys.response, message);
+    return { message, signatureOk: expected === (signature || "").trim().toLowerCase() };
 }
 
 /** Vector thử cố định, dùng chung với Tests/MessageSignatureTests.cs và code mẫu */
@@ -127,11 +113,9 @@ export const TEST_VECTOR = {
     timestamp: 1792574400,
     nonce: "1792574400-9b2e4c1f0a7d4e3b",
     requestSignature: "9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac",
-    responseStatus: 200,
-    responseRequestId: "8c2f0000-0000-4000-8000-000000000002",
-    responseTimestamp: 1792574401,
     responseBody: "{\"code\":\"SUCCESS\"}",
-    responseSignature: "ad5353907e543ef9429cfe159bdaf1ded0ae2c37a27208110bbc2a47ef902bac"
+    responseBodyMd5: "12db205e69b01844ef11955d7ca2b740",
+    responseSignature: "0736896e2b8b43d7215b2e4366f133f2a4d1f4ff472fc089f08365fc79bbd50f"
 };
 
 /** Chạy lại vector thử bằng chính các hàm trên; trả danh sách { name, ok } */
@@ -139,16 +123,13 @@ export async function selfTest() {
     const v = TEST_VECTOR;
     const keys = await deriveKeys(v.privateKey);
     const signed = await signRequest(keys, { body: v.body, timestamp: v.timestamp, nonce: v.nonce });
-    const verified = await verifyResponse(keys, {
-        status: v.responseStatus, requestId: v.responseRequestId, requestNonce: v.nonce, timestamp: v.responseTimestamp,
-        contentSha256: await sha256Hex(v.responseBody), signature: v.responseSignature, bodyBytes: utf8.encode(v.responseBody)
-    });
+    const verified = await verifyResponse(keys, { requestNonce: v.nonce, signature: v.responseSignature, bodyBytes: utf8.encode(v.responseBody) });
     return [
         { name: "K_request", ok: toHex(keys.request) === v.requestKeyHex },
         { name: "K_response", ok: toHex(keys.response) === v.responseKeyHex },
         { name: "MD5 body", ok: md5Hex(v.body) === v.bodyMd5 },
         { name: "MD5 body rỗng", ok: md5Hex("") === "d41d8cd98f00b204e9800998ecf8427e" },
         { name: "Chữ ký request", ok: signed.headers["X-Fast-Signature"] === v.requestSignature },
-        { name: "Chữ ký response", ok: verified.checksumOk && verified.signatureOk }
+        { name: "Chữ ký response", ok: md5Hex(v.responseBody) === v.responseBodyMd5 && verified.signatureOk }
     ];
 }

@@ -19,10 +19,11 @@ namespace Business
         /// <summary>userinfo2.admin = 1</summary>
         public bool ErpAdmin { get; init; }
 
-        /// <summary>Form được phép (restApiAllowForm). Không có dòng = không quyền form nào</summary>
+        /// <summary>Form được phép (restApiAllowForm). Không có dòng = mọi form</summary>
         public IReadOnlySet<string> AllowForms { get; init; } = new HashSet<string>();
 
-        public bool CanAccessForm(string form) => AllowForms.Contains(form);
+        /// <summary>Admin FBO (admin = 1) hoặc không khai restApiAllowForm thì mọi form; có khai thì chỉ các form đã khai</summary>
+        public bool CanAccessForm(string form) => ErpAdmin || AllowForms.Count == 0 || AllowForms.Contains(form);
     }
 
     public interface ISignerKeyStore

@@ -34,28 +34,18 @@ namespace Tests.Sample
         }
 
         /// <summary>
-        /// Response không ký, ký sai, hoặc không khớp nonce của request thì không được tin nội dung
+        /// Response không ký, ký sai, hoặc không khớp nonce của request thì không được tin nội dung.
+        /// X-Fast-Signature = HMAC-SHA256(K_response, md5Hex(body) + nonce của request)
         /// </summary>
         public bool VerifyResponse(HttpResponseMessage response, byte[] body, string requestNonce)
         {
-            string? Header(string name) => response.Headers.TryGetValues(name, out var values) ? values.FirstOrDefault() : null;
-
-            string? timestamp = Header("X-Fast-Timestamp"), signature = Header("X-Fast-Signature"), requestId = Header("X-Request-ID");
-            string contentSha256 = Convert.ToHexStringLower(SHA256.HashData(body));
-            if (timestamp == null || signature == null || requestId == null || Header("X-Fast-Content-SHA256") != contentSha256)
+            if (!response.Headers.TryGetValues("X-Fast-Signature", out var values) || values.FirstOrDefault() is not { } signature)
             {
                 return false;
             }
 
-            string canonical = string.Join("\n",
-                "FAST-HMAC-SHA256-RESPONSE",
-                ((int)response.StatusCode).ToString(),
-                requestId,
-                requestNonce,
-                timestamp,
-                contentSha256);
-
-            return CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Hmac(_responseKey, canonical)), Encoding.ASCII.GetBytes(signature.ToLowerInvariant()));
+            string message = Convert.ToHexStringLower(MD5.HashData(body)) + requestNonce;
+            return CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(Hmac(_responseKey, message)), Encoding.ASCII.GetBytes(signature.ToLowerInvariant()));
         }
 
         private static string Hmac(byte[] key, string message) => Convert.ToHexStringLower(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(message)));

@@ -10,16 +10,8 @@ def derive_keys(private_key_b64):
             hmac.new(key, b"FAST-API-V3-RESPONSE", hashlib.sha256).digest())
 
 
-def sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 def md5_hex(data: bytes) -> str:
     return hashlib.md5(data).hexdigest()
-
-
-def canonical_response(status, request_id, request_nonce, timestamp, content_sha256):
-    return "\n".join(["FAST-HMAC-SHA256-RESPONSE", str(status), request_id, request_nonce, str(timestamp), content_sha256.lower()])
 
 
 def sign_request(k_request, body: bytes, nonce, idempotency_key=""):
@@ -33,12 +25,10 @@ def sign_request(k_request, body: bytes, nonce, idempotency_key=""):
     return headers
 
 
-def verify_response(k_response, status, headers, request_nonce, body: bytes) -> bool:
-    content_sha256 = sha256_hex(body)
-    canonical = canonical_response(status, headers.get("X-Request-ID", ""), request_nonce, headers.get("X-Fast-Timestamp", ""), content_sha256)
-    expected = hmac.new(k_response, canonical.encode(), hashlib.sha256).hexdigest()
-    return (hmac.compare_digest(content_sha256, headers.get("X-Fast-Content-SHA256", "").lower())
-            and hmac.compare_digest(expected, headers.get("X-Fast-Signature", "").strip().lower()))
+def verify_response(k_response, headers, request_nonce, body: bytes) -> bool:
+    """X-Fast-Signature = HMAC-SHA256(K_response, md5Hex(body) + nonce cua request)"""
+    expected = hmac.new(k_response, (md5_hex(body) + request_nonce).encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, headers.get("X-Fast-Signature", "").strip().lower())
 
 
 def test_vector():
@@ -50,10 +40,7 @@ def test_vector():
     assert md5_hex(body) == "8e0a0e9704e5282159769a91441af571"
     assert sign_request(k_req, body, nonce)["X-Fast-Signature"] == "9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac"
     response = b'{"code":"SUCCESS"}'
-    assert verify_response(k_res, 200, {
-        "X-Request-ID": "8c2f0000-0000-4000-8000-000000000002", "X-Fast-Timestamp": "1792574401",
-        "X-Fast-Content-SHA256": sha256_hex(response),
-        "X-Fast-Signature": "ad5353907e543ef9429cfe159bdaf1ded0ae2c37a27208110bbc2a47ef902bac"}, nonce, response)
+    assert verify_response(k_res, {"X-Fast-Signature": "0736896e2b8b43d7215b2e4366f133f2a4d1f4ff472fc089f08365fc79bbd50f"}, nonce, response)
     print("Vector thu: dat")
 
 
@@ -70,7 +57,7 @@ def send(base_url, k_req, k_res, method, path, body: bytes, token=None):
     except urllib.error.HTTPError as error:
         response = error
     data = response.read()
-    if not verify_response(k_res, response.status, response.headers, nonce, data):
+    if not verify_response(k_res, response.headers, nonce, data):
         raise RuntimeError("Chu ky response sai: khong tin noi dung nay")
     return json.loads(data)
 

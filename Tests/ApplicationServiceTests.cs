@@ -33,7 +33,7 @@ namespace Tests
         private static MessageAuthenticator Create() =>
             new(new AppConfig { clockSkewSeconds = 300 }, new NonceStore(new MemoryCache(new MemoryCacheOptions())), new FixedTime(Now));
 
-        private static string Sign(string nonce, byte[] body) => MessageSignature.HmacHex(Signer.RequestKey!, MessageSignature.RequestMessage(body, nonce));
+        private static string Sign(string nonce, byte[] body) => MessageSignature.HmacHex(Signer.RequestKey!, MessageSignature.Message(body, nonce));
 
         [Theory]
         [InlineData("", "abc", "MISSING_SIGNATURE")]
@@ -78,18 +78,17 @@ namespace Tests
         }
 
         [Fact]
-        public void SignResponse_TheoCanonicalVaKResponse()
+        public void SignResponse_KyMd5BodyCongNonceBangKResponse()
         {
             byte[] response = Encoding.UTF8.GetBytes("{\"code\":\"SUCCESS\"}");
+            string nonce = "1792574400-abcdefgh04";
 
-            ResponseSignature signature = Create().SignResponse(Signer, 200, "req-1", "1792574400-abcdefgh04", response);
+            string signature = Create().SignResponse(Signer, nonce, response);
 
-            Assert.Equal(Now, signature.Timestamp);
-            Assert.Equal(MessageSignature.Sha256Hex(response), signature.ContentSha256);
-            string canonical = MessageSignature.CanonicalResponse(200, "req-1", "1792574400-abcdefgh04", Now, signature.ContentSha256);
-            Assert.Equal(MessageSignature.HmacHex(Signer.ResponseKey!, canonical), signature.Signature);
+            string message = MessageSignature.Md5Hex(response) + nonce;
+            Assert.Equal(MessageSignature.HmacHex(Signer.ResponseKey!, message), signature);
             // Khóa request không ký được response
-            Assert.NotEqual(MessageSignature.HmacHex(Signer.RequestKey!, canonical), signature.Signature);
+            Assert.NotEqual(MessageSignature.HmacHex(Signer.RequestKey!, message), signature);
         }
     }
 
@@ -284,9 +283,17 @@ namespace Tests
         private static MappedBody Body(FormRequestService service) => service.MapBody(GetCustomer, "{}"u8.ToArray(), null).Body;
 
         [Fact]
-        public async Task Authorize_KhongCoQuyenForm_Forbidden()
+        public async Task Authorize_CoKhaiFormNhungKhongCoForm_Forbidden()
         {
             Assert.Equal(new FormFailed("FORBIDDEN"), await Create(new DataSet()).AuthorizeAsync(SaleInvoice, Signer, "CTY"));
+        }
+
+        [Fact]
+        public void CanAccessForm_AdminHoacKhongKhai_MoiForm()
+        {
+            Assert.True((Signer with { ErpAdmin = true }).CanAccessForm("setSaleInvoice"));
+            Assert.True((Signer with { AllowForms = new HashSet<string>() }).CanAccessForm("setSaleInvoice"));
+            Assert.False(Signer.CanAccessForm("setSaleInvoice"));
         }
 
         [Fact]

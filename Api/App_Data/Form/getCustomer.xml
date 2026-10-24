@@ -8,7 +8,7 @@
   JSON camelCase, cột SQL snake_case (alias cột processing trả ra phải camelCase vì thành JSON response).
   Body (dạng phẳng, form một khối): { "keyword": "huy", "customerId": "KH001" }, cả hai đều không bắt buộc
 -->
-<import xmlns="urn:schemas-fast-com:fast-api" type="List" jsonNaming="camelCase" columnNaming="snake_case"
+<import xmlns="urn:schemas-fast-com:fast-api" type="List" key="ma_kh" jsonNaming="camelCase" columnNaming="snake_case"
         description="Danh mục khách hàng">
 
   <fields name="filter">
@@ -25,7 +25,7 @@ SELECT @Keyword = ISNULL(a.tu_khoa, ''), @CustomerID = ISNULL(a.ma_kh, '') FROM 
 -- Từ khóa tìm đúng chữ: thoát ký tự đại diện của LIKE
 SELECT @Keyword = REPLACE(REPLACE(REPLACE(@Keyword, '[', '[[]'), '%', '[%]'), '_', '[_]')
 
-SELECT 'SUCCESS' AS code, '' AS message, 'customers' AS tables
+SELECT 'SUCCESS' AS code, '' AS message, 'customers, items' AS tables
 
 SELECT RTRIM(a.ma_kh) AS customerId, a.ten_kh AS customerName, a.dia_chi AS address,
 		RTRIM(a.ma_so_thue) AS taxCode, RTRIM(a.dien_thoai) AS phone, a.e_mail AS email
@@ -34,6 +34,7 @@ SELECT RTRIM(a.ma_kh) AS customerId, a.ten_kh AS customerName, a.dia_chi AS addr
 		AND (@CustomerID = '' OR a.ma_kh = @CustomerID)
 		AND (@Keyword = '' OR a.ma_kh LIKE '%' + @Keyword + '%' OR a.ten_kh LIKE N'%' + @Keyword + N'%')
 	ORDER BY a.ma_kh
+SELECT TOP 1 'KH001' AS customerId, ma_vt AS itemId, ten_vt AS itemName FROM dmvt
       ]]>
     </text>
   </query>

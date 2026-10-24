@@ -16,9 +16,6 @@ namespace Web.Custom
     {
         public const string TokenPath = "/api/auth/token";
         public const string NonceHeader = "X-Fast-Nonce";
-        /// <summary>Chỉ dùng cho response (client kiểm chữ ký response); request không gửi hai header này</summary>
-        public const string TimestampHeader = "X-Fast-Timestamp";
-        public const string ContentSha256Header = "X-Fast-Content-SHA256";
         public const string SignatureHeader = "X-Fast-Signature";
         public const string IdempotencyKeyHeader = "Idempotency-Key";
 
@@ -217,12 +214,7 @@ namespace Web.Custom
 
         private void SignResponse(HttpContext context, SignerKeys signer, string requestNonce, byte[] body)
         {
-            string requestId = context.Items["requestID"]?.ToString() ?? context.TraceIdentifier;
-            ResponseSignature signature = authenticator.SignResponse(signer, context.Response.StatusCode, requestId, requestNonce, body);
-
-            context.Response.Headers[TimestampHeader] = signature.Timestamp.ToString();
-            context.Response.Headers[ContentSha256Header] = signature.ContentSha256;
-            context.Response.Headers[SignatureHeader] = signature.Signature;
+            context.Response.Headers[SignatureHeader] = authenticator.SignResponse(signer, requestNonce, body);
             context.Response.ContentLength = body.Length;
         }
 

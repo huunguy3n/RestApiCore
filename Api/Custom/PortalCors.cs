@@ -21,7 +21,7 @@ namespace Web.Custom
         public static readonly string[] ExposedHeaders =
         [
             RequestIdMiddleware.HeaderName,
-            SignatureMiddleware.TimestampHeader, SignatureMiddleware.ContentSha256Header, SignatureMiddleware.SignatureHeader
+            SignatureMiddleware.SignatureHeader
         ];
 
         public static IServiceCollection AddPortalCors(this IServiceCollection services, string[] origins)

@@ -36,14 +36,17 @@ namespace Tests
         }
 
         [Fact]
-        public void CanAccessForm_MacDinhTuChoi()
+        public void CanAccessForm_KhongKhaiThiMoiForm_CoKhaiThiChiKiemForm_AdminLuonDuoc()
         {
             UserRights rights = new();
-            Assert.False(rights.CanAccessForm("getCustomer"));
+            Assert.True(rights.CanAccessForm("getCustomer"));
 
             rights.AllowForms.Add("getCustomer");
             Assert.True(rights.CanAccessForm("getcustomer"));
             Assert.False(rights.CanAccessForm("setCustomer"));
+
+            rights.ErpAdmin = true;
+            Assert.True(rights.CanAccessForm("setCustomer"));
         }
 
         [Theory]

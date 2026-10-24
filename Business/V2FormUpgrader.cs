@@ -5,96 +5,109 @@ using System.Xml.Linq;
 
 namespace Business
 {
-    /// <summary>Bảng và cột mã của một controller trong Update.xml v2, vd Customer → dmkh.ma_kh</summary>
-    public sealed record ControllerLookup(string Table, string Column);
-
     /// <summary>XML v3 sinh ra và ghi chú cho người xem lại; Valid = nạp được bằng ImportFormLoader</summary>
     public sealed record UpgradeResult(string Xml, IReadOnlyList<string> Notes, bool Valid);
 
     /// <summary>
-    /// Chuyển form v2 (&lt;form xmlns="urn:schemas-fast-com:rest-api"&gt;) sang &lt;import&gt; v3 (KE_HOACH 2.5).
-    /// Giữ tên file; khối đầu là khối gốc; &lt;reference&gt; thành check tồn tại mã (đối tác gửi mã FBO thay mã của họ);
-    /// bỏ @@update; đổi tên biến v2. Kết quả là bản gợi ý, người xem lại rồi mới dùng
+    /// ColumnsOf trả về tên cột (không phân biệt hoa thường) của một bảng FBO, null nếu không có bảng/không tra được.
+    /// Có thì tách khối gốc/khối con của chứng từ theo cột thật của m??$000000 / d??$000000
+    /// </summary>
+    public sealed record UpgradeOptions(Func<string, IReadOnlySet<string>?>? ColumnsOf = null);
+
+    /// <summary>
+    /// Chuyển form FastAPI 2.4.7 (v2) sang &lt;import&gt; v3. Form v2 dùng chính &lt;import xmlns="urn:schemas-fast-com:fast-api"&gt;
+    /// nhưng chỉ có MỘT &lt;fields type=… table=…&gt; phẳng (master và detail trộn chung, JSON được JsonFlattener làm phẳng),
+    /// một &lt;query&gt; gọi proc api_* đọc bảng tạm #_data, và nạp chung qua entity SYSTEM "Include\*.txt".
+    /// Kết quả là bản gợi ý: tách khối, đặt tên camelCase, justContent thành check; processing phải viết lại (v3 không gọi api_*)
     /// </summary>
     public static partial class V2FormUpgrader
     {
-        public static readonly XNamespace V2 = "urn:schemas-fast-com:rest-api";
-        private static readonly XNamespace ImportNs = ImportFormLoader.Ns;
+        private static readonly XNamespace Ns = ImportFormLoader.Ns;
 
-        [GeneratedRegex(@"set\s+@@reference\s*=\s*b\.(\w+)\s+from\s+@@table\s+a\s+join\s+([\w$]+)\s+b", RegexOptions.IgnoreCase)]
-        private static partial Regex UpdateScript();
+        [GeneratedRegex(@"api_ProcessDataFor_m(\d+)", RegexOptions.IgnoreCase)]
+        private static partial Regex VoucherProc();
 
-        [GeneratedRegex(@"@@update\((\d+)\)", RegexOptions.IgnoreCase)]
-        private static partial Regex UpdateToken();
+        [GeneratedRegex(@"\bapi_\w+", RegexOptions.IgnoreCase)]
+        private static partial Regex ApiProc();
 
-        [GeneratedRegex(@"(?<=[a-z])(?=[A-Z])")]
+        [GeneratedRegex(@"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")]
         private static partial Regex WordBoundary();
 
-        [GeneratedRegex(@"'@@(app|sys)DatabaseName'", RegexOptions.IgnoreCase)]
-        private static partial Regex QuotedDatabaseName();
-
-        public static bool IsV2(XDocument document) => document.Root?.Name == V2 + "form";
-
-        /// <summary>
-        /// Đọc Update.xml v2: script dạng "update @@table set @@reference = b.ma_kh from @@table a join dmkh b …"
-        /// </summary>
-        public static Dictionary<string, ControllerLookup> ReadControllers(XDocument update)
+        /// <summary>Nạp file v2, phân giải entity SYSTEM tương đối theo thư mục của file (Include\Irregular.txt…)</summary>
+        public static XDocument Load(string path)
         {
-            Dictionary<string, ControllerLookup> controllers = new(StringComparer.OrdinalIgnoreCase);
-            foreach (XElement controller in update.Root?.Elements().Where(e => e.Name.LocalName == "controller") ?? [])
+            var settings = new XmlReaderSettings
             {
-                Match match = UpdateScript().Match(controller.Value);
-                string? name = controller.Attribute("name")?.Value;
-                if (match.Success && !string.IsNullOrEmpty(name))
-                {
-                    controllers[name] = new ControllerLookup(match.Groups[2].Value, match.Groups[1].Value);
-                }
-            }
-            return controllers;
+                DtdProcessing = DtdProcessing.Parse,
+                XmlResolver = new XmlUrlResolver(),
+                IgnoreComments = false
+            };
+            using XmlReader reader = XmlReader.Create(path, settings);
+            return XDocument.Load(reader);
         }
 
-        public static UpgradeResult Upgrade(string name, XDocument v2, IReadOnlyDictionary<string, ControllerLookup> controllers)
+        /// <summary>v2: &lt;fields&gt; mang type và không có name; v3 khai type ở &lt;import&gt; và mọi khối đều có name</summary>
+        public static bool IsV2(XDocument document) =>
+            document.Root is { } root && root.Name == Ns + "import" && root.Attribute("type") == null
+                && root.Element(Ns + "fields") is { } fields && fields.Attribute("type") != null && fields.Attribute("name") == null;
+
+        public static UpgradeResult Upgrade(string name, XDocument v2, UpgradeOptions? options = null)
         {
-            XElement form = v2.Root is XElement root && root.Name == V2 + "form"
-                ? root
-                : throw new ArgumentException($"{name}: không phải form v2 (<form xmlns=\"{V2}\">)");
+            if (!IsV2(v2))
+            {
+                throw new ArgumentException($"{name}: không phải form v2 (<import> có <fields type=… table=…> không tên khối)");
+            }
 
+            XElement root = v2.Root!;
+            XElement source = root.Element(Ns + "fields")!;
             List<string> notes = [];
-            List<XElement> structs = form.Elements(V2 + "struct").ToList();
 
-            XElement import = new(ImportNs + "import", new XAttribute("type", form.Attribute("type")?.Value ?? "List"));
-            if (form.Attribute("id")?.Value is { Length: > 0 } voucherCode)
+            string type = source.Attribute("type")!.Value.Trim();
+            string voucherCode = source.Attribute("voucherCode")?.Value.Replace("'", "").Trim() ?? "";
+            string table = source.Attribute("table")?.Value.Replace("'", "").Trim() ?? "";
+            string query = root.Element(Ns + "query")?.Element(Ns + "text")?.Value ?? "";
+
+            List<V2Field> fields = ReadFields(source, type, notes);
+
+            List<Block> blocks = Split(type, table, query, fields, options, notes);
+
+            ImportKey(blocks, type, notes);
+
+            XElement import = new(Ns + "import",
+                new XAttribute("type", type),
+                new XAttribute("jsonNaming", NamingConvention.CamelCase),
+                new XAttribute("columnNaming", NamingConvention.SnakeCase));
+            if (voucherCode.Length > 0)
             {
                 import.Add(new XAttribute("voucherCode", voucherCode));
             }
 
-            string rootKey = FindRootKey(structs, notes);
-            string? rootKeyMapping = null;
-
-            for (int i = 0; i < structs.Count; i++)
+            List<int> categories = [];
+            for (int i = 0; i < blocks.Count; i++)
             {
-                XElement block = ConvertStruct(structs[i], i == 0, rootKey, ref rootKeyMapping, controllers, notes);
-                import.Add(block);
+                XElement element = ToElement(blocks[i], i + 1, notes);
+                if (element.Elements().Any(f => f.Attribute("check") != null)) { categories.Add(i + 1); }
+                import.Add(element);
             }
-
-            foreach (XElement query in form.Element(V2 + "queries")?.Elements(V2 + "query") ?? [])
+            if (categories.Count > 0)
             {
-                string action = (query.Attribute("action")?.Value ?? "processing").ToLowerInvariant();
-                string text = ConvertQuery(query.Element(V2 + "text")?.Value ?? query.Value, notes);
-                import.Add(new XElement(ImportNs + "query", new XAttribute("action", action), new XElement(ImportNs + "text", new XCData(text))));
+                string call = string.Join(' ', categories.Select(n => $"@@checking({n})"));
+                import.Add(new XElement(Ns + "query", new XAttribute("action", "checking"), new XElement(Ns + "text", new XCData(" " + call + " "))));
             }
+            import.Add(new XElement(Ns + "query", new XAttribute("action", "processing"), new XElement(Ns + "text", new XCData(Processing(name, query, blocks, notes)))));
+
+            notes.Add("Tên field JSON đổi sang camelCase (v2 phân biệt hoa thường: YourId → yourId): đối tác phải gửi đúng tên mới");
 
             var document = new XDocument(
                 new XDeclaration("1.0", "utf-8", null),
                 new XDocumentType("import", null, null, "\n  <!ENTITY And \"&#38;#13;\">\n"),
-                new XComment($" Chuyển tự động từ form v2 {name}.xml bằng Fast.Api.Cli upgrade. Xem lại các ghi chú trước khi dùng "),
+                new XComment($" Chuyển tự động từ form v2 {name}.xml bằng Fast.Api.Cli upgrade. Xem lại các ghi chú, viết lại processing trước khi dùng "),
                 import);
 
             string xml = Write(document);
             bool valid = true;
             try
             {
-                // Cảnh báo lúc nạp (vd category không được @@checking gọi) cũng là việc cần xem lại
                 notes.AddRange(ImportFormLoader.Parse(name, XDocument.Parse(xml)).Warnings.Select(w => "nạp thử: " + w));
             }
             catch (ImportFormException ex)
@@ -105,207 +118,328 @@ namespace Business
             return new UpgradeResult(xml, notes.Distinct().ToList(), valid);
         }
 
-        /// <summary>
-        /// Khóa khối gốc: field isPrimaryKey đầu tiên; không có thì field cùng tên có ở mọi khối
-        /// </summary>
-        private static string FindRootKey(List<XElement> structs, List<string> notes)
-        {
-            if (structs.Count == 0)
-            {
-                notes.Add("form v2 không có <struct>");
-                return string.Empty;
-            }
+        // ---- Đọc field v2 ----
 
-            string? key = Fields(structs[0]).FirstOrDefault(f => IsTrue(f.Attribute("isPrimaryKey")))?.Attribute("name")?.Value;
-            if (key == null && structs.Count > 1)
-            {
-                key = Fields(structs[0]).Select(f => f.Attribute("name")?.Value)
-                    .FirstOrDefault(n => n != null && structs.Skip(1).All(s => Fields(s).Any(f => f.Attribute("name")?.Value == n)));
-                if (key != null)
-                {
-                    notes.Add($"khối gốc không có isPrimaryKey, chọn '{key}' (có ở mọi khối) làm key");
-                }
-                else
-                {
-                    notes.Add("không xác định được key khối gốc: khai key cho khối gốc bằng tay");
-                }
-            }
-            return key ?? string.Empty;
+        private sealed class V2Field
+        {
+            public required string Name { get; init; }
+            public required string FastName { get; init; }
+            public required XElement Source { get; init; }
+            public string? ExternalTable { get; init; }
+            public string JsonName { get; set; } = "";
         }
 
-        /// <summary>Tên JSON v3 là camelCase: v2 hay đặt PascalCase nên hạ chữ đầu</summary>
-        private static string JsonName(string name) => name.Length > 0 ? char.ToLowerInvariant(name[0]) + name[1..] : name;
-
-        private static XElement ConvertStruct(XElement source, bool isRoot, string rootKey, ref string? rootKeyMapping,
-            IReadOnlyDictionary<string, ControllerLookup> controllers, List<string> notes)
+        private static List<V2Field> ReadFields(XElement source, string type, List<string> notes)
         {
-            string blockName = source.Attribute("name")?.Value ?? "";
-            XElement block = new(ImportNs + "fields", new XAttribute("name", blockName));
-            if (source.Attribute("baseTable")?.Value is { Length: > 0 } table)
+            List<V2Field> result = [];
+            foreach (XElement field in source.Elements(Ns + "field"))
             {
-                block.Add(new XAttribute("table", table));
-            }
-            if (isRoot && rootKey.Length > 0)
-            {
-                block.Add(new XAttribute("key", JsonName(rootKey)));
-            }
-
-            List<XElement> fields = Fields(source).ToList();
-            // Field ẩn mapping="" có tên trùng <reference name> là chỗ chứa mã đã tra ở v2: v3 gộp vào field có reference
-            HashSet<string> referenceTargets = new(fields
-                .Select(f => f.Element(V2 + "reference")?.Attribute("name")?.Value)
-                .OfType<string>(), StringComparer.OrdinalIgnoreCase);
-
-            foreach (XElement field in fields)
-            {
-                string fieldName = field.Attribute("name")?.Value ?? "";
-                string mapping = field.Attribute("mapping")?.Value ?? "";
-
-                if (mapping.Length == 0 && referenceTargets.Contains(fieldName))
+                string name = field.Attribute("name")?.Value.Trim() ?? "";
+                if (name.Length == 0)
                 {
-                    notes.Add($"{blockName}.{fieldName}: bỏ field ẩn chứa mã tra từ <reference>, đã gộp vào field có reference");
-                    continue;
-                }
-                if (isRoot && fieldName == rootKey)
-                {
-                    rootKeyMapping = mapping;
-                }
-                else if (!isRoot && fieldName == rootKey && mapping == rootKeyMapping)
-                {
-                    // v3 tự thêm khóa khối gốc vào khối con
+                    notes.Add("bỏ một <field> không có name");
                     continue;
                 }
 
-                block.Add(ConvertField(blockName, field, controllers, notes));
+                // cacheID: tham số lấy tiếp trang của v2. v3 phân trang bằng <paging>, không nhận field này
+                if (type == "Report" && name.Equals("cacheID", StringComparison.OrdinalIgnoreCase))
+                {
+                    notes.Add("bỏ field cacheID (v2 dùng để lấy tiếp phần dữ liệu còn lại); v3 phân trang bằng <paging pageSize key>, khai thêm nếu form trả nhiều dòng");
+                    continue;
+                }
+
+                bool hidden = IsTrue(field.Attribute("hidden"));
+                string fast = field.Attribute("fastName")?.Value.Trim() is { Length: > 0 } f ? f : name;
+                // v2: field hidden lấy tên = fastName (xem ApiField)
+                string baseName = hidden ? fast : name;
+
+                string? externalTable = null;
+                if (IsTrue(field.Attribute("external")) && name.IndexOf('_') > 0)
+                {
+                    externalTable = name[..name.IndexOf('_')];
+                }
+
+                if (!NamingConvention.IsSnakeCase(fast))
+                {
+                    string fixedName = Snake(fast);
+                    notes.Add($"{name}: fastName '{fast}' không phải snake_case, đổi thành '{fixedName}' — kiểm tra cột thật");
+                    fast = fixedName;
+                }
+                result.Add(new V2Field { Name = baseName, FastName = fast, Source = field, ExternalTable = externalTable });
             }
-            return block;
+            return result;
         }
 
-        private static XElement ConvertField(string blockName, XElement field, IReadOnlyDictionary<string, ControllerLookup> controllers, List<string> notes)
+        // ---- Tách khối ----
+
+        private sealed class Block
         {
-            string fieldName = field.Attribute("name")?.Value ?? "";
-            string mapping = field.Attribute("mapping")?.Value ?? "";
-            XElement result = new(ImportNs + "field", new XAttribute("name", fieldName));
+            public required string Name { get; init; }
+            public string Table { get; set; } = "";
+            public string Key { get; set; } = "";
+            public List<V2Field> Fields { get; } = [];
+        }
 
-            List<(string Check, string ErrorCode, int Index)> checks = [];
-            XElement? reference = field.Element(V2 + "reference");
+        private static List<Block> Split(string type, string table, string query, List<V2Field> fields, UpgradeOptions? options, List<string> notes)
+        {
+            string rootName = type == "Report" ? "filter" : "master";
+            var master = new Block { Name = rootName };
+            List<Block> blocks = [master];
 
-            if (reference != null)
+            if (type == "Report")
             {
-                string target = reference.Attribute("name")?.Value ?? fieldName;
-                string controller = reference.Attribute("controller")?.Value ?? "";
-                int index = int.TryParse(reference.Attribute("index")?.Value, out int i) ? i : 0;
-                result.Add(new XAttribute("fastName", target), new XAttribute("upperCase", "true"));
-
-                if (controllers.TryGetValue(controller, out ControllerLookup? lookup))
+                // v2 khai table cho Report chỉ để điền mặc định; cột điều kiện lọc không nhất thiết thuộc bảng đó
+                if (table.Length > 0)
                 {
-                    checks.Add(($"{target} not in (select {lookup.Column} from {lookup.Table})", ErrorCodeOf(controller), index));
-                    notes.Add($"{blockName}.{fieldName}: <reference controller=\"{controller}\"> thành check tồn tại {lookup.Table}.{lookup.Column}. "
-                        + $"Đối tác phải gửi mã FBO ({target}) thay mã của họ ({mapping}); thêm điều kiện status nếu cần");
+                    notes.Add($"Report: bỏ table '{table}' ở khối {rootName}, kiểu và độ rộng khai tường minh ở từng field");
                 }
-                else
-                {
-                    notes.Add($"{blockName}.{fieldName}: controller '{controller}' không có trong Update.xml, chưa sinh check tồn tại mã");
-                }
+            }
+            else if (type == "Voucher")
+            {
+                SplitVoucher(master, blocks, query, fields, options, notes);
+                SplitExternal(blocks, fields);
+                return blocks;
             }
             else
             {
-                if (mapping.Length == 0)
-                {
-                    notes.Add($"{blockName}.{fieldName}: v2 không có mapping, dùng fastName = name");
-                }
-                result.Add(new XAttribute("fastName", mapping.Length > 0 ? mapping : fieldName));
+                master.Table = table;
             }
 
-            string v2Type = field.Attribute("type")?.Value ?? "";
-            string? type = v2Type.ToLowerInvariant() switch
-            {
-                "" or "string" => null,
-                "datetime" => "datetime",
-                "decimal" => "numeric",
-                "int" => "int",
-                "boolean" => "bool",
-                "unixtimestamp" => "unixtime",
-                _ => Unknown()
-            };
-            string? Unknown()
-            {
-                notes.Add($"{blockName}.{fieldName}: type v2 '{v2Type}' không có ở v3, để string");
-                return null;
-            }
-
-            Copy(result, "type", type);
-            Copy(result, "format", field.Attribute("dataFormatString")?.Value);
-            if (reference == null)
-            {
-                Copy(result, "maxLength", field.Attribute("maxLength")?.Value);
-            }
-            Copy(result, "allowNull", field.Attribute("allowNulls")?.Value?.ToLowerInvariant());
-            foreach (string attribute in new[] { "isPrimaryKey", "upperCase", "hidden", "defaultValue", "checkIrregular", "justContent" })
-            {
-                if (result.Attribute(attribute) == null)
-                {
-                    Copy(result, attribute, field.Attribute(attribute)?.Value);
-                }
-            }
-
-            foreach (XElement check in field.Elements(V2 + "check"))
-            {
-                checks.Add((check.Attribute("condition")?.Value ?? "", check.Attribute("errorCode")?.Value ?? "INVALID_FIELD",
-                    int.TryParse(check.Attribute("index")?.Value, out int index) ? index : 0));
-            }
-
-            if (checks.Count > 0)
-            {
-                result.Add(new XAttribute("category", checks[0].Index));
-                if (checks.Select(c => c.Index).Distinct().Count() > 1)
-                {
-                    notes.Add($"{blockName}.{fieldName}: các check v2 khác index, v3 một field một category: dùng {checks[0].Index}");
-                }
-                result.Add(new XAttribute("check", string.Join('\r', checks.Select(c => c.Check))));
-                result.Add(new XAttribute("errorCode", string.Join('\r', checks.Select(c => c.ErrorCode))));
-            }
-            return result;
+            master.Fields.AddRange(fields);
+            SplitExternal(blocks, fields);
+            return blocks;
         }
 
         /// <summary>
-        /// Query v2 → v3: bỏ @@update(n); @@userName v2 (tài khoản API) → @@apiUserName; @@userERP → @@userName; @@id → @@voucherCode
+        /// Chứng từ: field v2 không nói thuộc master hay detail. Tra cột thật của m??$000000 / d??$000000 (số lấy từ
+        /// api_ProcessDataFor_m??); cột có ở cả hai bảng hoặc không có ở bảng nào thì theo field trước đó
         /// </summary>
-        public static string ConvertQuery(string text, List<string> notes)
+        private static void SplitVoucher(Block master, List<Block> blocks, string query, List<V2Field> fields, UpgradeOptions? options, List<string> notes)
         {
-            string result = UpdateToken().Replace(text, m =>
+            Match proc = VoucherProc().Match(query);
+            if (!proc.Success)
             {
-                notes.Add($"query: bỏ @@update({m.Groups[1].Value}), <reference> đã thành check tồn tại mã");
-                return $"/* v2 update({m.Groups[1].Value}) đã bỏ */";
-            });
+                master.Fields.AddRange(fields);
+                if (fields.Count > 1)
+                {
+                    notes.Add("không thấy api_ProcessDataFor_m?? trong query nên không biết bảng chứng từ: toàn bộ field vào khối master, tự tách khối detail");
+                }
+                return;
+            }
 
-            result = ReplaceVariable(result, "userName", "apiUserName", notes, "@@userName v2 là tên tài khoản API → @@apiUserName (ở v3 @@userName là user FBO)");
-            result = ReplaceVariable(result, "userERP", "userName", notes, "@@userERP → @@userName");
-            result = ReplaceVariable(result, "id", "voucherCode", notes, "@@id → @@voucherCode");
+            string number = proc.Groups[1].Value;
+            string masterTable = $"m{number}$000000", detailTable = $"d{number}$000000";
+            IReadOnlySet<string>? masterColumns = options?.ColumnsOf?.Invoke(masterTable);
+            IReadOnlySet<string>? detailColumns = options?.ColumnsOf?.Invoke(detailTable);
 
-            if (QuotedDatabaseName().IsMatch(result))
+            if (masterColumns == null || detailColumns == null)
             {
-                notes.Add("query: '@@appDatabaseName' / '@@sysDatabaseName' trong dấu nháy: v3 thay bằng [tên] (định danh), "
-                    + "truyền làm chuỗi thì sửa thành tên trực tiếp hoặc DB_NAME()");
+                master.Fields.AddRange(fields);
+                notes.Add($"không đọc được cột {masterTable}/{detailTable} nên toàn bộ field vào khối master: chạy lại với --config <appsettings.Local.json> để tách master/detail theo cột thật, hoặc tự tách");
+                return;
+            }
+
+            master.Table = masterTable;
+            var detail = new Block { Name = "detail", Table = detailTable };
+            Block previous = master;
+            foreach (V2Field field in fields)
+            {
+                bool inMaster = masterColumns.Contains(field.FastName), inDetail = detailColumns.Contains(field.FastName);
+                Block target = inMaster == inDetail ? previous : inDetail ? detail : master;
+                if (inMaster != inDetail) { previous = target; }
+                target.Fields.Add(field);
+            }
+
+            if (detail.Fields.Count > 0)
+            {
+                blocks.Add(detail);
+                notes.Add($"Tách theo cột {masterTable}/{detailTable}. Detail: {string.Join(", ", detail.Fields.Select(f => f.FastName))}. Xem lại field có ở cả hai bảng hoặc không có ở bảng nào (theo field đứng trước)");
+            }
+            else
+            {
+                notes.Add($"không có field nào thuộc {detailTable}: chỉ có khối master");
+            }
+        }
+
+        /// <summary>v2 external="true": field "TaxDetail_ReportForm" thuộc bảng con thứ ba trở đi (JSON mảng TaxDetail)</summary>
+        private static void SplitExternal(List<Block> blocks, List<V2Field> fields)
+        {
+            foreach (IGrouping<string, V2Field> group in fields.Where(f => f.ExternalTable != null).GroupBy(f => f.ExternalTable!, StringComparer.OrdinalIgnoreCase))
+            {
+                foreach (V2Field field in group)
+                {
+                    foreach (Block block in blocks) { block.Fields.Remove(field); }
+                }
+                var child = new Block { Name = CamelCase(group.Key) };
+                child.Fields.AddRange(group);
+                blocks.Add(child);
+            }
+        }
+
+        // ---- Khóa khối gốc ----
+
+        private static void ImportKey(List<Block> blocks, string type, List<string> notes)
+        {
+            Block root = blocks[0];
+            if (type == "Report")
+            {
+                return;
+            }
+            V2Field? key = root.Fields.FirstOrDefault(f => IsTrue(f.Source.Attribute("isPrimaryKey")))
+                ?? (type == "Voucher" ? root.Fields.FirstOrDefault(f => f.FastName == "id_doitac") : null);
+            if (key != null)
+            {
+                root.Key = key.Name;
+            }
+            else if (blocks.Count > 1)
+            {
+                notes.Add("không xác định được key khối gốc (không có isPrimaryKey/id_doitac): khai key bằng tay");
+            }
+        }
+
+        // ---- Sinh XML ----
+
+        private static XElement ToElement(Block block, int category, List<string> notes)
+        {
+            XElement element = new(Ns + "fields", new XAttribute("name", block.Name));
+            if (block.Table.Length > 0) { element.Add(new XAttribute("table", block.Table)); }
+
+            // Tên JSON: camelCase, duy nhất trong khối
+            HashSet<string> used = new(StringComparer.OrdinalIgnoreCase);
+            foreach (V2Field field in block.Fields)
+            {
+                string raw = field.ExternalTable != null ? field.Name[(field.ExternalTable.Length + 1)..] : field.Name;
+                string json = CamelCase(raw);
+                for (int n = 2; !used.Add(json); n++)
+                {
+                    notes.Add($"{block.Name}.{raw}: trùng tên sau khi đổi camelCase, đặt '{json}{n}'");
+                    json = CamelCase(raw) + n;
+                }
+                field.JsonName = json;
+            }
+            if (block.Key.Length > 0)
+            {
+                V2Field key = block.Fields.First(f => f.Name == block.Key);
+                element.Add(new XAttribute("key", key.JsonName));
+            }
+
+            foreach (V2Field field in block.Fields)
+            {
+                element.Add(ConvertField(block, field, category, notes));
+            }
+            return element;
+        }
+
+        private static XElement ConvertField(Block block, V2Field field, int category, List<string> notes)
+        {
+            XElement s = field.Source;
+            string where = $"{block.Name}.{field.Name}";
+            XElement result = new(Ns + "field", new XAttribute("name", field.JsonName), new XAttribute("fastName", field.FastName));
+
+            string v2Type = s.Attribute("type")?.Value.Trim().ToLowerInvariant() ?? "";
+            string? type = v2Type switch
+            {
+                "" or "string" => null,
+                "datetime" or "numeric" or "bool" => v2Type,
+                _ => Unknown(v2Type, where, notes)
+            };
+            Copy(result, "type", type);
+
+            string maxLength = s.Attribute("maxLength")?.Value ?? "";
+            // v2: không khai maxLength thì mặc định 256 (ApiField)
+            if (maxLength.Length == 0 && type == null && !IsTrue(s.Attribute("hidden"))) { maxLength = "256"; }
+            Copy(result, "maxLength", type == null ? maxLength : null);
+
+            foreach (string attribute in new[] { "allowNull", "isPrimaryKey", "upperCase", "hidden", "checkIrregular" })
+            {
+                Copy(result, attribute, s.Attribute(attribute)?.Value.Trim().ToLowerInvariant());
+            }
+
+            string? defaultValue = s.Attribute("defaultValue")?.Value.Trim();
+            if (defaultValue != null)
+            {
+                result.Add(new XAttribute("defaultValue", defaultValue));
+                if (defaultValue.Replace(" ", "").Equals("getdate()", StringComparison.OrdinalIgnoreCase))
+                {
+                    notes.Add($"{where}: defaultValue getdate() (v2 điền ngày giờ máy chủ), kiểm tra v3 xử lý giá trị này ở processing");
+                }
+            }
+
+            // v2 justContent = danh sách giá trị được phép; v3 justContent là cờ bool khác nghĩa nên đổi thành check
+            if (s.Attribute("justContent")?.Value is { Length: > 0 } just)
+            {
+                string[] values = just.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                string list = string.Join(", ", values.Select(v => v.Replace("'", "''")).Select(v => type == "numeric" ? v : $"'{v}'"));
+                result.Add(new XAttribute("category", category));
+                result.Add(new XAttribute("check", $"{field.FastName} not in ({list})"));
+                result.Add(new XAttribute("errorCode", "INVALID_FIELD"));
+                notes.Add($"{where}: justContent \"{just}\" thành check {field.FastName} not in ({list}), lỗi INVALID_FIELD");
             }
             return result;
         }
 
-        private static string ReplaceVariable(string text, string from, string to, List<string> notes, string note)
+        private static string? Unknown(string v2Type, string where, List<string> notes)
         {
-            var pattern = new Regex($@"@@{from}\b", RegexOptions.IgnoreCase);
-            if (!pattern.IsMatch(text))
-            {
-                return text;
-            }
-            notes.Add("query: " + note);
-            return pattern.Replace(text, "@@" + to);
+            notes.Add($"{where}: type v2 '{v2Type}' không có ở v3, để string");
+            return null;
         }
 
-        /// <summary>Customer → CUSTOMER_NOT_FOUND, SaleEmployee → SALE_EMPLOYEE_NOT_FOUND</summary>
-        public static string ErrorCodeOf(string controller) => WordBoundary().Replace(controller, "_").ToUpperInvariant() + "_NOT_FOUND";
+        // ---- Query ----
 
-        private static IEnumerable<XElement> Fields(XElement block) => block.Elements(V2 + "field");
+        /// <summary>
+        /// v2 gọi proc api_* đọc #_data (một bảng phẳng); v3 không gọi api_* và có #master/#detail riêng.
+        /// Không dịch máy: giữ nguyên query v2 làm chú thích, processing trả ERROR cho tới khi người viết lại
+        /// </summary>
+        private static string Processing(string name, string query, List<Block> blocks, List<string> notes)
+        {
+            string[] procs = ApiProc().Matches(query).Select(m => m.Value).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            string tables = string.Join(", ", blocks.Select(b => "#" + b.Name));
+            notes.Add($"processing: viết lại cho v3 — query v2 đọc #_data (bảng phẳng), v3 có {tables}"
+                + (procs.Length > 0 ? $"; v3 không gọi proc v2 ({string.Join(", ", procs)})" : ""));
+            if (query.Contains("@@update", StringComparison.OrdinalIgnoreCase))
+            {
+                notes.Add("processing: @@update không còn ở v3");
+            }
+
+            var sb = new StringBuilder();
+            sb.AppendLine();
+            sb.AppendLine($"-- TODO v3: viết processing cho {name}. Query v2 dưới đây chỉ để tham khảo, KHÔNG chạy");
+            foreach (string line in query.Replace("\r", "").Replace("]]>", "]] >").Split('\n'))
+            {
+                if (line.Trim().Length > 0) { sb.AppendLine("-- " + line.TrimEnd()); }
+            }
+            sb.AppendLine("SELECT 'ERROR' AS code, N'Chưa chuyển processing v2 sang v3' AS message");
+            return sb.ToString();
+        }
+
+        // ---- Tiện ích ----
+
+        /// <summary>CusID → cusID, GLDateFrom → glDateFrom, YourId → yourId, ma_nt → maNt</summary>
+        public static string CamelCase(string name)
+        {
+            string[] words = name.Split('_', StringSplitOptions.RemoveEmptyEntries);
+            var sb = new StringBuilder();
+            for (int i = 0; i < words.Length; i++)
+            {
+                string word = words[i];
+                if (i == 0)
+                {
+                    // Hạ cả cụm chữ hoa đầu, chừa chữ hoa cuối nếu nó mở đầu một từ mới
+                    int run = 0;
+                    while (run < word.Length && char.IsUpper(word[run])) { run++; }
+                    int lower = run <= 1 ? run : run == word.Length ? run : run - 1;
+                    word = word[..lower].ToLowerInvariant() + word[lower..];
+                }
+                else
+                {
+                    word = char.ToUpperInvariant(word[0]) + word[1..];
+                }
+                sb.Append(word);
+            }
+            return sb.Length == 0 ? name : sb.ToString();
+        }
+
+        public static string Snake(string name) => WordBoundary().Replace(name, "_").ToLowerInvariant();
 
         private static bool IsTrue(XAttribute? attribute) => attribute?.Value.Trim().ToLowerInvariant() is "true" or "1";
 

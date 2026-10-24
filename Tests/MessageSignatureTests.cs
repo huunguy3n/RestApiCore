@@ -19,8 +19,8 @@ namespace Tests
         internal const string RequestSignature = "9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac";
 
         internal const string ResponseBody = "{\"code\":\"SUCCESS\"}";
-        internal const string RequestId = "8c2f0000-0000-4000-8000-000000000002";
-        internal const string ResponseSignature = "ad5353907e543ef9429cfe159bdaf1ded0ae2c37a27208110bbc2a47ef902bac";
+        internal const string ResponseBodyMd5 = "12db205e69b01844ef11955d7ca2b740";
+        internal const string ResponseSignature = "0736896e2b8b43d7215b2e4366f133f2a4d1f4ff472fc089f08365fc79bbd50f";
 
         private static byte[] PrivateKey => Convert.FromBase64String(PrivateKeyBase64);
 
@@ -48,7 +48,7 @@ namespace Tests
         [Fact]
         public void RequestSignature_KhopVector()
         {
-            string message = MessageSignature.RequestMessage(Encoding.UTF8.GetBytes(Body), Nonce);
+            string message = MessageSignature.Message(Encoding.UTF8.GetBytes(Body), Nonce);
 
             Assert.Equal(BodyMd5 + Nonce, message);
             Assert.Equal(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), message));
@@ -57,19 +57,20 @@ namespace Tests
         [Fact]
         public void ResponseSignature_KhopVector()
         {
-            string canonical = MessageSignature.CanonicalResponse(200, RequestId, Nonce, 1792574401, MessageSignature.Sha256Hex(Encoding.UTF8.GetBytes(ResponseBody)));
+            string message = MessageSignature.Message(Encoding.UTF8.GetBytes(ResponseBody), Nonce);
 
-            Assert.Equal(ResponseSignature, MessageSignature.HmacHex(MessageSignature.DeriveResponseKey(PrivateKey), canonical));
+            Assert.Equal(ResponseBodyMd5 + Nonce, message);
+            Assert.Equal(ResponseSignature, MessageSignature.HmacHex(MessageSignature.DeriveResponseKey(PrivateKey), message));
         }
 
         [Fact]
         public void ChuKyRequest_KhongDungLamChuKyResponse()
         {
-            string canonical = MessageSignature.CanonicalResponse(200, RequestId, Nonce, 1792574401, MessageSignature.Sha256Hex(Encoding.UTF8.GetBytes(ResponseBody)));
+            string message = MessageSignature.Message(Encoding.UTF8.GetBytes(ResponseBody), Nonce);
 
             // Ký bằng K_request (khóa của client) ra chữ ký khác, client không giả được response
-            string forged = MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), canonical);
-            Assert.Equal("40d2309d1cbd8c5f30a800c90d4609f9df10809f8b8ee6a358b9b571316f9430", forged);
+            string forged = MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), message);
+            Assert.Equal("5078d0139a53aaa6d68985093a79defebeae670f812687203006aff5c16ea693", forged);
             Assert.False(MessageSignature.SignatureEquals(ResponseSignature, forged));
         }
 
@@ -92,7 +93,7 @@ namespace Tests
         public void SuaMotByteBody_ChuKySai()
         {
             byte[] tampered = Encoding.UTF8.GetBytes(Body.Replace("\"Quantity\":2", "\"Quantity\":3"));
-            string message = MessageSignature.RequestMessage(tampered, Nonce);
+            string message = MessageSignature.Message(tampered, Nonce);
 
             Assert.False(MessageSignature.SignatureEquals(RequestSignature, MessageSignature.HmacHex(MessageSignature.DeriveRequestKey(PrivateKey), message)));
         }

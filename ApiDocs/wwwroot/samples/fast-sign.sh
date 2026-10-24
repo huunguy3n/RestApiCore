@@ -8,16 +8,13 @@ set -euo pipefail
 
 # K = HMAC-SHA256(private_key, label), in hex
 derive_key() { printf '%s' "$2" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$(printf '%s' "$1" | base64 -d | xxd -p -c 256)" | awk '{print $NF}'; }
-sha256_hex() { openssl dgst -sha256 | awk '{print $NF}'; }
 md5_hex() { openssl dgst -md5 | awk '{print $NF}'; }
 hmac_hex() { printf '%s' "$2" | openssl dgst -sha256 -mac HMAC -macopt "hexkey:$1" | awk '{print $NF}'; }
 
-# verify_response K_RESPONSE STATUS REQUEST_ID REQUEST_NONCE TIMESTAMP SIGNATURE BODY_FILE -> in "ok" hoặc "SAI"
+# verify_response K_RESPONSE REQUEST_NONCE SIGNATURE BODY_FILE -> in "ok" hoặc "SAI"
+# X-Fast-Signature = HMAC-SHA256(K_response, md5(body) + nonce của request)
 verify_response() {
-  local sha canonical
-  sha=$(sha256_hex < "$7")
-  canonical=$(printf 'FAST-HMAC-SHA256-RESPONSE\n%s\n%s\n%s\n%s\n%s' "$2" "$3" "$4" "$5" "$sha")
-  [ "$(hmac_hex "$1" "$canonical")" = "${6,,}" ] && echo ok || echo SAI
+  [ "$(hmac_hex "$1" "$(md5_hex < "$4")$2")" = "${3,,}" ] && echo ok || echo SAI
 }
 
 test_vector() {
@@ -32,7 +29,7 @@ test_vector() {
   signature=$(hmac_hex "$k_req" "${md5}1792574400-9b2e4c1f0a7d4e3b")
   [ "$signature" = "9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac" ] || { echo "Sai chu ky request"; exit 1; }
   tmp=$(mktemp); printf '%s' '{"code":"SUCCESS"}' > "$tmp"
-  [ "$(verify_response "$k_res" 200 8c2f0000-0000-4000-8000-000000000002 1792574400-9b2e4c1f0a7d4e3b 1792574401 ad5353907e543ef9429cfe159bdaf1ded0ae2c37a27208110bbc2a47ef902bac "$tmp")" = ok ] || { echo "Sai chu ky response"; exit 1; }
+  [ "$(verify_response "$k_res" 1792574400-9b2e4c1f0a7d4e3b 0736896e2b8b43d7215b2e4366f133f2a4d1f4ff472fc089f08365fc79bbd50f "$tmp")" = ok ] || { echo "Sai chu ky response"; exit 1; }
   rm -f "$tmp"
   echo "Vector thu: dat"
 }

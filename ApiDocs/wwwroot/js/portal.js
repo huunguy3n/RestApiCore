@@ -346,11 +346,7 @@ async function signedCall(method, pathAndQuery, bodyText, idempotencyKey, extraH
     const response = await fetch(apiBase + pathAndQuery, { method, headers, body: bodyText });
     const bytes = new Uint8Array(await response.arrayBuffer());
     const verify = await sign.verifyResponse(keys, {
-        status: response.status,
-        requestId: response.headers.get("X-Request-ID"),
         requestNonce: signed.nonce,
-        timestamp: response.headers.get("X-Fast-Timestamp"),
-        contentSha256: response.headers.get("X-Fast-Content-SHA256"),
         signature: response.headers.get("X-Fast-Signature"),
         bodyBytes: bytes
     });
@@ -369,9 +365,9 @@ async function signedCall(method, pathAndQuery, bodyText, idempotencyKey, extraH
 function callResult(r) {
     const verdict = !r.signed
         ? alertBox("warning", "Response không có chữ ký (lỗi trước khi server xác định được khóa, vd UNAUTHORIZED).")
-        : r.verify.checksumOk && r.verify.signatureOk
+        : r.verify.signatureOk
             ? alertBox("success", "Chữ ký response hợp lệ.")
-            : alertBox("danger", `Chữ ký response SAI (checksum ${r.verify.checksumOk ? "đúng" : "sai"}, HMAC ${r.verify.signatureOk ? "đúng" : "sai"}): không tin nội dung.`);
+            : alertBox("danger", "Chữ ký response SAI: không tin nội dung.");
     const headerText = Object.entries(r.requestHeaders).map(([k, v]) => `${k}: ${v}`).join("\n");
     return h("div", {},
         h("div", { class: "d-flex align-items-center gap-2" },
@@ -380,7 +376,7 @@ function callResult(r) {
         h("div", { class: "mt-2" }, verdict),
         h("details", { open: true }, h("summary", {}, "Thông điệp đã ký (md5(body) + nonce)"), pre(r.message)),
         h("details", {}, h("summary", {}, "Header request"), pre(headerText)),
-        r.signed ? h("details", {}, h("summary", {}, "canonicalResponse (portal tự dựng để kiểm)"), pre(r.verify.canonical)) : null,
+        r.signed ? h("details", {}, h("summary", {}, "Thông điệp response (portal tự dựng để kiểm)"), pre(r.verify.message)) : null,
         h("h3", { class: "h6 mt-3" }, "Body response"),
         pre(r.json ? JSON.stringify(r.json, null, 2) : r.text));
 }
@@ -444,8 +440,8 @@ async function samplesView() {
         ["md5Hex(body)", v.bodyMd5],
         ["X-Fast-Nonce = \"<unix giây>-<ngẫu nhiên>\"", v.nonce],
         ["X-Fast-Signature (request)", v.requestSignature],
-        ["Response: status, X-Request-ID, X-Fast-Timestamp", `${v.responseStatus}, ${v.responseRequestId}, ${v.responseTimestamp}`],
         ["Response body", v.responseBody],
+        ["md5Hex(response body)", v.responseBodyMd5],
         ["X-Fast-Signature (response)", v.responseSignature]
     ];
     const message = v.bodyMd5 + v.nonce;
@@ -457,7 +453,7 @@ async function samplesView() {
             h("li", {}, "Dẫn xuất K_request, K_response từ private_key (HMAC-SHA256 với hai nhãn cố định)."),
             h("li", {}, "Dựng nonce = \"<serverTime>-<chuỗi ngẫu nhiên 8–48 ký tự A-Z a-z 0-9 _ ->\". Giây trong nonce phải lệch giờ server không quá clockSkewSeconds, mỗi nonce chỉ dùng một lần."),
             h("li", {}, "X-Fast-Signature = hex(HMAC-SHA256(K_request, md5Hex(body) + nonce)); body là đúng các byte gửi đi (body rỗng vẫn md5 chuỗi rỗng). Request chỉ cần hai header X-Fast-Nonce và X-Fast-Signature. Lấy JWT ở POST /api/auth/token với body {\"userName\"}, các request sau gửi kèm Authorization: Bearer."),
-            h("li", {}, "Kiểm response: HMAC-SHA256(K_response, canonicalResponse) với status, X-Request-ID, nonce của request, X-Fast-Timestamp, SHA-256 body. Sai thì không tin nội dung.")),
+            h("li", {}, "Kiểm response: X-Fast-Signature = HMAC-SHA256(K_response, md5Hex(body response) + nonce của request). Sai thì không tin nội dung.")),
         h("h2", { class: "h5 mt-4" }, "Vector thử cố định"),
         h("p", { class: "small text-secondary" }, "Mọi code mẫu đều tự kiểm bằng vector này khi chạy không tham số. Code của bạn ra đúng các giá trị dưới đây là ký đúng."),
         h("div", { class: "table-responsive" }, h("table", { class: "table table-sm vector" },

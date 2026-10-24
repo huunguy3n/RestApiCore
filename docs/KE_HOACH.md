@@ -59,7 +59,7 @@
 | Object `restApi*` đang có | Bảng `restApiUser`, `restApiAllowForm(u_id, form)`, `restApiAllowIp(u_id, ip_address, description)`, `restApiBlackListIp`, `restApiCache`, `restApiLogData`, `restApiLogError`, `restApiLogActivity`, `restApiLogTransfer`, `restApiNotify`, `restApiTransfer`, `restApiUpdate`. Proc `restApi_CheckFormRights`, `restApi_CheckIPAddress`, `restApi_InsertLogData`, `restApi_InsertLogError`, `restApi_RemoveCache`, `restApi_TableDebug` | Cách v3 dùng ở mục 3.1 |
 
 Hai điểm trong logic quyền hiện tại cần đổi ở v3:
-- `restApi_CheckFormRights` và `restApi_CheckIPAddress`: user **không có dòng nào** trong `restApiAllowForm`/`restApiAllowIp` thì được **mọi form / mọi IP**. v3 đổi sang **mặc định từ chối** với form. Riêng IP vẫn giữ cách "không khai thì cho mọi IP", vì nhiều đối tác không có IP tĩnh.
+- `restApi_CheckFormRights` và `restApi_CheckIPAddress`: user **không có dòng nào** trong `restApiAllowForm`/`restApiAllowIp` thì được **mọi form / mọi IP**. v3 **giữ nguyên** (chốt lại 24/10/2026): `userinfo2.admin = 1` được mọi form; user thường không khai thì được mọi form / mọi IP, có khai mới kiểm theo danh sách đã khai.
 - `fsd_GetUnitRight` có nhánh `@Admin = 0` khi truyền `@Unit` thì trả nguyên danh sách đơn vị mà **không kiểm quyền**. v3 không dùng hàm này.
 
 ### 1.3. SQL Server 2008 R2 — giới hạn phải tuân theo
@@ -198,7 +198,7 @@ Không có chế độ chạy file v2. Tool `Fast.Api.Cli upgrade` hỗ trợ ch
 | `restApiLogData` + `restApi_InsertLogData` | Dùng tới pha 5, sau đó thay bằng bảng log mới |
 | `restApiCache` + `restApi_RemoveCache` | v3 không dùng. Giữ nguyên, không xoá |
 | `restApiLogActivity`, `restApiLogTransfer`, `restApiNotify`, `restApiTransfer`, `restApiUpdate` | Giữ nguyên, dùng khi tới chức năng tương ứng |
-| `restApi_CheckFormRights`, `restApi_CheckIPAddress` | Giữ nguyên; v3 dùng `restApi_GetUserRights` thay thế (mặc định từ chối form, một lượt gọi DB) |
+| `restApi_CheckFormRights`, `restApi_CheckIPAddress` | Giữ nguyên; v3 dùng `restApi_GetUserRights` thay thế (không khai form = mọi form, admin = mọi form, một lượt gọi DB) |
 
 ### 3.2. Object viết mới
 
@@ -315,22 +315,16 @@ Body đọc **một lần** (buffer có giới hạn `MaxRequestBodySize`), vừ
 HTTP/1.1 200
 Content-Type: application/json
 X-Request-ID: 8c2f…
-X-Fast-Timestamp: 1792574401
-X-Fast-Content-SHA256: …
 X-Fast-Signature: …
 
 { "code": "SUCCESS", … }
 ```
 ```
-canonicalResponse =
-  "FAST-HMAC-SHA256-RESPONSE" + "\n" +
-  STATUS            + "\n" +   // 200
-  REQUEST_ID        + "\n" +
-  REQUEST_NONCE     + "\n" +   // nonce của request tương ứng
-  TIMESTAMP         + "\n" +
-  CONTENT_SHA256
+message   = md5Hex(responseBody) + REQUEST_NONCE      // nonce của request tương ứng
+signature = hex(HMAC-SHA256(K_response, UTF8(message)))
 ```
-- Gắn `REQUEST_NONCE` để response cũ không phát lại được cho request khác.
+Response chỉ có `X-Fast-Signature` (không còn `X-Fast-Timestamp`, `X-Fast-Content-SHA256`; chữ ký đã gồm checksum body).
+- Gắn nonce của request để response cũ không phát lại được cho request khác.
 - Lỗi **trước bước 1** (thiếu/sai JWT, user không tồn tại): chưa biết khóa của ai nên **không ký**, chỉ trả `code`, `message` chung, `request_id`. Client coi response không ký là lỗi xác thực, không tin nội dung.
 
 #### 4.2.5. Lấy token
@@ -578,7 +572,7 @@ Quy tắc cho mọi pha từ pha 1: hiện vật mới (script SQL, XML mẫu, c
 | `Provider`: thêm `OpenConnAsync`/`ExecuteAsync`/`RetrieveAsync`/`BulkAsync` có `CancellationToken`; `CommandTimeout` đặt **một lần** lúc khởi động (`Provider.Configure(appSettings:commandTimeout)`), repository không gán lại biến static nữa. Hàm đồng bộ giữ cho `FormRepository` tới pha 3 | Xong 23/10/2026 |
 | `LogRepository` ghi `#logData`/`#logError` hoàn toàn qua tham số có kiểu + độ dài, tự cắt theo cột (lỗi 1.4 #3); ghi log và kiểm IP chạy async | Xong 23/10/2026, chạy thử: path `/x'y';--` lưu nguyên văn vào `restApiLogData` |
 | Script SQL đánh số trong `sql/`: `001_restApi_CheckUnitRights`, `002_restApiUser_private_key` (thêm cột; kiểm PK `name`, identity `id`: thiếu PK thì tạo, sai PK / thiếu identity thì báo lỗi để sửa tay), `003_restApiRevokedToken`, `004_restApiIdempotency`, `005_restApi_GetUserRights` (4 result set cố định: user + userinfo2 qua `vsysuserinfo`, form, IP cho phép, IP chặn) | Xong 23/10/2026, chạy 2 lần liên tiếp trên DB dev không lỗi |
-| `UserRepository.GetUserRightsAsync` → `UserRights` (`UId` ≠ `UserId`, `IsActive`, `CanAccessForm` mặc định từ chối, `IsIpAllowed` như `restApi_CheckIPAddress`); 14 test mới. Chưa nối vào xác thực (pha 2) | Xong 23/10/2026. DB dev: `ADMIN` → u_id 2, user_id 1, admin; `NGUYENTDH` không có user FBO tương ứng nên không hiệu lực |
+| `UserRepository.GetUserRightsAsync` → `UserRights` (`UId` ≠ `UserId`, `IsActive`, `CanAccessForm` (admin hoặc không khai = mọi form; có khai mới kiểm), `IsIpAllowed` như `restApi_CheckIPAddress`); 14 test mới. Chưa nối vào xác thực (pha 2) | Xong 23/10/2026. DB dev: `ADMIN` → u_id 2, user_id 1, admin; `NGUYENTDH` không có user FBO tương ứng nên không hiệu lực |
 
 *M1:* `/health/ready` đạt, log ghi file, rate limit trả 429, script DB chạy 2 lần không lỗi → **đạt** (23/10/2026).
 

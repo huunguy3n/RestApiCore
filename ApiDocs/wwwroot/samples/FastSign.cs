@@ -24,8 +24,6 @@ public class FastSign(string baseUrl, string privateKeyBase64)
     public static byte[] DeriveKey(string privateKeyBase64, string label) =>
         HMACSHA256.HashData(Convert.FromBase64String(privateKeyBase64), Encoding.ASCII.GetBytes(label));
 
-    public static string Sha256Hex(byte[] data) => Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
-
     public static string Md5Hex(byte[] data) => Convert.ToHexString(MD5.HashData(data)).ToLowerInvariant();
 
     public static string HmacHex(byte[] key, string text) => Convert.ToHexString(HMACSHA256.HashData(key, Encoding.UTF8.GetBytes(text))).ToLowerInvariant();
@@ -42,13 +40,9 @@ public class FastSign(string baseUrl, string privateKeyBase64)
         return headers;
     }
 
-    public static bool VerifyResponse(byte[] responseKey, int status, string requestId, string requestNonce, string timestamp, string contentSha256, string signature, byte[] body)
-    {
-        string actualSha256 = Sha256Hex(body);
-        string canonical = string.Join("\n", "FAST-HMAC-SHA256-RESPONSE", status, requestId, requestNonce, timestamp, actualSha256);
-        return CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(actualSha256), Encoding.ASCII.GetBytes(contentSha256.ToLowerInvariant()))
-            && CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(HmacHex(responseKey, canonical)), Encoding.ASCII.GetBytes(signature.Trim().ToLowerInvariant()));
-    }
+    /// <summary>X-Fast-Signature = HMAC-SHA256(K_response, md5Hex(body) + nonce của request)</summary>
+    public static bool VerifyResponse(byte[] responseKey, string requestNonce, string signature, byte[] body) =>
+        CryptographicOperations.FixedTimeEquals(Encoding.ASCII.GetBytes(HmacHex(responseKey, Md5Hex(body) + requestNonce)), Encoding.ASCII.GetBytes(signature.Trim().ToLowerInvariant()));
 
     public async Task<JsonElement> SendAsync(HttpMethod method, string pathAndQuery, string body, string? token = null)
     {
@@ -64,8 +58,7 @@ public class FastSign(string baseUrl, string privateKeyBase64)
         using var response = await _http.SendAsync(request);
         byte[] responseBody = await response.Content.ReadAsByteArrayAsync();
         string Header(string name) => response.Headers.TryGetValues(name, out var values) ? values.First() : "";
-        if (!VerifyResponse(_responseKey, (int)response.StatusCode, Header("X-Request-ID"), nonce, Header("X-Fast-Timestamp"),
-            Header("X-Fast-Content-SHA256"), Header("X-Fast-Signature"), responseBody))
+        if (!VerifyResponse(_responseKey, nonce, Header("X-Fast-Signature"), responseBody))
         {
             throw new InvalidOperationException("Chữ ký response sai: không tin nội dung này");
         }
@@ -85,8 +78,7 @@ public class FastSign(string baseUrl, string privateKeyBase64)
         Check(SignRequest(requestKey, body, nonce)["X-Fast-Signature"] == "9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac", "Chữ ký request");
 
         byte[] response = Encoding.UTF8.GetBytes("{\"code\":\"SUCCESS\"}");
-        Check(VerifyResponse(responseKey, 200, "8c2f0000-0000-4000-8000-000000000002", nonce, "1792574401", Sha256Hex(response),
-            "ad5353907e543ef9429cfe159bdaf1ded0ae2c37a27208110bbc2a47ef902bac", response), "Chữ ký response");
+        Check(VerifyResponse(responseKey, nonce, "0736896e2b8b43d7215b2e4366f133f2a4d1f4ff472fc089f08365fc79bbd50f", response), "Chữ ký response");
         Console.WriteLine("Vector thử: đạt");
     }
 

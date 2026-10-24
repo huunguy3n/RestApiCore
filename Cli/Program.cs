@@ -8,6 +8,17 @@ Console.OutputEncoding = System.Text.Encoding.UTF8;
 if (args.Length == 0 || args[0] is "-h" or "--help")
 {
     Console.WriteLine("""
+        Fast.Api.Cli create-user --config <appsettings.Local.json> --user <name> --name-erp <userinfo2.name>
+                                 --password-env <ENV> [--forms form1,form2] [--issue-key] [--apply]
+
+          Tạo restApiUser: mã hóa mật khẩu portal bằng passwordKey, nối name_erp → vsysuserinfo.
+          Mật khẩu đọc từ biến môi trường (không truyền trên dòng lệnh). --forms = tên file XML không đuôi.
+          --issue-key kèm private_key HMAC (in một lần). Mặc định kiểm thử; --apply mới ghi.
+
+        Fast.Api.Cli set-password --config <appsettings.Local.json> --user <name> --password-env <ENV> [--apply]
+
+          Đặt / đổi mật khẩu portal (AES passwordKey). Mật khẩu từ biến môi trường.
+
         Fast.Api.Cli rekey-passwords --config <appsettings.Local.json> [--apply]
                                      [--old-key <khóa cấu hình>] [--new-key <khóa cấu hình>]
 
@@ -21,10 +32,12 @@ if (args.Length == 0 || args[0] is "-h" or "--help")
           Cấp private_key (HMAC-SHA256 v3) cho tài khoản, lưu mã hóa bằng Security:KeyEncryptionKey.
           Khóa in ra đúng một lần khi --apply. Đã có khóa thì phải thêm --rotate.
 
-        Fast.Api.Cli upgrade <file.xml | thư mục Form> [--update <Update.xml>] [--out <thư mục>] [--force]
+        Fast.Api.Cli upgrade <file.xml | thư mục App_Data\FastAPI> [--config <appsettings.Local.json>] [--out <thư mục>] [--force]
 
-          Chuyển form v2 (<form>) sang <import> v3, giữ tên file. <reference> thành check tồn tại mã theo Update.xml
-          (mặc định ../Options/Update.xml), bỏ @@update, đổi biến v2. In ghi chú cần xem lại; không có --out thì chỉ in ra.
+          Chuyển form FastAPI 2.4.7 (v2: <import> phẳng, entity Include\*.txt) sang <import> v3, giữ tên file.
+          Đổi tên field sang camelCase, justContent thành check, processing để lại làm chú thích (viết lại cho v3).
+          --config (chỉ đọc DB) để tách master/detail chứng từ theo cột m??$000000 / d??$000000.
+          In ghi chú cần xem lại; không có --out thì chỉ in ra.
         """);
     return 0;
 }
@@ -33,6 +46,8 @@ try
 {
     return args[0] switch
     {
+        "create-user" => await CreateUserCommand.RunAsync(args[1..]),
+        "set-password" => await SetPasswordCommand.RunAsync(args[1..]),
         "rekey-passwords" => await RekeyPasswordsCommand.RunAsync(args[1..]),
         "issue-key" => await IssueKeyCommand.RunAsync(args[1..]),
         "upgrade" => UpgradeCommand.Run(args[1..]),
