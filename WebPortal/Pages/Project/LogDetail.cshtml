@@ -1,0 +1,26 @@
+@page "/{maDa:projectcode}/logs/{reqId}"
+@model WebPortal.Pages.Project.LogDetailModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Request " + Model.ReqId;
+    ViewData["Crumb"] = "Body đã che khóa bí mật (password, token, privateKey, signature…); mỗi lần mở được ghi nhật ký";
+}
+@if (Model.Detail != null)
+{
+    var s = Model.Detail.Summary;
+    <table class="adm__table">
+        <tbody>
+            <tr><th>Thời gian</th><td>@s.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss.fff")</td></tr>
+            <tr><th>User / IP</th><td>@s.UserName / @s.IpAddress</td></tr>
+            <tr><th>Request</th><td>@s.Method @s.Path @Model.Detail.QueryString</td></tr>
+            <tr><th>Form</th><td>@s.Form</td></tr>
+            <tr><th>Kết quả</th><td>HTTP @s.StatusCode · @s.ResultCode · @s.DurationMs ms · chữ ký @s.SignatureResult</td></tr>
+            <tr><th>Kích thước</th><td>request @s.RequestBytes byte · response @s.ResponseBytes byte</td></tr>
+        </tbody>
+    </table>
+    <h2 class="adm__h2">Body request</h2>
+    <pre class="adm__code">@(Model.Detail.RequestBody ?? "(không lưu)")</pre>
+    <h2 class="adm__h2">Body response</h2>
+    <pre class="adm__code">@(Model.Detail.ResponseBody ?? "(không lưu)")</pre>
+}
+<p><a href="/@Model.MaDa/logs">← Log</a></p>

@@ -1,0 +1,64 @@
+@page "/cpanel/licenses"
+@model WebPortal.Pages.Cpanel.LicensesModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "License";
+    ViewData["Crumb"] = "Khóa ký license, license đã cấp mọi dự án, ký manifest toàn vẹn bản phát hành";
+}
+<section class="adm__panel">
+    <h2>Khóa ký license</h2>
+    <p>@Model.Key.Message</p>
+    @if (Model.Key.Configured)
+    {
+        <p>kid: <code>@Model.Key.Kid</code></p>
+        @if (!Model.Key.Trusted)
+        {
+            <p>Thêm dòng sau vào <code>Security/Licensing/trusted-keys.json</code> rồi build lại bản phát hành PortalApp/WebApi:</p>
+            <pre class="adm__code">@Model.Key.TrustedKeyEntry</pre>
+        }
+    }
+    else
+    {
+        <form method="post" asp-page-handler="Generate">
+            <button type="submit" class="adm__btn">Tạo cặp khóa mới (ghi PFX vào Portal:License:KeyPath)</button>
+        </form>
+    }
+</section>
+
+<section class="adm__panel">
+    <h2>Ký manifest toàn vẹn</h2>
+    <p>Tải lên <code>integrity.json</code> do bước build Release sinh ra, nhận <code>integrity.sig</code> đặt cạnh nó trong gói phát hành.</p>
+    <form method="post" asp-page-handler="Sign" enctype="multipart/form-data" class="adm__form">
+        <input type="file" name="manifest" accept=".json" required />
+        <button type="submit" class="adm__btn">Ký</button>
+    </form>
+</section>
+
+<h2 class="adm__h2">License đã cấp</h2>
+<table class="adm__table">
+    <thead><tr><th>Dự án</th><th>Máy</th><th>MAC</th><th>Cấp lúc</th><th>Người cấp</th><th>Hạn</th><th>Trạng thái</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var l in Model.Licenses)
+    {
+        <tr>
+            <td>@Model.Code(l.ProjectId)</td>
+            <td>@l.MachineName</td>
+            <td><code>@l.MacList</code></td>
+            <td>@l.IssuedAt.ToString("yyyy-MM-dd HH:mm")</td>
+            <td>@l.IssuedBy</td>
+            <td>@(l.ExpiresAt?.ToString("yyyy-MM-dd") ?? "không hạn")</td>
+            <td>@(l.RevokedAt != null ? $"Thu hồi {l.RevokedAt:yyyy-MM-dd}: {l.RevokedReason}" : "Hiệu lực")</td>
+            <td>
+                @if (l.RevokedAt == null)
+                {
+                    <form method="post" asp-page-handler="Revoke" class="adm__inline">
+                        <input type="hidden" name="licenseId" value="@l.Id" />
+                        <input name="reason" maxlength="256" placeholder="Lý do" />
+                        <button type="submit" class="adm__btn adm__btn--small adm__btn--ghost">Thu hồi</button>
+                    </form>
+                }
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>

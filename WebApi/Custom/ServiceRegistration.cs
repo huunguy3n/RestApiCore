@@ -13,7 +13,7 @@ namespace Web.Custom
     /// </summary>
     public static class ServiceRegistration
     {
-        public static IServiceCollection AddFastApi(this IServiceCollection services, AppConfig appConfig, PrivateKeyProtector privateKeyProtector, PortalKeyProvider portalKey)
+        public static IServiceCollection AddFastApi(this IServiceCollection services, AppConfig appConfig, PrivateKeyProtector privateKeyProtector)
         {
             services.AddSingleton(appConfig);
             services.AddSingleton<Options, OptionsRepository>();
@@ -30,7 +30,6 @@ namespace Web.Custom
             services.AddSingleton(new Provider.SqlDatabase(appConfig.appConnectionString, appConfig.commandTimeout));
             services.AddSingleton<UserRepository>();
             services.AddSingleton<IUserRightsRepository>(provider => provider.GetRequiredService<UserRepository>());
-            services.AddSingleton<IPortalCredentialStore>(provider => provider.GetRequiredService<UserRepository>());
             services.AddSingleton<ServerRepository>();
             services.AddSingleton<IIpAccessRepository>(provider => provider.GetRequiredService<ServerRepository>());
             services.AddSingleton<IRevokedTokenRepository, RevokedTokenRepository>();
@@ -42,7 +41,6 @@ namespace Web.Custom
 
             // Bảo mật: khóa, JWT, chữ ký
             services.AddSingleton(privateKeyProtector);
-            services.AddSingleton(portalKey);
             services.AddSingleton(new JwtTokenService(appConfig.secretKey, appConfig.issuerToken));
             services.AddPortalCors(appConfig.portalOrigins);
 
@@ -52,14 +50,6 @@ namespace Web.Custom
             services.AddSingleton<SignerKeyStore>();
             services.AddSingleton<ISignerKeyStore>(provider => provider.GetRequiredService<SignerKeyStore>());
             services.AddSingleton<ISignerCacheInvalidator>(provider => provider.GetRequiredService<SignerKeyStore>());
-            // Quản trị portal: vai trò/quyền chi tiết, quyền form, nhật ký quản trị (sql/008)
-            services.AddSingleton<IPortalAccessRepository, PortalAccessRepository>();
-            services.AddSingleton<PortalAuthorizationService>();
-            services.AddSingleton<FormPermissionService>();
-            services.AddSingleton<UserAdminService>();
-            services.AddSingleton<IRequestLogReader, LogViewRepository>();
-            services.AddSingleton<RequestLogViewService>();
-            services.AddSingleton<IFormCatalogProvider>(provider => provider.GetRequiredService<FormRuntime>());
             services.AddSingleton<NonceStore>();
             services.AddSingleton<IRevokedTokenStore, RevokedTokenStore>();
             services.AddSingleton<LoginLockout>();
@@ -67,7 +57,6 @@ namespace Web.Custom
             services.AddSingleton<ICursorStore, CursorStore>();
             services.AddSingleton<MessageAuthenticator>();
             services.AddSingleton<AccessTokenIssuer>();
-            services.AddSingleton<PortalLoginService>();
             services.AddSingleton<FormRequestService>();
             services.AddSingleton<FormResponseWriter>();
             // Log v3: request chỉ đẩy vào hàng đợi, LogWorker ghi SQL theo lô, SQL lỗi thì spool ra logDirectory/spool

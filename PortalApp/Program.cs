@@ -1,3 +1,5 @@
+using PortalApp.Core;
+
 namespace PortalApp
 {
     internal static class Program
@@ -6,7 +8,7 @@ namespace PortalApp
         private static void Main()
         {
             ApplicationConfiguration.Initialize();
-            Application.Run(new MainForm());
+            Application.Run(new MainForm(LocalProject.Open()));
         }
     }
 }

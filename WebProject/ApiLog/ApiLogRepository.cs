@@ -12,6 +12,7 @@ namespace WebProject.ApiLog
     /// <summary>
     /// Đọc restApiLogReq / restApiLogBody / restApiLogAttack trên DB app, ghi zcApiLogViewAudit khi mở body.
     /// SQL Server 2008: ROW_NUMBER, mọi giá trị lọc đi bằng tham số. Kết quả dựng sẵn dạng JSON camelCase cho api-log.js.
+    /// Kết nối qua Provider FBO (D:\Fast Source\Development\Provider), không new SqlConnection.
     /// </summary>
     public sealed class ApiLogRepository
     {
@@ -39,9 +40,7 @@ namespace WebProject.ApiLog
         public Dictionary<string, object> List(ApiLogFilter filter)
         {
             int first = (filter.Page - 1) * filter.PageSize + 1;
-            DataSet ds = new DataSet();
-            using (SqlConnection sql = new SqlConnection(connectionString))
-            using (SqlCommand command = new SqlCommand(@"
+            DataSet ds = global::Provider.Provider.Retrieve(connectionString, @"
 				SELECT COUNT(1) AS all_count,
 					SUM(CASE WHEN status_code BETWEEN 200 AND 299 THEN 1 ELSE 0 END) AS http2xx,
 					SUM(CASE WHEN status_code BETWEEN 300 AND 399 THEN 1 ELSE 0 END) AS http3xx,
@@ -53,21 +52,10 @@ namespace WebProject.ApiLog
 				FROM restApiLogReq WHERE " + BaseWhere + @" OPTION (RECOMPILE)
 				SELECT COUNT(1) AS total FROM restApiLogReq WHERE " + Where + @" OPTION (RECOMPILE)
 				SELECT t.* FROM (SELECT " + SummaryColumns + @", ROW_NUMBER() OVER (ORDER BY created_at DESC, id DESC) AS rn
-					FROM restApiLogReq WHERE " + Where + @") t WHERE t.rn BETWEEN @rn_from AND @rn_to ORDER BY t.rn OPTION (RECOMPILE)", sql))
-            {
-                command.Parameters.Add("@from_time", SqlDbType.DateTime).Value = filter.From;
-                command.Parameters.Add("@to_time", SqlDbType.DateTime).Value = filter.ToExclusive;
-                command.Parameters.Add("@user", SqlDbType.VarChar, 32).Value = Param(filter.UserName);
-                command.Parameters.Add("@path", SqlDbType.NVarChar, 300).Value = Param(filter.PathPrefix);
-                command.Parameters.Add("@status_from", SqlDbType.Int).Value = filter.StatusFrom.HasValue ? (object)filter.StatusFrom.Value : DBNull.Value;
-                command.Parameters.Add("@status_to", SqlDbType.Int).Value = filter.StatusTo.HasValue ? (object)filter.StatusTo.Value : DBNull.Value;
-                command.Parameters.Add("@result", SqlDbType.VarChar, 64).Value = Param(filter.ResultCode);
-                command.Parameters.Add("@result_not", SqlDbType.VarChar, 64).Value = Param(filter.ResultNot);
-                command.Parameters.Add("@req", SqlDbType.UniqueIdentifier).Value = filter.ReqId.HasValue ? (object)filter.ReqId.Value : DBNull.Value;
-                command.Parameters.Add("@rn_from", SqlDbType.Int).Value = first;
-                command.Parameters.Add("@rn_to", SqlDbType.Int).Value = first + filter.PageSize - 1;
-                new SqlDataAdapter(command).Fill(ds);
-            }
+					FROM restApiLogReq WHERE " + Where + @") t WHERE t.rn BETWEEN @rn_from AND @rn_to ORDER BY t.rn OPTION (RECOMPILE)",
+                FilterParams(filter,
+                    new SqlParameter("@rn_from", SqlDbType.Int) { Value = first },
+                    new SqlParameter("@rn_to", SqlDbType.Int) { Value = first + filter.PageSize - 1 }));
 
             DataRow totals = ds.Tables[0].Rows[0];
             List<Dictionary<string, object>> items = new List<Dictionary<string, object>>();
@@ -99,18 +87,13 @@ namespace WebProject.ApiLog
         /// <summary>Metadata một request (không body, không ghi audit). null = không có</summary>
         public Dictionary<string, object> Detail(Guid reqId)
         {
-            DataSet ds = new DataSet();
-            using (SqlConnection sql = new SqlConnection(connectionString))
-            using (SqlCommand command = new SqlCommand(@"
+            DataSet ds = global::Provider.Provider.Retrieve(connectionString, @"
 				SELECT TOP 1 " + SummaryColumns + @", content_sha256, nonce, client_timestamp, idempotency_key,
 					(SELECT b.size FROM restApiLogBody b WHERE b.sha256 = r.request_sha256) AS request_stored_size,
 					(SELECT b.size FROM restApiLogBody b WHERE b.sha256 = r.response_sha256) AS response_stored_size
 				FROM restApiLogReq r WHERE req_id = @req ORDER BY id DESC
-				SELECT TOP 50 created_at, ip_address, code FROM restApiLogAttack WHERE req_id = @req ORDER BY created_at, id", sql))
-            {
-                command.Parameters.Add("@req", SqlDbType.UniqueIdentifier).Value = reqId;
-                new SqlDataAdapter(command).Fill(ds);
-            }
+				SELECT TOP 50 created_at, ip_address, code FROM restApiLogAttack WHERE req_id = @req ORDER BY created_at, id",
+                new SqlParameter("@req", SqlDbType.UniqueIdentifier) { Value = reqId });
             if (ds.Tables[0].Rows.Count == 0) return null;
 
             DataRow row = ds.Tables[0].Rows[0];
@@ -140,42 +123,51 @@ namespace WebProject.ApiLog
         /// <summary>Body đã giải nén (tối đa MaxBodyBytes + 1 byte để biết bị cắt). null = không có request</summary>
         public LoggedBodies ReadBodies(Guid reqId)
         {
-            using (SqlConnection sql = new SqlConnection(connectionString))
-            using (SqlCommand command = new SqlCommand(@"
+            DataSet ds = global::Provider.Provider.Retrieve(connectionString, @"
 				SELECT TOP 1 r.request_sha256, r.response_sha256, rq.content AS request_content, rs.content AS response_content
 				FROM restApiLogReq r
 				LEFT JOIN restApiLogBody rq ON rq.sha256 = r.request_sha256
 				LEFT JOIN restApiLogBody rs ON rs.sha256 = r.response_sha256
-				WHERE r.req_id = @req ORDER BY r.id DESC", sql))
+				WHERE r.req_id = @req ORDER BY r.id DESC",
+                new SqlParameter("@req", SqlDbType.UniqueIdentifier) { Value = reqId });
+            if (ds.Tables[0].Rows.Count == 0) return null;
+            DataRow row = ds.Tables[0].Rows[0];
+            return new LoggedBodies
             {
-                command.Parameters.Add("@req", SqlDbType.UniqueIdentifier).Value = reqId;
-                DataTable table = new DataTable();
-                new SqlDataAdapter(command).Fill(table);
-                if (table.Rows.Count == 0) return null;
-                DataRow row = table.Rows[0];
-                return new LoggedBodies
-                {
-                    RequestKept = row["request_sha256"] != DBNull.Value,
-                    ResponseKept = row["response_sha256"] != DBNull.Value,
-                    Request = Unzip(row["request_content"]),
-                    Response = Unzip(row["response_content"])
-                };
-            }
+                RequestKept = row["request_sha256"] != DBNull.Value,
+                ResponseKept = row["response_sha256"] != DBNull.Value,
+                Request = Unzip(row["request_content"]),
+                Response = Unzip(row["response_content"])
+            };
         }
 
         /// <summary>Ghi vết mở body. Lỗi SQL ném ra để handler không trả body</summary>
         public void WriteAudit(int userId, string userName, Guid reqId, string ipAddress)
         {
-            using (SqlConnection sql = new SqlConnection(connectionString))
-            using (SqlCommand audit = new SqlCommand("INSERT INTO zcApiLogViewAudit (user_id, user_name, req_id, ip_address) VALUES (@u, @n, @r, @ip)", sql))
+            global::Provider.Provider.Execute(connectionString,
+                "INSERT INTO zcApiLogViewAudit (user_id, user_name, req_id, ip_address) VALUES (@u, @n, @r, @ip)",
+                new SqlParameter("@u", SqlDbType.Int) { Value = userId },
+                new SqlParameter("@n", SqlDbType.NVarChar, 128) { Value = userName.Length > 128 ? userName.Substring(0, 128) : userName },
+                new SqlParameter("@r", SqlDbType.UniqueIdentifier) { Value = reqId },
+                new SqlParameter("@ip", SqlDbType.VarChar, 45) { Value = Param(ApiLogQuery.Clean(ipAddress, 45, ".:")) });
+        }
+
+        private static SqlParameter[] FilterParams(ApiLogFilter filter, params SqlParameter[] extra)
+        {
+            List<SqlParameter> list = new List<SqlParameter>
             {
-                audit.Parameters.Add("@u", SqlDbType.Int).Value = userId;
-                audit.Parameters.Add("@n", SqlDbType.NVarChar, 128).Value = userName.Length > 128 ? userName.Substring(0, 128) : userName;
-                audit.Parameters.Add("@r", SqlDbType.UniqueIdentifier).Value = reqId;
-                audit.Parameters.Add("@ip", SqlDbType.VarChar, 45).Value = Param(ApiLogQuery.Clean(ipAddress, 45, ".:"));
-                sql.Open();
-                audit.ExecuteNonQuery();
-            }
+                new SqlParameter("@from_time", SqlDbType.DateTime) { Value = filter.From },
+                new SqlParameter("@to_time", SqlDbType.DateTime) { Value = filter.ToExclusive },
+                new SqlParameter("@user", SqlDbType.VarChar, 32) { Value = Param(filter.UserName) },
+                new SqlParameter("@path", SqlDbType.NVarChar, 300) { Value = Param(filter.PathPrefix) },
+                new SqlParameter("@status_from", SqlDbType.Int) { Value = filter.StatusFrom.HasValue ? (object)filter.StatusFrom.Value : DBNull.Value },
+                new SqlParameter("@status_to", SqlDbType.Int) { Value = filter.StatusTo.HasValue ? (object)filter.StatusTo.Value : DBNull.Value },
+                new SqlParameter("@result", SqlDbType.VarChar, 64) { Value = Param(filter.ResultCode) },
+                new SqlParameter("@result_not", SqlDbType.VarChar, 64) { Value = Param(filter.ResultNot) },
+                new SqlParameter("@req", SqlDbType.UniqueIdentifier) { Value = filter.ReqId.HasValue ? (object)filter.ReqId.Value : DBNull.Value }
+            };
+            if (extra != null) list.AddRange(extra);
+            return list.ToArray();
         }
 
         private static Dictionary<string, object> Summary(DataRow row)

@@ -24,6 +24,19 @@ namespace Business
 
         /// <summary>Admin FBO (admin = 1) hoặc không khai restApiAllowForm thì mọi form; có khai thì chỉ các form đã khai</summary>
         public bool CanAccessForm(string form) => ErpAdmin || AllowForms.Count == 0 || AllowForms.Contains(form);
+
+        /// <summary>restApiUser.token_valid_after (UTC): JWT có iat trước mốc này bị từ chối. Null = không chặn</summary>
+        public DateTime? TokenValidAfter { get; init; }
+
+        /// <summary>iat (giây Unix) có còn hiệu lực theo TokenValidAfter không</summary>
+        public bool IsTokenIssueTimeValid(long issuedAtUnixSeconds) =>
+            TokenValidAfter == null || issuedAtUnixSeconds >= new DateTimeOffset(DateTime.SpecifyKind(TokenValidAfter.Value, DateTimeKind.Utc)).ToUnixTimeSeconds();
+    }
+
+    /// <summary>Xóa cache khóa/quyền sau khi đổi để có hiệu lực ngay trong tiến trình này</summary>
+    public interface ISignerCacheInvalidator
+    {
+        ValueTask InvalidateAsync(CancellationToken cancellationToken = default);
     }
 
     public interface ISignerKeyStore
@@ -82,7 +95,8 @@ namespace Business
             return new SignerKeys(rights.UId, rights.Name, rights.IsActive, requestKey, responseKey, rights.UserId, rights.NameErp)
             {
                 ErpAdmin = rights.ErpAdmin,
-                AllowForms = new HashSet<string>(rights.AllowForms, StringComparer.OrdinalIgnoreCase)
+                AllowForms = new HashSet<string>(rights.AllowForms, StringComparer.OrdinalIgnoreCase),
+                TokenValidAfter = rights.TokenValidAfter
             };
         }
     }

@@ -1,29 +1,37 @@
 ﻿# Hướng dẫn sử dụng FastAPI v3
 
-Tutorial thực hành: dựng môi trường, cấp tài khoản đối tác, ký request, gọi nghiệp vụ, dùng portal, và thêm form XML.
+Tutorial thực hành: dựng môi trường, cấp tài khoản đối tác, ký request, gọi nghiệp vụ, dùng WebPortal / PortalApp, và thêm form XML.
 
-Đặc tả đầy đủ: [KE_HOACH.md](KE_HOACH.md). Tóm tắt repo: [../README.md](../README.md).
+Quyết định kiến trúc portal: [ADR-0001](adr/ADR-0001-portal-cpanel-portalapp.md). Tóm tắt repo: [../README.md](../README.md). Đặc tả giao thức API: [KE_HOACH.md](KE_HOACH.md).
 
 ---
 
 ## 1. Kiến trúc ngắn
 
 ```
-Đối tác                    FastAPI v3                      FBO / SQL
-─────────                  ──────────                      ─────────
+Đối tác                    WebApi                          FBO / SQL
+─────────                  ──────                          ─────────
 1. Ký HMAC + lấy JWT  →   /api/auth/token
 2. JWT + ký HMAC      →   /api/{resource}[/{verb}]
-                          → kiểm JWT, nonce, chữ ký
+                          → kiểm JWT, nonce, chữ ký, iat ≥ token_valid_after
                           → quyền form / IP / đơn vị
                           → nạp XML <import>
                           → checking + processing SQL  →  bảng / proc nghiệp vụ
 3. Kiểm chữ ký response ←  JSON + header X-Fast-*
 ```
 
-- **Nguồn dữ liệu:** SQL Server (DB app FBO).
-- **Định nghĩa API:** file XML trong `Api/App_Data/Form/`.
-- **Bí mật đối tác:** `private_key` (32 byte, base64) — chỉ dùng ký HMAC, không dùng đăng nhập portal.
-- **Mật khẩu portal:** `restApiUser.password` (AES trên server); trình duyệt mã hóa RSA-OAEP trước khi gửi.
+Ba cổng thao tác, không còn CLI:
+
+| Môi trường | Công cụ | Ghi chú |
+|---|---|---|
+| DEV / UAT | **WebPortal** | `/cpanel` Super Admin; `/{maDa}` Admin và user Api. Portal là nguồn sự thật, đồng bộ một chiều xuống DB dự án |
+| PROD | **PortalApp** | Nằm trong folder restApi, đọc `appsettings.Local.json` cạnh nó, không đăng nhập, cần license gắn MAC |
+| Mọi nơi | **WebApi** | Chỉ API. Không giao diện, không endpoint quản trị |
+
+- **Nguồn dữ liệu nghiệp vụ:** SQL Server (DB app FBO).
+- **Định nghĩa API:** file XML trong `WebApi/App_Data/Form/` (folder restApi của từng dự án).
+- **Bí mật đối tác:** `private_key` (32 byte, base64) — chỉ dùng ký HMAC.
+- **Mật khẩu portal:** băm PBKDF2-HMAC-SHA256 (310.000 vòng), tối thiểu 12 ký tự.
 
 ---
 
@@ -40,25 +48,31 @@ dotnet build
 ### 2.2. `appsettings.Local.json`
 
 ```powershell
-copy Api\appsettings.Local.example.json Api\appsettings.Local.json
+copy WebApi\appsettings.Local.example.json WebApi\appsettings.Local.json
+copy WebPortal\appsettings.Local.example.json WebPortal\appsettings.Local.json
 ```
+
+**WebApi**
 
 | Khóa | Ý nghĩa |
 |---|---|
-| `appSettings:secretKey` | Ký JWT (≥ 32 ký tự). **Khác** `passwordKey` |
-| `appSettings:passwordKey` | AES mật khẩu user — **đúng 32 ký tự** |
+| `appSettings:secretKey` | Ký JWT (≥ 32 ký tự) |
+| `appSettings:environment` | `DEV` hoặc `PROD`. PROD mới kiểm license |
+| `appSettings:projectCode` | Mã dự án (khớp `nbdmda` / license) |
+| `appSettings:licenseEnforce` | `true` = WebApi chặn request khi license sai. Mặc định chỉ cảnh báo |
+| `appSettings:portalOrigins` | Origin WebPortal được CORS, vd `["http://localhost:5225"]` |
 | `connectionStrings:appConnectionString` | Chuỗi kết nối DB app |
 | `Security:KeyEncryptionKey` | Base64 32 byte — mã hóa `private_key` trong DB |
-| `Security:PortalKeyPath` | (Tuỳ chọn) PFX khóa RSA portal. Không khai → khóa tạm (đổi mỗi lần restart) |
-| `appSettings:portalOrigins` | Origin WebPortal được CORS, vd `["http://localhost:5225"]` |
 
-Ví dụ đầy đủ hơn:
+Ví dụ:
 
 ```json
 {
   "appSettings": {
     "secretKey": "thay-bang-chuoi-ngau-nhien-dai-hon-32",
-    "passwordKey": "0123456789abcdef0123456789abcdef",
+    "environment": "DEV",
+    "projectCode": "AQTC",
+    "licenseEnforce": false,
     "issuerToken": "FastRestApi",
     "maxRequestsPerMinute": "120",
     "isDevState": true,
@@ -74,27 +88,33 @@ Ví dụ đầy đủ hơn:
 }
 ```
 
-> Trên production: tắt `isDevState`, dùng HTTPS, ACL chặt cho file Local, không dùng khóa ephemeral cho portal.
+**WebPortal** — xem `WebPortal/appsettings.Local.example.json`. Cần PortalDb, QLDA (chỉ SELECT `nbdmda`), `Portal:AllowedApiRoots`, và (khi cấp license) PFX ECDSA P-256 ngoài repo.
+
+> Trên production: `environment=PROD`, tắt `isDevState`, dùng HTTPS, ACL chặt cho folder restApi và file Local.
 
 ### 2.3. Script SQL
 
-Trên DB app, chạy theo thứ tự:
+**DB dự án**, chạy theo thứ tự:
 
 | File | Việc |
 |---|---|
+| `sql/000_restApiBase.sql` | Bảng nền `restApiUser`, `restApiAllowForm`, `restApiAllowIp`, … |
 | `sql/001_restApi_CheckUnitRights.sql` | Kiểm quyền đơn vị |
 | `sql/002_restApiUser_private_key.sql` | Cột `private_key` |
-| `sql/003_restApiRevokedToken.sql` | JWT đã thu hồi |
+| `sql/003_restApiRevokedToken.sql` | JWT đã thu hồi (jti) |
 | `sql/004_restApiIdempotency.sql` | Chống ghi trùng |
 | `sql/005_restApi_GetUserRights.sql` | Một lượt lấy user + quyền + khóa |
-| `sql/006` … `008` | Log mới (khi đã triển khai đầy đủ pha log) |
+| `sql/006` … `008` | Log request / dọn / tìm |
+| `sql/009_restApiPortalSupport.sql` | `token_valid_after`, `restApiLicense`, chỉ mục log, bucket thời gian |
 
-Giả định đã có bảng nền `restApiUser`, `restApiAllowForm`, `restApiAllowIp`, … (từ bản v3/dev). Chỉ đụng object `restApi*`.
+Chỉ đụng object `restApi*`.
+
+**PortalDb:** `sql/portal/001_portalDb.sql` rồi `002_portalCustomize.sql`.
 
 ### 2.4. Chạy
 
 ```powershell
-dotnet run --project Api --launch-profile http
+dotnet run --project WebApi --launch-profile http
 # http://localhost:5143
 
 dotnet run --project WebPortal --launch-profile http
@@ -110,101 +130,54 @@ curl http://localhost:5143/api/_meta/server
 
 ---
 
-## 3. Chuẩn bị tài khoản
+## 3. Chuẩn bị tài khoản (WebPortal)
 
-`restApiUser` **không có cờ admin riêng**. Quyền quản trị đơn vị lấy từ FBO: `name_erp` → `userinfo2` / `vsysuserinfo` có `admin = 1`. Quyền form vẫn phải khai trong `restApiAllowForm` (không có dòng = không gọi được form).
+Không dùng CLI. Mọi user Api và quyền được tạo trên portal rồi **đẩy một chiều** xuống DB dự án.
 
-| Khái niệm | Ý nghĩa |
-|---|---|
-| `restApiUser.name` | Tên đăng nhập API / portal (khóa chính) |
-| `restApiUser.password` | Mật khẩu **portal** (AES `passwordKey`) — không dùng ký API |
-| `restApiUser.private_key` | Khóa HMAC ký request/response API |
-| `restApiUser.name_erp` | Phải khớp `userinfo2.name` (NSD FBO còn `status = '1'`) |
+### 3.1. Super Admin
 
-### 3.1. Khởi tạo user quản trị (bảng đang rỗng)
+1. Mở `/cpanel/setup` (chỉ khi chưa có SA).
+2. Đặt tên đăng nhập (không trùng bất kỳ Admin / user Api nào sau này) và mật khẩu ≥ 12 ký tự.
+3. Đăng nhập `/cpanel/login`. Lần đầu bắt buộc đổi mật khẩu.
+4. Tạo dự án: chọn mã từ `nbdmda` (`status = 1`), xác nhận `api_folder` (phải nằm dưới `AllowedApiRoots`, có `appsettings.Local.json` và `App_Data\Form`, kết nối SQL được, đã chạy `sql/009`).
+5. Cấp Admin dự án (tài khoản ngoài mapping FBO, không gọi được api).
 
-1. Trên FBO phải có sẵn NSD admin (thường `userinfo2.name = 'ADMIN'`, `admin = 1`, `status = '1'`).
-2. Tạo tài khoản API nối sang NSD đó (mật khẩu đặt qua biến môi trường, không ghi trên dòng lệnh):
+### 3.2. Admin dự án — cấp user Api
 
-```powershell
-# Xem trước (không ghi)
-$env:RESTAPI_PASSWORD = 'DoiMatKhauNgay'
-dotnet run --project Cli -- create-user `
-  --config Api/appsettings.Local.json `
-  --user APIADMIN `
-  --name-erp ADMIN `
-  --password-env RESTAPI_PASSWORD `
-  --forms getCustomer,setSaleInvoice,setTemplate `
-  --issue-key
+Đăng nhập `/{maDa}/login`. Trong một dự án, tên Admin và tên user Api không trùng nhau. Tên đăng nhập là duy nhất toàn portal.
 
-# Ghi thật
-dotnet run --project Cli -- create-user `
-  --config Api/appsettings.Local.json `
-  --user APIADMIN `
-  --name-erp ADMIN `
-  --password-env RESTAPI_PASSWORD `
-  --forms getCustomer,setSaleInvoice,setTemplate `
-  --issue-key `
-  --apply
+1. Tạo user: `user_name`, mật khẩu ≥ 12, `name_erp` chọn từ NSD FBO đang hoạt động (`vsysuserinfo`).
+2. Cấp form: để trống = **mọi form đang bật** trong `App_Data\Form`. Có khai = đúng danh sách. Lưu danh sách rỗng phải xác nhận trên UI.
+3. Cấp IP: cùng quy tắc (rỗng = mọi IP).
+4. Cấp hoặc xoay `private_key` — hiện **một lần**. Giao cho đối tác qua kênh an toàn.
+5. Thu hồi token: ghi `token_valid_after` trên DB dự án; JWT cũ bị WebApi từ chối.
 
-Remove-Item Env:RESTAPI_PASSWORD
-```
+NSD FBO `admin = 1` luôn được mọi form (hành vi WebApi).
 
-- Portal: đăng nhập `APIADMIN` + mật khẩu vừa đặt.
-- API: dùng `private_key` in ra **một lần** khi có `--issue-key`.
-- `--forms`: tên file XML không đuôi. Bổ sung form sau bằng SQL `INSERT restApiAllowForm`.
+### 3.3. User Api trên portal
 
-### 3.2. Cấp user / mật khẩu cho đối tác thường
+Đăng nhập `/{maDa}/login`: xem hướng dẫn, form được cấp, mã lỗi, gọi thử (CORS), thu hồi token của mình, xem key sau khi nhập lại mật khẩu.
 
-NSD FBO thường (`admin = 0`) phải tồn tại trước; quyền đơn vị theo `sysunitrights` của NSD đó.
+### 3.4. Một phiên mỗi tài khoản
 
-```powershell
-$env:RESTAPI_PASSWORD = 'MatKhauDoiTac'
-dotnet run --project Cli -- create-user `
-  --config Api/appsettings.Local.json `
-  --user DOITAC01 `
-  --name-erp NVKD01 `
-  --password-env RESTAPI_PASSWORD `
-  --forms getCustomer,setSaleInvoice `
-  --issue-key `
-  --apply
-Remove-Item Env:RESTAPI_PASSWORD
-```
+Đăng nhập đúng mật khẩu mà đang có phiên hiệu lực:
 
-Giao cho đối tác:
+1. Portal hiện cảnh báo (IP, thời điểm, trình duyệt của phiên cũ) và tạo challenge 2 phút.
+2. Phiên cũ tự hỏi `/session/notice` mỗi 30 giây và hiện banner.
+3. Đồng ý → phiên cũ bị thu hồi (`replaced`), phiên mới được tạo trong một transaction.
+4. Không đồng ý hoặc quá hạn → challenge hủy, phiên cũ giữ nguyên.
 
-1. `name` + mật khẩu portal (vào WebPortal).
-2. `private_key` (base64) — kênh an toàn; dùng ký HMAC / lấy JWT API.
+Đổi mật khẩu, khóa tài khoản hoặc SA ép thoát: thu hồi mọi phiên của tài khoản đó.
 
-Đổi mật khẩu portal sau này:
+### 3.5. Báo lệch và đồng bộ lại
 
-```powershell
-$env:RESTAPI_PASSWORD = 'MatKhauMoi'
-dotnet run --project Cli -- set-password --config Api/appsettings.Local.json --user DOITAC01 --password-env RESTAPI_PASSWORD --apply
-Remove-Item Env:RESTAPI_PASSWORD
-```
-
-Chỉ cấp / xoay `private_key` (đã có user):
-
-```powershell
-dotnet run --project Cli -- issue-key --config Api/appsettings.Local.json --user DOITAC01 --apply
-# đã có khóa: thêm --rotate
-```
-
-(Tuỳ chọn) `restApiAllowIp` — không khai thì cho mọi IP; có khai thì chỉ các IP đó.
-
-### 3.3. Mã hóa lại mật khẩu (khi tách `passwordKey` khỏi `secretKey` cũ)
-
-```powershell
-dotnet run --project Cli -- rekey-passwords --config Api/appsettings.Local.json
-dotnet run --project Cli -- rekey-passwords --config Api/appsettings.Local.json --apply
-```
+Nếu ai đó sửa thẳng `restApiUser` / `restApiAllowForm` / `restApiAllowIp` trên DB dự án, lần đẩy sau sẽ ghi đè. Admin bấm **Đồng bộ lại** hoặc xem **Báo lệch** (chỉ đọc). Lỗi đẩy thì portal giữ thay đổi và gắn `sync_error`.
 
 ---
 
 ## 4. Bảo mật thông điệp (đối tác bắt buộc)
 
-Mọi request nghiệp vụ và `/api/auth/token`, `/api/_meta/ping`, … (trừ `GET /api/_meta/server` và health) cần:
+Mọi request nghiệp vụ và `/api/auth/token`, `/api/_meta/ping` (trừ `GET /api/_meta/server` và health) cần:
 
 | Header | Nội dung |
 |---|---|
@@ -234,15 +207,6 @@ signature = hex(HMAC-SHA256(K_request, UTF8(message)))
 
 Header response: `X-Request-ID`, `X-Fast-Signature` (= HMAC-SHA256(K_response, md5Hex(body response) + nonce của request)).
 
-```
-canonical =
-  "FAST-HMAC-SHA256-RESPONSE" + "\n" +
-  STATUS + "\n" + REQUEST_ID + "\n" + REQUEST_NONCE + "\n" +
-  TIMESTAMP + "\n" + sha256Hex(responseBody)
-
-signature = hex(HMAC-SHA256(K_response, UTF8(canonical)))
-```
-
 Response **không có** chữ ký (thường lỗi JWT/user sớm) → không tin nội dung.
 
 ### 4.4. Vector thử cố định
@@ -256,16 +220,7 @@ Dùng để kiểm client tự viết (cùng giá trị trong `Tests/MessageSign
 | Nonce | `1792574400-9b2e4c1f0a7d4e3b` |
 | `X-Fast-Signature` (request) | `9f79234564e12b262c72b20339c00b520874f00efe9678cf5be7052c920339ac` |
 
-Chạy mẫu C# (file top-level statements; tạo project tạm hoặc chạy theo hướng dẫn trong comment đầu file):
-
-```powershell
-# Vector thử (không cần server):
-#   mở WebPortal/wwwroot/samples/FastSign.cs — hàm TestVector() chạy khi start
-# Gọi thật:
-#   dotnet run -- <base_url> <user> <private_key_base64>
-```
-
-Có sẵn Python / Java / Node / shell trong cùng thư mục `samples/`.
+Có sẵn C# / Python / Java / Node / shell trong `WebPortal/wwwroot/samples/`.
 
 ---
 
@@ -356,10 +311,11 @@ POST /api/sale-invoice?unitCode=CTY&dryRun=true
 ```http
 POST /api/_meta/ping
 Authorization: Bearer <jwt>
-…
 ```
 
 ### Bước E — Thu hồi token
+
+Một JWT hiện tại:
 
 ```http
 POST /api/auth/revoke
@@ -368,7 +324,7 @@ X-Fast-Nonce: …
 X-Fast-Signature: …
 ```
 
-Body có thể rỗng (vẫn ký với md5 của body rỗng).
+Mọi JWT của user: Admin (hoặc chính user Api) bấm thu hồi trên WebPortal / PortalApp — WebApi chặn theo `iat` và `token_valid_after`.
 
 ---
 
@@ -421,15 +377,20 @@ Một số mã lỗi thường gặp: `INVALID_SIGNATURE`, `TIMESTAMP_EXPIRED`, 
 
 ---
 
-## 7. Portal đối tác (WebPortal)
+## 7. WebPortal
 
-1. Mở WebPortal (vd `http://localhost:5225`), cấu hình base URL API nếu trang yêu cầu.
-2. Đăng nhập bằng `restApiUser.name` + mật khẩu: trình duyệt lấy `portalKey` từ `/api/_meta/server`, mã hóa RSA-OAEP, gọi `POST /api/auth/portal`.
-3. JWT `scope=portal` **chỉ** đọc `/api/_meta/*` — không gọi nghiệp vụ.
-4. Xem danh sách tài nguyên, chi tiết field, mẫu JSON, bảng lỗi.
-5. **Gọi thử:** dán `private_key` vào ô (chỉ giữ trong bộ nhớ trang) → lấy JWT API → ký HMAC → gửi `dryRun` hoặc gửi thật.
+Hai cổng, chỉ hai ô user/pass:
 
-Code mẫu tải từ trang portal hoặc thư mục `WebPortal/wwwroot/samples/`.
+| URL | Ai |
+|---|---|
+| `/cpanel/login` | Đúng một Super Admin |
+| `/{maDa}/login` | Admin dự án hoặc user Api. `maDa` phải có trong `nbdmda` (status = 1) và đã khai `portalProject`. Sai → 404 chung |
+
+Mã dành riêng, không dùng làm mã dự án: `cpanel`, `login`, `logout`, `css`, `js`, `lib`, `samples`, `error`, `session`, `api`, `health`.
+
+Gọi thử API từ trang user Api: trình duyệt ký HMAC bằng `private_key` (chỉ giữ trong bộ nhớ trang), gửi sang WebApi qua CORS. Không còn `POST /api/auth/portal` hay JWT `scope=portal`.
+
+Code mẫu tải từ trang hoặc `WebPortal/wwwroot/samples/`.
 
 ---
 
@@ -468,64 +429,83 @@ Gợi ý:
 
 Mẫu tham khảo: `getCustomer.xml`, `setSaleInvoice.xml`, `setTemplate.xml`.
 
+Admin sửa form trên WebPortal (revision + publish) hoặc copy file vào `App_Data\Form` rồi restart WebApi. Cấp `restApiAllowForm` (hoặc để rỗng = mọi form) cho tên form mới.
+
 ### 8.2. Nâng form v2 → v3
 
-```powershell
-dotnet run --project Cli -- upgrade "D:\path\to\App_Data\FastAPI" --config "Api\appsettings.Local.json" --out "Api\App_Data\Form"
-```
+Trên WebPortal (màn Forms) hoặc PortalApp: chọn thư mục FastAPI 2.4.7, xuất `<import>` v3.
 
-- Đọc form FastAPI 2.4.7 (`<import>` phẳng, entity `Include\*.txt`), xuất `<import>` v3, giữ tên file.
+- Đọc form FastAPI 2.4.7 (`<import>` phẳng, entity `Include\*.txt`), giữ tên file.
 - Tên field đổi sang camelCase; `justContent` thành `check`; field `cacheID` bị bỏ.
-- `--config` (chỉ đọc DB) để tách `master`/`detail` của chứng từ theo cột thật của `m??$000000` / `d??$000000`. Không có thì mọi field vào `master`.
+- Có kết nối DB thì tách `master`/`detail` của chứng từ theo cột thật của `m??$000000` / `d??$000000`. Không có thì mọi field vào `master`.
 - **Processing không tự chuyển được**: v2 gọi proc `api_*` đọc `#_data`. Query v2 được giữ làm chú thích, processing trả `ERROR` tới khi bạn viết lại.
-- In ghi chú cần xem lại. Không có `--out` → chỉ in ra màn hình.
-
-Sau khi copy XML mới: restart Api (form nạp lúc khởi động). Cấp `restApiAllowForm` cho tên form mới.
 
 ---
 
-## 9. Vận hành
+## 9. PortalApp trên PROD
+
+Đặt `PortalApp.exe` ngay trong folder restApi (cùng `appsettings.json` / `appsettings.Local.json`). Không có ô nhập connection string, không có đăng nhập.
+
+1. **License:** tạo `license-request.json` → gửi SA/Admin trên WebPortal → nhận `restApi.lic` → nạp vào folder. Chưa hợp lệ thì chỉ còn màn yêu cầu / nạp license.
+2. **Setup wizard:** preflight, chạy `sql/000`–`009`, sinh secret, IIS, ghi `projectCode`.
+3. User Api, form/IP (rỗng = tất cả), cấp/xoay key, thu hồi token.
+4. Log / hiệu suất; áp gói từ portal (nhập SHA-256).
+
+Bảo vệ bằng ACL Windows của folder (Administrators + App Pool). Mọi thao tác ghi `restApiAudit` kèm `DOMAIN\User` và tên máy. Bước cần quyền máy (IIS, ACL) chạy với Administrator (UAC).
+
+Ở PROD, PortalApp ghi thẳng DB dự án — ngoại lệ có chủ đích vì máy khách không gọi được WebPortal.
+
+---
+
+## 10. Vận hành
 
 | Việc | Cách |
 |---|---|
-| Health | `GET /health/live` (tiến trình), `GET /health/ready` (SQL + thư mục log) |
+| Health | `GET /health/live` (tiến trình), `GET /health/ready` (SQL + thư mục log + license khi PROD) |
 | Log file | Mặc định `%ProgramData%\FastRestApi\Logs\api-*.log`; gắn `X-Request-ID` |
 | Rate limit | Theo user đã xác thực (hoặc IP trước khi có JWT); vượt → `429 TOO_MANY_REQUESTS` |
-| Đổi `private_key` | `issue-key --rotate --apply` + đối tác cập nhật |
-| Thu hồi phiên | Client gọi `/api/auth/revoke`; hoặc đợi JWT hết hạn |
+| Đổi `private_key` | WebPortal / PortalApp xoay key + đối tác cập nhật |
+| Thu hồi một JWT | Client gọi `/api/auth/revoke` |
+| Thu hồi mọi JWT của user | Portal / PortalApp → `token_valid_after` |
+| Bản phát hành | `build/release.ps1` (Obfuscar + `integrity.json`) |
 
 Production checklist ngắn:
 
 1. HTTPS, Hosting Bundle .NET 10, App Pool No Managed Code.
-2. Bí mật ngoài Git; PFX portal hoặc Certificate Store.
-3. SQL script đã áp; quyền DDL không cần trên runtime (chỉ lúc cài).
-4. `isDevState=false`; `portalOrigins` đúng origin thật.
-5. Backup `appsettings.Local.json` và khóa PFX riêng, ACL hẹp.
+2. Bí mật ngoài Git; PFX license hoặc Certificate Store (`LocalMachine\My`).
+3. SQL `000`–`009` đã áp; quyền DDL không cần trên runtime (chỉ lúc cài).
+4. `environment=PROD`; `projectCode` khớp; `restApi.lic` cạnh `appsettings.json`.
+5. Folder restApi: ACL hẹp. Backup `appsettings.Local.json` và PFX riêng.
 
 ---
 
-## 10. Gỡ lỗi nhanh
+## 11. Gỡ lỗi nhanh
 
 | Triệu chứng | Hướng xử lý |
 |---|---|
-| Api không start: thiếu `secretKey` / connection / `passwordKey` | Kiểm `appsettings.Local.json` |
+| WebApi không start: thiếu `secretKey` / connection | Kiểm `appsettings.Local.json` |
 | `401 INVALID_SIGNATURE` | Sai `private_key`, body đã đổi sau khi ký, hoặc hex hoa/thường lệch quy ước |
 | `401 TIMESTAMP_EXPIRED` / `NONCE_REUSED` | Đồng bộ `serverTime`; mỗi request một nonce mới |
-| `403 FORBIDDEN` | Có khai `restApiAllowForm` nhưng không có form này (admin FBO hoặc không khai thì được mọi form) |
+| `401` sau khi thu hồi mọi token | JWT có `iat` trước `token_valid_after` — lấy token mới |
+| `403 FORBIDDEN` | Có khai form/IP nhưng không khớp (admin FBO hoặc không khai thì được mọi form / mọi IP) |
 | `400 UNIT_REQUIRED` / `UNIT_DENIED` | Thêm `?unitCode=`; kiểm `sysunitrights` / admin FBO |
 | `400 INVALID_SHAPE` | Sai cấu trúc JSON (thiếu khối bắt buộc, detail không phải mảng, …) |
-| Portal login fail sau restart | Đang dùng khóa RSA ephemeral — khai `PortalKeyPath` hoặc `PortalKeyThumbprint` |
+| `/cpanel` 404 / không vào được dự án | Mã không có trong `nbdmda` status = 1, hoặc trùng đoạn URL dành riêng |
+| Đồng bộ lỗi | Xem `sync_error`; kiểm `AllowedApiRoots`, quyền đọc folder, SQL login |
+| PortalApp chỉ còn màn license | Sai chữ ký, sai MAC, sai `projectCode`, hết hạn, hoặc đồng hồ bị chỉnh lùi |
 | Form không thấy route | Tên file không tách được verb/resource, hoặc XML lỗi lúc nạp (xem log khởi động) |
 
 ---
 
-## 11. Liên kết nhanh
+## 12. Liên kết nhanh
 
 | Nhu cầu | Đến đâu |
 |---|---|
-| Đặc tả đầy đủ | [KE_HOACH.md](KE_HOACH.md) |
+| ADR kiến trúc portal | [ADR-0001](adr/ADR-0001-portal-cpanel-portalapp.md) |
+| Đặc tả giao thức API | [KE_HOACH.md](KE_HOACH.md) |
 | README repo | [../README.md](../README.md) |
 | Mẫu ký C#/Python/… | `WebPortal/wwwroot/samples/` |
 | Vector chữ ký trong test | `Tests/MessageSignatureTests.cs` |
-| Client mẫu trong test | `Tests/Sample/FastApiSigner.cs` |
-| Script DB | `sql/` |
+| License / phiên / quyền | `Tests/LicenseTests.cs`, `Tests/SessionServiceTests.cs`, `Tests/PortalAccessTests.cs` |
+| Script DB dự án | `sql/` |
+| Script PortalDb | `sql/portal/` |

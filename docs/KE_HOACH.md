@@ -2,6 +2,8 @@
 
 **Cập nhật:** 23/10/2026 · v3 = repo này (`huunguyenit/RestApiCore`), phát triển tiếp, không dựng mới. v2 = FastAPI 2.4.7 (VB, `D:\Fast Source\API\FastAPI 2.4.7`).
 
+> Tên project và cổng quản trị đã đổi (24/10/2026): `Api` → `WebApi`, bỏ CLI, WebPortal `/cpanel` + `/{maDa}`, PROD dùng PortalApp có license. Xem [ADR-0001](adr/ADR-0001-portal-cpanel-portalapp.md) và [HUONG_DAN_SU_DUNG.md](HUONG_DAN_SU_DUNG.md). Phần giao thức API (HMAC, JWT, XML, route form) bên dưới vẫn đúng.
+
 ## 0. Quyết định đã chốt
 
 | Hạng mục | Quyết định |

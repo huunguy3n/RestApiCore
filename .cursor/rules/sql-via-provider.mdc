@@ -1,0 +1,50 @@
+---
+description: Mọi kết nối và lệnh SQL Server phải đi qua Provider — không new SqlConnection/SqlCommand/SqlBulkCopy ngoài Provider
+globs: "**/*.{cs,csproj}"
+alwaysApply: true
+---
+
+# SQL qua Provider.dll (hard)
+
+## Hai bản Provider
+
+| Phạm vi | Đường dẫn | API |
+|---|---|---|
+| RestApiCore (net10): WebApi, WebPortal, PortalApp, DataAccess, Business | `RestApiCore/Provider` → `Provider.SqlDatabase` | `OpenConnectionAsync`, `BeginTransactionAsync`, `ExecuteAsync`, `ExecuteScalarAsync`, `RetrieveAsync`, `BulkAsync` |
+| WebProject FBO (.NET Framework) | `D:\Fast Source\Development\Provider` → `Provider.Provider` | `OpenConn` / `CloseConn`, `Execute`, `Retrieve`, `Bulk` |
+
+Hai bản **không** thay thế nhau. WebProject **không** tham chiếu Provider net10 của RestApiCore.
+
+## Quy tắc
+
+- **BẮT BUỘC** mở / chạy SQL qua Provider tương ứng (bảng trên).
+- **KHÔNG ĐƯỢC** ngoài code của chính Provider:
+  - `new SqlConnection(...)`
+  - `new SqlCommand(...)`
+  - `new SqlBulkCopy(...)`
+  - `ExecuteScalar` / `ExecuteNonQuery` / `ExecuteReader` trực tiếp trên command tự tạo
+- Sau `OpenConnectionAsync` / `OpenConn` vẫn chỉ gọi API Provider (`ExecuteAsync`, `RetrieveAsync`, …) — không tự dựng command.
+- Được phép dùng `SqlConnectionStringBuilder` chỉ để *dựng* chuỗi (setup wizard); *mở* vẫn qua Provider.
+- `SqlParameter` / bắt `SqlException` (hoặc `DatabaseException.InnerException`) vẫn dùng bình thường.
+- Reference WebProject: HintPath tới `..\..\Provider\Provider\bin\Release\Provider.dll` (= `D:\Fast Source\Development\Provider`), `Private=False` (program FBO đã có sẵn trong `bin`).
+
+## Ví dụ
+
+```csharp
+// ❌ BAD
+using (SqlConnection c = new SqlConnection(cs)) { c.Open(); ... }
+await using var c = await db.OpenConnectionAsync();
+await using var cmd = new SqlCommand("SELECT 1", c); // vẫn cấm
+
+// ✅ RestApiCore net10
+var db = new SqlDatabase(cs, 30);
+object? n = await db.ExecuteScalarAsync("SELECT 1", ct);
+DataSet ds = await db.RetrieveAsync("SELECT 1 AS x", ct);
+await using SqlConnection c = await db.OpenConnectionAsync(ct);
+await using SqlTransaction tx = await db.BeginTransactionAsync(c, ct);
+await db.ExecuteAsync(c, tx, "INSERT ...", ct, param);
+
+// ✅ WebProject FBO
+DataSet ds = global::Provider.Provider.Retrieve(cs, "SELECT 1 AS x");
+global::Provider.Provider.Execute(cs, "INSERT ...", param);
+```

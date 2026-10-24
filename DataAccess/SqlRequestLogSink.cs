@@ -43,23 +43,23 @@ namespace DataAccess
             }
 
             await using var connection = await database.OpenConnectionAsync(cancellationToken);
-            await using var transaction = (SqlTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            await using var transaction = await database.BeginTransactionAsync(connection, cancellationToken);
 
             if (bodies.Rows.Count > 0)
             {
                 // Body: qua bảng tạm rồi chỉ thêm SHA256 chưa có (loại trùng giữa các lô)
-                await ExecuteAsync(connection, transaction, "CREATE TABLE #log_body (sha256 CHAR(64) NOT NULL PRIMARY KEY, created_at DATETIME NOT NULL, size INT NOT NULL, content VARBINARY(MAX) NOT NULL)", cancellationToken);
-                await BulkAsync(connection, transaction, bodies, "#log_body", cancellationToken);
-                await ExecuteAsync(connection, transaction, """
+                await database.ExecuteAsync(connection, transaction, "CREATE TABLE #log_body (sha256 CHAR(64) NOT NULL PRIMARY KEY, created_at DATETIME NOT NULL, size INT NOT NULL, content VARBINARY(MAX) NOT NULL)", cancellationToken);
+                await database.BulkAsync(connection, transaction, bodies, "#log_body", cancellationToken);
+                await database.ExecuteAsync(connection, transaction, """
                     INSERT INTO dbo.restApiLogBody (sha256, created_at, size, content)
                         SELECT a.sha256, a.created_at, a.size, a.content FROM #log_body a
                             WHERE NOT EXISTS (SELECT 1 FROM dbo.restApiLogBody b WHERE b.sha256 = a.sha256)
                     """, cancellationToken);
             }
-            await BulkAsync(connection, transaction, requests, "dbo.restApiLogReq", cancellationToken);
+            await database.BulkAsync(connection, transaction, requests, "dbo.restApiLogReq", cancellationToken);
             if (attacks.Rows.Count > 0)
             {
-                await BulkAsync(connection, transaction, attacks, "dbo.restApiLogAttack", cancellationToken);
+                await database.BulkAsync(connection, transaction, attacks, "dbo.restApiLogAttack", cancellationToken);
             }
 
             await transaction.CommitAsync(cancellationToken);
@@ -150,20 +150,5 @@ namespace DataAccess
             return table;
         }
 
-        private async Task ExecuteAsync(SqlConnection connection, SqlTransaction transaction, string sql, CancellationToken cancellationToken)
-        {
-            await using var command = new SqlCommand(sql, connection, transaction) { CommandTimeout = database.CommandTimeout };
-            await command.ExecuteNonQueryAsync(cancellationToken);
-        }
-
-        private async Task BulkAsync(SqlConnection connection, SqlTransaction transaction, DataTable table, string destination, CancellationToken cancellationToken)
-        {
-            using var bulk = new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction) { DestinationTableName = destination, BulkCopyTimeout = database.CommandTimeout };
-            foreach (DataColumn column in table.Columns)
-            {
-                bulk.ColumnMappings.Add(column.ColumnName, column.ColumnName);
-            }
-            await bulk.WriteToServerAsync(table, cancellationToken);
-        }
     }
 }

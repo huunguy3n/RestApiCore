@@ -1,0 +1,52 @@
+@page "/cpanel/audit"
+@model WebPortal.Pages.Cpanel.AuditModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Nhật ký";
+    ViewData["Crumb"] = "Mọi thao tác trên portal, kể cả bị từ chối (không chứa mật khẩu, khóa, connection string)";
+}
+<form method="get" class="adm__bar">
+    <input type="date" name="from" value="@Model.From.ToString("yyyy-MM-dd")" />
+    <input type="date" name="to" value="@Model.To.AddDays(-1).ToString("yyyy-MM-dd")" />
+    <select name="project">
+        <option value="">Mọi dự án</option>
+        @foreach (var p in Model.Projects)
+        {
+            <option value="@p.Id" selected="@(Model.Project == p.Id)">@p.MaDa</option>
+        }
+    </select>
+    <input name="actor" value="@Model.Actor" placeholder="Tài khoản" maxlength="64" />
+    <input name="action" value="@Model.ActionPrefix" placeholder="Hành động (tiền tố)" maxlength="64" />
+    <select name="outcome">
+        <option value="">Mọi kết quả</option>
+        @foreach (var o in new[] { "SUCCESS", "DENIED", "REJECTED", "FAILED" })
+        {
+            <option value="@o" selected="@(Model.Outcome == o)">@o</option>
+        }
+    </select>
+    <button type="submit" class="adm__btn adm__btn--small">Lọc</button>
+</form>
+<p class="adm__crumb">@Model.Result.Total dòng</p>
+<table class="adm__table">
+    <thead><tr><th>Thời gian</th><th>Loại</th><th>Người</th><th>Dự án</th><th>Hành động</th><th>Đối tượng</th><th>Kết quả</th><th>IP</th><th>Chi tiết</th></tr></thead>
+    <tbody>
+    @foreach (var e in Model.Result.Items)
+    {
+        <tr>
+            <td>@e.At.ToString("yyyy-MM-dd HH:mm:ss")</td>
+            <td>@e.ActorType @(e.ActingAs != null ? "(thay Admin)" : "")</td>
+            <td>@e.ActorLogin</td>
+            <td>@e.ProjectCode</td>
+            <td>@e.Action</td>
+            <td>@e.Target</td>
+            <td><span class="adm__chip adm__chip--@e.Outcome.ToLowerInvariant()">@e.Outcome</span></td>
+            <td>@e.IpAddress</td>
+            <td>@e.Detail</td>
+        </tr>
+    }
+    </tbody>
+</table>
+@if (Model.Result.Total > Model.PageNumber * WebPortal.Pages.Cpanel.AuditModel.PageSize)
+{
+    <p><a href="@Model.NextUrl">Trang sau →</a></p>
+}

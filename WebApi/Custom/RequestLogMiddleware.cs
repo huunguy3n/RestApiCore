@@ -19,7 +19,7 @@ namespace Web.Custom
         public const string SignatureResultItem = "signatureResult";
 
         /// <summary>Route trả JWT trong body</summary>
-        private static readonly string[] TokenPaths = ["/api/auth/token", PortalEndpoints.PortalPath, "/api/auth"];
+        private static readonly string[] TokenPaths = ["/api/auth/token", "/api/auth"];
 
         public async Task Invoke(HttpContext context)
         {
@@ -64,9 +64,7 @@ namespace Web.Custom
             string? userName = signer?.Name ?? NullIfAnonymous(IpAccessMiddleware.GetUserName(context.User));
 
             string? resultCode = ResultCode(context.Response.ContentType, responseBody);
-            // auth/portal: request chứa mật khẩu mã hóa bằng khóa server, không lưu (người giữ khóa riêng giải được)
-            bool isPortalLogin = request.Path.StartsWithSegments(PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase);
-            (byte[]? keptRequest, string? requestSha) = isPortalLogin ? (null, null) : Keep(requestBody);
+            (byte[]? keptRequest, string? requestSha) = Keep(requestBody);
             (byte[]? keptResponse, string? responseSha) = isToken ? (null, null) : Keep(responseBody);
 
             return new RequestLogEntry

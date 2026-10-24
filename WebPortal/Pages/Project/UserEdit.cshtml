@@ -1,0 +1,59 @@
+@page "/{maDa:projectcode}/users/{id:int}"
+@model WebPortal.Pages.Project.UserEditModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "User Api " + Model.ApiUser?.UserName;
+    ViewData["Crumb"] = "Map NSD FBO, quyền form/IP, khóa, mật khẩu, private_key, thu hồi token";
+}
+@if (Model.IssuedKey != null)
+{
+    <section class="adm__panel" aria-live="polite">
+        <h2>private_key mới của @Model.IssuedKey.UserName</h2>
+        <p class="adm__warn">Chỉ hiện một lần. Giao cho đối tác qua kênh an toàn; khóa cũ đã hết hiệu lực.</p>
+        <pre class="adm__code">@Model.IssuedKey.PrivateKeyBase64</pre>
+    </section>
+}
+@if (Model.ApiUser != null)
+{
+    var u = Model.ApiUser;
+    <p>Đồng bộ: @(u.InSync ? $"OK lúc {u.SyncedAt:yyyy-MM-dd HH:mm}" : "CHƯA đồng bộ" + (u.SyncError != null ? ": " + u.SyncError : ""))
+        @if (Model.Remote != null)
+        {
+            <span> · Trên dự án: u_id @Model.Remote.UId, @(Model.Remote.HasKey ? $"đã cấp khóa {Model.Remote.KeyIssuedAt:yyyy-MM-dd HH:mm}" : "chưa cấp khóa")@(Model.Remote.TokenValidAfter != null ? $", thu hồi token lúc {Model.Remote.TokenValidAfter:yyyy-MM-dd HH:mm} UTC" : "")</span>
+        }
+    </p>
+    <form method="post" asp-page-handler="Save" class="adm__form">
+        <label for="nameErp">NSD FBO (name_erp)</label>
+        <select id="nameErp" name="nameErp">
+            <option value="@u.NameErp">@u.NameErp (hiện tại)</option>
+            @foreach (var e in Model.ErpUsers.Where(e => !string.Equals(e.Name, u.NameErp, StringComparison.OrdinalIgnoreCase)))
+            {
+                <option value="@e.Name">@e.Name @(e.Admin ? "(admin FBO: được mọi form)" : "")</option>
+            }
+        </select>
+        <label for="displayName">Tên hiển thị / đối tác</label>
+        <input id="displayName" name="displayName" value="@u.DisplayName" maxlength="100" />
+        <label><input type="checkbox" name="active" value="true" @(u.Active ? "checked" : "") /> Hoạt động (bỏ chọn = khóa, thu hồi mọi token và phiên)</label>
+        <partial name="_RightsFields" model="@((string.Join(Environment.NewLine, u.Forms), string.Join(Environment.NewLine, u.Ips.Select(i => i.Description == null ? i.Ip : i.Ip + " " + i.Description))))" />
+        <button type="submit" class="adm__btn">Lưu và đồng bộ</button>
+    </form>
+
+    <div class="adm__bar">
+        <form method="post" asp-page-handler="Key" class="adm__inline">
+            <button type="submit" class="adm__btn">@(Model.Remote?.HasKey == true ? "Xoay private_key" : "Cấp private_key")</button>
+        </form>
+        <form method="post" asp-page-handler="Revoke" class="adm__inline">
+            <button type="submit" class="adm__btn adm__btn--ghost">Thu hồi mọi token</button>
+        </form>
+        <form method="post" asp-page-handler="Sync" class="adm__inline">
+            <button type="submit" class="adm__btn adm__btn--ghost">Đồng bộ lại</button>
+        </form>
+    </div>
+
+    <form method="post" asp-page-handler="Password" class="adm__form">
+        <label for="password">Đặt lại mật khẩu đăng nhập portal</label>
+        <input id="password" name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" required />
+        <button type="submit" class="adm__btn adm__btn--ghost">Đặt lại</button>
+    </form>
+}
+<p><a href="/@Model.MaDa/users">← Danh sách user Api</a></p>

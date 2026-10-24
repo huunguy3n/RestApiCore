@@ -1,0 +1,47 @@
+@model WebPortal.Pages.PortalPageModel
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>@ViewData["Title"] - @Model.Brand</title>
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+</head>
+<body class="adm">
+    <aside class="adm__side" aria-label="Điều hướng">
+        <span class="adm__brand">@Model.Brand</span>
+        <nav class="adm__nav">
+            @foreach (var item in Model.Nav)
+            {
+                <a href="@item.Href" class="@(item.Key == Model.NavKey ? "is-active" : "")">@item.Text</a>
+            }
+        </nav>
+    </aside>
+    <div class="adm__main">
+        <header class="adm__top">
+            <div>
+                <h1 class="adm__title">@ViewData["Title"]</h1>
+                <p class="adm__crumb">@ViewData["Crumb"]</p>
+            </div>
+            @if (Model.Identity != null)
+            {
+                <form method="post" action="@Model.LogoutUrl" class="adm__user">
+                    <span>@Model.Identity.Login <span class="adm__chip">@(Model.Identity.Kind switch { "SA" => "Super Admin", "ADMIN" => "Admin dự án", _ => "Tài khoản Api" })</span></span>
+                    <button type="submit" class="adm__btn adm__btn--ghost">Đăng xuất</button>
+                </form>
+            }
+        </header>
+        <p id="session-notice" class="adm__alert" role="alert" hidden></p>
+        <main class="adm__content">
+            <partial name="_Flash" model="@((Model.Flash, Model.FlashError))" />
+            @RenderBody()
+        </main>
+    </div>
+    @if (Model.Identity != null && Model.NoticeUrl != null)
+    {
+        <script src="~/js/session-notice.js" asp-append-version="true" data-notice-url="@Model.NoticeUrl"></script>
+    }
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

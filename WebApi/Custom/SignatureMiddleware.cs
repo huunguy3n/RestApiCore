@@ -8,7 +8,7 @@ namespace Web.Custom
 {
     /// <summary>
     /// Điều phối chữ ký cho /api (KE_HOACH 4.2.3, 4.2.4): route nào phải ký, xác định user và khóa (body auth/token hoặc JWT + thu hồi),
-    /// chính sách JWT portal, đếm khóa đăng nhập, đọc body có giới hạn, đệm và ký response. Kiểm nonce/HMAC/phát lại và tính chữ ký
+    /// đếm khóa đăng nhập, đọc body có giới hạn, đệm và ký response. Kiểm nonce/HMAC/phát lại và tính chữ ký
     /// response ở MessageAuthenticator. Lỗi trước khi biết khóa của user thì trả không ký; từ khi có khóa, mọi response (kể cả lỗi) đều ký
     /// </summary>
     public class SignatureMiddleware(RequestDelegate next, AppConfig appConfig, ISignerKeyStore keyStore, IRevokedTokenStore revokedTokens,
@@ -30,21 +30,9 @@ namespace Web.Custom
             {
                 return false;
             }
-            // Không cần token, không ký: giờ server + khóa công khai portal; đăng nhập portal (mật khẩu mã hóa RSA, không có private_key)
-            return !(HttpMethods.IsGet(context.Request.Method) && context.Request.Path.Equals("/api/_meta/server", StringComparison.OrdinalIgnoreCase)
-                || HttpMethods.IsPost(context.Request.Method) && context.Request.Path.Equals(PortalEndpoints.PortalPath, StringComparison.OrdinalIgnoreCase));
+            // Không cần token, không ký: giờ server để client đồng bộ timestamp của nonce
+            return !(HttpMethods.IsGet(context.Request.Method) && context.Request.Path.Equals("/api/_meta/server", StringComparison.OrdinalIgnoreCase));
         }
-
-        /// <summary>
-        /// JWT scope=portal chỉ đọc GET /api/_meta/* (trừ ping, dùng để thử ký); không ký request/response vì trình duyệt không giữ private_key
-        /// </summary>
-        public static bool PortalMayCall(HttpContext context) =>
-            HttpMethods.IsGet(context.Request.Method)
-            && context.Request.Path.StartsWithSegments("/api/_meta", StringComparison.OrdinalIgnoreCase)
-            && !context.Request.Path.StartsWithSegments("/api/_meta/ping", StringComparison.OrdinalIgnoreCase)
-            // Quản trị portal: quyền kiểm theo vai trò ở từng handler (PortalAdminEndpoints), không ở đây
-            || (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsPut(context.Request.Method))
-            && context.Request.Path.StartsWithSegments(PortalAdminEndpoints.BasePath, StringComparison.OrdinalIgnoreCase);
 
         public async Task Invoke(HttpContext context)
         {
@@ -63,20 +51,6 @@ namespace Web.Custom
             {
                 context.Items[RequestLogMiddleware.SignatureResultItem] = "UNAUTHORIZED";
                 await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("UNAUTHORIZED"));
-                return;
-            }
-
-            if (!isTokenRequest && context.User.FindFirst("scope")?.Value == "portal")
-            {
-                if (!PortalMayCall(context))
-                {
-                    context.Items[RequestLogMiddleware.SignatureResultItem] = "PORTAL_TOKEN_NOT_ALLOWED";
-                    await ResponseHelper.WriteJsonAsync(context, responseManager.GetResponse("PORTAL_TOKEN_NOT_ALLOWED"));
-                    return;
-                }
-                context.Items[SignerItem] = signer;
-                context.Items[RequestLogMiddleware.SignatureResultItem] = "PORTAL";
-                await next(context);
                 return;
             }
 
@@ -166,16 +140,18 @@ namespace Web.Custom
         }
 
         /// <summary>
-        /// Route v3 khác: JWT v3 (có u_id), jti chưa thu hồi, u_id khớp tài khoản hiện tại.
-        /// Token kiểu cũ (không có u_id) không dùng được cho v3
+        /// Route v3 khác: JWT v3 (có u_id, scope=api), jti chưa thu hồi, u_id khớp tài khoản hiện tại, iat không trước
+        /// restApiUser.token_valid_after (portal / PortalApp "thu hồi mọi token"). Token kiểu cũ (không có u_id) không dùng được cho v3
         /// </summary>
         private async Task<SignerKeys?> GetJwtSignerAsync(HttpContext context)
         {
             string userName = IpAccessMiddleware.GetUserName(context.User);
             string? uIdClaim = context.User.FindFirst("u_id")?.Value;
             string? jti = context.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+            string? scope = context.User.FindFirst("scope")?.Value;
+            long.TryParse(context.User.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Iat)?.Value, out long issuedAt);
 
-            if (userName == "anonymous" || !int.TryParse(uIdClaim, out int uId) || string.IsNullOrEmpty(jti))
+            if (userName == "anonymous" || !int.TryParse(uIdClaim, out int uId) || string.IsNullOrEmpty(jti) || scope != "api")
             {
                 return null;
             }
@@ -185,7 +161,7 @@ namespace Web.Custom
             }
 
             SignerKeys? signer = await keyStore.GetAsync(userName, context.RequestAborted);
-            return signer?.UId == uId ? signer : null;
+            return signer?.UId == uId && signer.IsTokenIssueTimeValid(issuedAt) ? signer : null;
         }
 
         /// <summary>

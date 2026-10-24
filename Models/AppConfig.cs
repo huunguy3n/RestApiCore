@@ -64,15 +64,33 @@
         }
 
         /// <summary>
-        /// Thời hạn (phút) JWT scope=portal cấp ở /api/auth/portal
+        /// DEV | PROD. PROD: kiểm license (restApi.lic) và manifest toàn vẹn lúc khởi động
         /// </summary>
-        public int portalTokenMinutes
+        public string environment
+        {
+            get; set;
+        }
+
+        public bool IsProduction => string.Equals(environment, "PROD", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Mã dự án (nbdmda / portalProject.ma_da). License cấp theo mã này
+        /// </summary>
+        public string projectCode
         {
             get; set;
         }
 
         /// <summary>
-        /// Origin của portal WebPortal được gọi /api từ trình duyệt (CORS), vd "https://docs.congty.vn". Rỗng: không mở CORS
+        /// true: license không hợp lệ thì /api trả 503 LICENSE_INVALID. false (mặc định): chỉ ghi log và báo ở /health/ready
+        /// </summary>
+        public bool licenseEnforce
+        {
+            get; set;
+        }
+
+        /// <summary>
+        /// Origin của WebPortal được gọi /api từ trình duyệt (CORS, màn "Gọi thử"), vd "https://portal.noibo". Rỗng: không mở CORS
         /// </summary>
         public string[] portalOrigins
         {
@@ -234,7 +252,9 @@
             logRetentionDays = 30;
             attackLogRetentionDays = 90;
             loginMaxFailures = 5;
-            portalTokenMinutes = 30;
+            environment = "DEV";
+            projectCode = string.Empty;
+            licenseEnforce = false;
             portalOrigins = [];
             loginLockMinutes = 15;
             issuerToken = string.Empty;

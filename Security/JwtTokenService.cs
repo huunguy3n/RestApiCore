@@ -25,9 +25,12 @@ namespace Security
         /// </summary>
         public string GenerateToken(string userName, int uId, int userId, string nameErp, string jti, DateTime expiresUtc, string scope = "api")
         {
+            DateTime now = DateTime.UtcNow;
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, userName),
+                // iat: WebApi chặn token phát trước restApiUser.token_valid_after (thu hồi mọi token của user)
+                new Claim(JwtRegisteredClaimNames.Iat, new DateTimeOffset(now).ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
                 new Claim("u_id", uId.ToString(), ClaimValueTypes.Integer32),
                 new Claim("user_id", userId.ToString(), ClaimValueTypes.Integer32),
                 new Claim("name_erp", nameErp),
@@ -39,7 +42,7 @@ namespace Security
                 issuer: _issuer,
                 audience: Audience,
                 claims: claims,
-                notBefore: DateTime.UtcNow,
+                notBefore: now,
                 expires: expiresUtc,
                 signingCredentials: new SigningCredentials(new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretKey)), SecurityAlgorithms.HmacSha256)
             );

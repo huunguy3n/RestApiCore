@@ -1,0 +1,58 @@
+@page "/cpanel/projects/{id:int}"
+@model WebPortal.Pages.Cpanel.ProjectEditModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Dự án " + Model.Project?.MaDa;
+    ViewData["Crumb"] = "Folder Api, địa chỉ WebApi, trạng thái và Admin của dự án";
+}
+@if (Model.Project != null)
+{
+    var p = Model.Project;
+    <form method="post" asp-page-handler="Save" class="adm__form">
+        <label for="apiFolder">Folder Api</label>
+        <input id="apiFolder" name="apiFolder" value="@p.ApiFolder" maxlength="260" required />
+        <label for="apiBaseUrl">Địa chỉ WebApi</label>
+        <input id="apiBaseUrl" name="apiBaseUrl" value="@p.ApiBaseUrl" maxlength="256" required />
+        <label><input type="checkbox" name="active" value="true" @(p.Active ? "checked" : "") /> Dự án hoạt động (bỏ chọn: mọi đăng nhập /@p.MaDa bị chặn)</label>
+        <button type="submit" class="adm__btn">Kiểm tra và lưu</button>
+    </form>
+    <form method="post" asp-page-handler="Check" class="adm__inline">
+        <button type="submit" class="adm__btn adm__btn--ghost">Kiểm tra kết nối</button>
+    </form>
+    <p class="adm__crumb">Kiểm tra gần nhất: @p.LastCheckAt?.ToString("yyyy-MM-dd HH:mm") @p.LastCheckResult</p>
+
+    <h2 class="adm__h2">Admin dự án</h2>
+    <table class="adm__table">
+        <thead><tr><th>Tài khoản</th><th>Tên</th><th>Trạng thái</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var a in Model.ProjectAdmins)
+        {
+            <tr>
+                <td><a href="/cpanel/admins/@a.Id">@a.Login</a></td>
+                <td>@a.DisplayName</td>
+                <td>@(a.Active ? "Hoạt động" : "Khóa")</td>
+                <td>
+                    <form method="post" asp-page-handler="Remove" class="adm__inline">
+                        <input type="hidden" name="adminId" value="@a.Id" />
+                        <button type="submit" class="adm__btn adm__btn--small adm__btn--ghost">Gỡ khỏi dự án</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (Model.OtherAdmins.Count > 0)
+    {
+        <form method="post" asp-page-handler="Assign" class="adm__form">
+            <label for="adminId">Gán Admin có sẵn</label>
+            <select id="adminId" name="adminId">
+                @foreach (var a in Model.OtherAdmins)
+                {
+                    <option value="@a.Id">@a.Login - @a.DisplayName</option>
+                }
+            </select>
+            <button type="submit" class="adm__btn adm__btn--ghost">Gán</button>
+        </form>
+    }
+    <p><a href="/cpanel/admins">Tạo Admin mới →</a> · <a href="/@p.MaDa">Mở dự án →</a></p>
+}

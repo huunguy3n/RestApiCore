@@ -1,0 +1,73 @@
+@page "/{maDa:projectcode}"
+@model WebPortal.Pages.Project.IndexModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = Model.CanAdmin ? "Tổng quan dự án" : "Hướng dẫn tích hợp";
+    ViewData["Crumb"] = Model.CanAdmin ? $"{Model.ProjectName} ({Model.MaDa})" : $"WebApi dự án {Model.MaDa}: {Model.Project.ApiBaseUrl}";
+}
+@if (Model.CanAdmin)
+{
+    <section class="adm__stats">
+        <article class="adm__stat"><span>User Api</span><strong>@Model.Users.Count</strong><small>@Model.Users.Count(u => !u.Active) khóa</small></article>
+        <article class="adm__stat"><span>Chưa đồng bộ</span><strong>@Model.Users.Count(u => !u.InSync)</strong></article>
+        @if (Model.Performance is { } perf)
+        {
+            <article class="adm__stat"><span>Request 24 giờ</span><strong>@perf.Requests.ToString("N0")</strong><small>@perf.Errors.ToString("N0") lỗi</small></article>
+            <article class="adm__stat"><span>Thời gian TB</span><strong>@perf.AverageMs.ToString("N0") ms</strong><small>max @perf.MaxMs.ToString("N0") ms</small></article>
+        }
+    </section>
+    @if (Model.Performance?.Error is string error)
+    {
+        <p class="adm__warn">Không đọc được log dự án: @error</p>
+    }
+    <p>Folder Api: <code>@Model.Project.ApiFolder</code> · Kiểm tra gần nhất: @Model.Project.LastCheckAt?.ToString("yyyy-MM-dd HH:mm") @Model.Project.LastCheckResult</p>
+    <p><a href="/@Model.MaDa/users">Quản trị user Api →</a> · <a href="/@Model.MaDa/logs">Log & hiệu suất →</a> · <a href="/@Model.MaDa/settings">Kiểm tra đồng bộ →</a></p>
+}
+else
+{
+    <section class="adm__panel">
+        <h2>Xác thực</h2>
+        <ol>
+            <li>Admin dự án cấp <code>private_key</code> (base64 32 byte) cho tài khoản <code>@Model.Identity!.Login</code>; xem lại ở mục <a href="/@Model.MaDa/key">Khóa & token</a>.</li>
+            <li>Đồng bộ giờ: <code>GET @Model.Project.ApiBaseUrl/api/_meta/server</code> → <code>serverTime</code>.</li>
+            <li>Mỗi request có hai header: <code>X-Fast-Nonce: &lt;unix giây&gt;-&lt;ngẫu nhiên 16-48 ký tự&gt;</code> và
+                <code>X-Fast-Signature = hex(HMAC-SHA256(K_request, md5Hex(body) + nonce))</code>, với
+                <code>K_request = HMAC-SHA256(private_key, "FAST-API-V3-REQUEST")</code>.</li>
+            <li>Lấy JWT: <code>POST /api/auth/token</code>, body <code>{"userName":"@Model.Identity.Login"}</code>, ký như trên. Các request sau gửi thêm <code>Authorization: Bearer &lt;accessToken&gt;</code>.</li>
+            <li>Kiểm response: <code>X-Fast-Signature = hex(HMAC-SHA256(K_response, md5Hex(responseBody) + requestNonce))</code>, <code>K_response</code> dẫn xuất với nhãn "FAST-API-V3-RESPONSE". Response không ký = lỗi xác thực, không tin nội dung.</li>
+            <li>Thu hồi token đang dùng: <code>POST /api/auth/revoke</code>; thu hồi mọi token: mục <a href="/@Model.MaDa/key">Khóa & token</a>.</li>
+        </ol>
+        <p>Code mẫu (tự kiểm vector thử khi chạy không tham số):
+            <a href="/samples/FastSign.cs">C#</a> · <a href="/samples/fast_sign.py">Python</a> · <a href="/samples/fast-sign.mjs">JavaScript</a> ·
+            <a href="/samples/FastSign.java">Java</a> · <a href="/samples/fast-sign.sh">cURL</a></p>
+    </section>
+
+    <h2 class="adm__h2">Form được cấp quyền @(Model.Forms?.AllForms == true ? "(tất cả form của dự án)" : "")</h2>
+    @if (Model.Forms == null)
+    {
+        <p class="adm__warn">Không đọc được danh sách form của dự án lúc này.</p>
+    }
+    else
+    {
+        <table class="adm__table">
+            <thead><tr><th>Form</th><th>Route</th><th>Loại</th><th>Mô tả</th><th>unitCode</th><th></th></tr></thead>
+            <tbody>
+            @foreach (var f in Model.Forms.Forms)
+            {
+                <tr>
+                    <td>@f.Name</td>
+                    <td><code>POST @f.Route</code></td>
+                    <td>@f.Type</td>
+                    <td>@f.Description</td>
+                    <td>@(f.UnitRequired ? "bắt buộc" : "")</td>
+                    <td><a href="/@Model.MaDa/resource/@f.Name">Chi tiết & gọi thử</a></td>
+                </tr>
+            }
+            </tbody>
+        </table>
+        @if (Model.Forms.MissingForms.Count > 0)
+        {
+            <p class="adm__crumb">Được cấp nhưng chưa có trên dự án: @string.Join(", ", Model.Forms.MissingForms)</p>
+        }
+    }
+}

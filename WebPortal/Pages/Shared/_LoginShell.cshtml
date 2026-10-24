@@ -1,0 +1,50 @@
+@model WebPortal.Pages.LoginViewModel
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Đăng nhập - @Model.Title</title>
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+</head>
+<body class="adm adm--login">
+    <main class="adm__card">
+        <h1 class="adm__title">@Model.Title</h1>
+        <p class="adm__crumb">@Model.Subtitle</p>
+        @if (Model.Info != null)
+        {
+            <p class="adm__warn" role="status">@Model.Info</p>
+        }
+        @if (Model.Message != null)
+        {
+            <p class="adm__alert" role="alert">@Model.Message</p>
+        }
+        @if (Model.PendingToken != null)
+        {
+            <p class="adm__warn" role="alert">
+                Tài khoản này đang đăng nhập ở nơi khác (IP @(Model.ExistingIp ?? "?"), từ @Model.ExistingSince).
+                Đồng ý thì phiên kia bị kết thúc ngay. Xác nhận trong 2 phút.
+            </p>
+            <form method="post" asp-page-handler="Confirm">
+                <input type="hidden" name="pending" value="@Model.PendingToken" />
+                <button type="submit" class="adm__btn">Đồng ý, kết thúc phiên kia</button>
+            </form>
+            <form method="post" asp-page-handler="Cancel">
+                <input type="hidden" name="pending" value="@Model.PendingToken" />
+                <button type="submit" class="adm__btn adm__btn--ghost">Không, giữ phiên kia</button>
+            </form>
+        }
+        else
+        {
+            <form method="post" autocomplete="on">
+                <label for="Login">Tài khoản</label>
+                <input id="Login" name="Login" value="@Model.Login" maxlength="64" autocomplete="username" required autofocus />
+                <label for="Password">Mật khẩu</label>
+                <input id="Password" name="Password" type="password" maxlength="256" autocomplete="current-password" required />
+                <button type="submit" class="adm__btn">Đăng nhập</button>
+            </form>
+        }
+    </main>
+</body>
+</html>

@@ -1,85 +1,52 @@
+using PortalApp.Core;
 using PortalApp.Ui;
 
 namespace PortalApp.Pages
 {
-    /// <summary>Trang chủ: lối tắt tới từng lệnh (lấy từ danh mục thật) và nhắc nguyên tắc kiểm thử trước khi ghi.</summary>
-    public sealed class HomePage : UserControl
+    /// <summary>Trạng thái folder restApi trên máy này: cấu hình, license, toàn vẹn nhị phân, kết nối DB</summary>
+    public sealed class HomePage : PageBase
     {
-        private const int Pad = 24, TileHeight = 120;
+        private readonly Label folder = Info(), config = Info(), license = Info(), database = Info();
+        private readonly AppButton check = new("Kiểm tra lại", Theme.Icon.Refresh, ButtonStyle.Primary);
 
-        private readonly PageHeader header = new();
-        private readonly List<Tile> tiles = [];
-
-        public HomePage(IEnumerable<(CommandDef Command, string Icon)> commands, Action<string> open)
+        public HomePage(LocalProject project, ILogSink log)
+            : base(project, log, Theme.Icon.Home, "Tổng quan", "PortalApp quản trị WebApi của dự án ngay trên máy PROD: không có đăng nhập, quyền truy cập do ACL Windows của folder restApi quyết định.")
         {
-            BackColor = Theme.Background;
-            AutoScroll = true;
-            DoubleBuffered = true;
-            header.Set(Theme.Icon.Home, "Trang chủ", "", "Công cụ quản trị Fast.Api. Mọi lệnh mặc định chạy kiểm thử; chỉ ghi database khi bạn chọn \"Áp dụng (ghi thật)\" và xác nhận.");
-            Controls.Add(header);
-            foreach (var (command, icon) in commands)
-            {
-                var tile = new Tile(icon, command.Title, command.Description);
-                tile.Click += (_, _) => open(command.Name);
-                tiles.Add(tile);
-                Controls.Add(tile);
-            }
+            TableLayoutPanel state = AddSection("Trạng thái");
+            AddRow(state, "Folder restApi", folder);
+            AddRow(state, "Cấu hình", config);
+            AddRow(state, "License", license);
+            AddRow(state, "Database", database);
+            AddWide(state, Buttons(check));
+            TableLayoutPanel steps = AddSection("Thứ tự cài đặt lần đầu",
+                "1. Cài đặt → Cấu hình kết nối. 2. License → tạo yêu cầu, nạp license. 3. Cài đặt → chạy script SQL, dựng IIS, khóa quyền folder. 4. User Api → tạo user, cấp private_key.");
+            check.Click += async (_, _) => await RunAsync(check, RefreshAsync);
         }
 
-        protected override void OnLayout(LayoutEventArgs e)
+        public override async Task RefreshAsync()
         {
-            base.OnLayout(e);
-            int width = Math.Max(480, ClientSize.Width - Pad * 2);
-            header.SetBounds(Pad, Pad, width, PageHeader.HeaderHeight);
-            int cols = width >= 900 ? 3 : width >= 600 ? 2 : 1;
-            int cell = (width - (cols - 1) * Theme.Gap) / cols;
-            int y = Pad + PageHeader.HeaderHeight + Theme.Gap;
-            for (int i = 0; i < tiles.Count; i++)
+            Project.Reload();
+            folder.Text = Project.Folder;
+            config.Text = Project.IsConfigured ? $"Dự án {Project.ProjectCode}, môi trường {Project.Environment}" : "Chưa cấu hình (Cài đặt → Cấu hình kết nối)";
+            LicenseStatus status = LicenseStatus.Check(Project);
+            license.Text = status.Describe();
+            license.ForeColor = status.Unlocked ? Theme.Success : Theme.Error;
+            if (!Project.IsConfigured)
             {
-                tiles[i].SetBounds(Pad + (i % cols) * (cell + Theme.Gap), y + (i / cols) * (TileHeight + Theme.Gap), cell, TileHeight);
+                database.Text = "—";
+                return;
             }
-            int rows = (tiles.Count + cols - 1) / cols;
-            AutoScrollMinSize = new Size(0, y + rows * (TileHeight + Theme.Gap) + Pad);
-        }
-
-        private sealed class Tile : Control
-        {
-            private readonly string icon, title, description;
-            private bool hover;
-
-            public Tile(string icon, string title, string description)
+            string? schema;
+            try
             {
-                this.icon = icon;
-                this.title = title;
-                this.description = description;
-                SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.ResizeRedraw | ControlStyles.OptimizedDoubleBuffer | ControlStyles.Selectable, true);
-                TabStop = true;
-                Cursor = Cursors.Hand;
+                schema = await Project.Admin().CheckSchemaAsync();
             }
-
-            protected override void OnMouseEnter(EventArgs e) { hover = true; Invalidate(); base.OnMouseEnter(e); }
-            protected override void OnMouseLeave(EventArgs e) { hover = false; Invalidate(); base.OnMouseLeave(e); }
-            protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
-            protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
-            protected override bool IsInputKey(Keys keyData) => keyData is Keys.Enter or Keys.Space || base.IsInputKey(keyData);
-
-            protected override void OnKeyUp(KeyEventArgs e)
+            catch (Exception ex) when (ex is Provider.DatabaseException or Microsoft.Data.SqlClient.SqlException)
             {
-                if (e.KeyCode is Keys.Enter or Keys.Space) { OnClick(EventArgs.Empty); }
-                base.OnKeyUp(e);
+                schema = "Không kết nối được SQL.";
             }
-
-            protected override void OnPaint(PaintEventArgs e)
-            {
-                Graphics g = e.Graphics;
-                g.Clear(Theme.Background);
-                Theme.FillRound(g, ClientRectangle, hover ? Theme.PrimarySoft : Theme.Surface, Focused || hover ? Theme.Primary : Theme.Border, 10);
-                using Font iconFont = Theme.Icons(18f);
-                TextRenderer.DrawText(g, icon, iconFont, new Point(20, 20), Theme.Primary);
-                TextRenderer.DrawText(g, title, Theme.Body(11.5f, FontStyle.Bold), new Point(56, 20), Theme.TextPrimary);
-                TextRenderer.DrawText(g, description, Theme.Body(9.5f), new Rectangle(20, 56, Width - 40, Height - 62), Theme.TextSecondary,
-                    TextFormatFlags.WordBreak | TextFormatFlags.EndEllipsis);
-            }
+            database.Text = schema ?? "Kết nối được, đã chạy sql/009.";
+            database.ForeColor = schema == null ? Theme.Success : Theme.Warning;
         }
     }
 }

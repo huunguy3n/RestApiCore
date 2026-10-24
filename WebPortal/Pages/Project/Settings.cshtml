@@ -1,0 +1,45 @@
+@page "/{maDa:projectcode}/settings"
+@model WebPortal.Pages.Project.SettingsModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Cấu hình dự án";
+    ViewData["Crumb"] = "Folder Api (portal đọc connection string trong appsettings.Local.json của folder này), địa chỉ WebApi, kiểm tra đồng bộ";
+}
+<form method="post" asp-page-handler="Save" class="adm__form">
+    <label for="apiFolder">Folder Api</label>
+    <input id="apiFolder" name="apiFolder" value="@Model.Project.ApiFolder" maxlength="260" required />
+    @if (Model.SuggestedFolder.Length > 0 && !string.Equals(Model.SuggestedFolder, Model.Project.ApiFolder, StringComparison.OrdinalIgnoreCase))
+    {
+        <p class="adm__crumb">Gợi ý từ QLDA (dir_src_web): <code>@Model.SuggestedFolder</code></p>
+    }
+    <label for="apiBaseUrl">Địa chỉ WebApi</label>
+    <input id="apiBaseUrl" name="apiBaseUrl" value="@Model.Project.ApiBaseUrl" maxlength="256" required />
+    <button type="submit" class="adm__btn">Kiểm tra và lưu</button>
+</form>
+<p class="adm__crumb">Kiểm tra gần nhất: @Model.Project.LastCheckAt?.ToString("yyyy-MM-dd HH:mm") @Model.Project.LastCheckResult</p>
+<div class="adm__bar">
+    <form method="post" asp-page-handler="Check" class="adm__inline"><button type="submit" class="adm__btn adm__btn--ghost">Kiểm tra kết nối</button></form>
+    <form method="post" asp-page-handler="Drift" class="adm__inline"><button type="submit" class="adm__btn adm__btn--ghost">Báo lệch portal ↔ dự án</button></form>
+    <form method="post" asp-page-handler="SyncAll" class="adm__inline"><button type="submit" class="adm__btn">Đồng bộ lại tất cả user</button></form>
+</div>
+@if (Model.Drift != null)
+{
+    <h2 class="adm__h2">Lệch giữa portal và DB dự án</h2>
+    @if (Model.Drift.Count == 0)
+    {
+        <p class="adm__ok">Không lệch: DB dự án khớp portal.</p>
+    }
+    else
+    {
+        <p class="adm__crumb">Cách sửa duy nhất là đẩy lại từ portal ("Đồng bộ lại tất cả"): thay đổi làm thẳng trên DB dự án sẽ bị ghi đè.</p>
+        <table class="adm__table">
+            <thead><tr><th>User</th><th>Lệch</th></tr></thead>
+            <tbody>
+            @foreach (var d in Model.Drift)
+            {
+                <tr><td>@d.UserName</td><td>@d.Problem</td></tr>
+            }
+            </tbody>
+        </table>
+    }
+}

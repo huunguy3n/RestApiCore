@@ -7,11 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Control plane (trang /Admin): DB portal riêng, băm mật khẩu, danh mục quyền -->
+    <!-- PortalDb, QLDA, DB dự án (đọc connection string từ folder restApi), băm mật khẩu, ký license -->
     <ProjectReference Include="..\Provider\Provider.csproj" />
     <ProjectReference Include="..\Security\Security.csproj" />
     <ProjectReference Include="..\Models\Models.csproj" />
     <ProjectReference Include="..\Business\Business.csproj" />
+    <ProjectReference Include="..\DataAccess\DataAccess.csproj" />
   </ItemGroup>
 
   <ItemGroup>

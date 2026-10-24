@@ -11,7 +11,8 @@ namespace Provider
     /// <summary>
     /// Truy cập SQL Server bằng ADO.NET cho một connection string. Đăng ký singleton lúc khởi động (appSettings:commandTimeout),
     /// repository nhận qua constructor thay cho lớp static dùng chung trước đây.
-    /// Lệnh trên cùng một SqlConnection chạy cùng phiên SQL: bảng tạm # và transaction T-SQL giữ qua các lệnh
+    /// Lệnh trên cùng một SqlConnection chạy cùng phiên SQL: bảng tạm # và transaction T-SQL giữ qua các lệnh.
+    /// Sau OpenConnectionAsync chỉ gọi API của lớp này — không new SqlCommand / SqlBulkCopy bên ngoài
     /// </summary>
     public sealed class SqlDatabase
     {
@@ -46,22 +47,54 @@ namespace Provider
             }
         }
 
+        public Task<SqlTransaction> BeginTransactionAsync(SqlConnection connection, CancellationToken cancellationToken = default) =>
+            BeginTransactionAsync(connection, IsolationLevel.ReadCommitted, cancellationToken);
+
+        public async Task<SqlTransaction> BeginTransactionAsync(SqlConnection connection, IsolationLevel isolationLevel, CancellationToken cancellationToken = default) =>
+            (SqlTransaction)await connection.BeginTransactionAsync(isolationLevel, cancellationToken);
+
         public async Task ExecuteAsync(string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters)
         {
             await using SqlConnection sqlConnection = await OpenConnectionAsync(cancellationToken);
             await ExecuteAsync(sqlConnection, commandText, cancellationToken, parameters);
         }
 
-        public async Task ExecuteAsync(SqlConnection connection, string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters)
+        public Task ExecuteAsync(SqlConnection connection, string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters) =>
+            ExecuteAsync(connection, transaction: null, commandText, cancellationToken, parameters);
+
+        public async Task ExecuteAsync(SqlConnection connection, SqlTransaction? transaction, string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters)
         {
             try
             {
-                await using SqlCommand sqlCommand = CreateCommand(connection, commandText, parameters);
+                await using SqlCommand sqlCommand = CreateCommand(connection, transaction, commandText, parameters);
                 await sqlCommand.ExecuteNonQueryAsync(cancellationToken);
             }
             catch (SqlException ex)
             {
                 throw new DatabaseException("Database execution failed", ex);
+            }
+        }
+
+        public async Task<object?> ExecuteScalarAsync(string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters)
+        {
+            await using SqlConnection sqlConnection = await OpenConnectionAsync(cancellationToken);
+            return await ExecuteScalarAsync(sqlConnection, commandText, cancellationToken, parameters);
+        }
+
+        public Task<object?> ExecuteScalarAsync(SqlConnection connection, string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters) =>
+            ExecuteScalarAsync(connection, transaction: null, commandText, cancellationToken, parameters);
+
+        public async Task<object?> ExecuteScalarAsync(SqlConnection connection, SqlTransaction? transaction, string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters)
+        {
+            try
+            {
+                await using SqlCommand sqlCommand = CreateCommand(connection, transaction, commandText, parameters);
+                object? value = await sqlCommand.ExecuteScalarAsync(cancellationToken);
+                return value == DBNull.Value ? null : value;
+            }
+            catch (SqlException ex)
+            {
+                throw new DatabaseException("Database scalar failed", ex);
             }
         }
 
@@ -71,14 +104,17 @@ namespace Provider
             return await RetrieveAsync(sqlConnection, commandText, cancellationToken, parameters);
         }
 
+        public Task<DataSet> RetrieveAsync(SqlConnection connection, string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters) =>
+            RetrieveAsync(connection, transaction: null, commandText, cancellationToken, parameters);
+
         /// <summary>
         /// Đọc mọi result set vào DataSet bằng DataReader async (SqlDataAdapter không có bản async)
         /// </summary>
-        public async Task<DataSet> RetrieveAsync(SqlConnection connection, string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters)
+        public async Task<DataSet> RetrieveAsync(SqlConnection connection, SqlTransaction? transaction, string commandText, CancellationToken cancellationToken = default, params SqlParameter[] parameters)
         {
             try
             {
-                await using SqlCommand sqlCommand = CreateCommand(connection, commandText, parameters);
+                await using SqlCommand sqlCommand = CreateCommand(connection, transaction, commandText, parameters);
                 await using SqlDataReader reader = await sqlCommand.ExecuteReaderAsync(cancellationToken);
 
                 DataSet dataSet = new DataSet();
@@ -116,13 +152,18 @@ namespace Provider
             }
         }
 
-        public async Task BulkAsync(SqlConnection connection, DataTable dataTable, string tableName, CancellationToken cancellationToken = default)
+        public Task BulkAsync(SqlConnection connection, DataTable dataTable, string tableName, CancellationToken cancellationToken = default) =>
+            BulkAsync(connection, transaction: null, dataTable, tableName, cancellationToken);
+
+        public async Task BulkAsync(SqlConnection connection, SqlTransaction? transaction, DataTable dataTable, string tableName, CancellationToken cancellationToken = default)
         {
             try
             {
                 if (dataTable.Columns.Count > 0)
                 {
-                    using SqlBulkCopy bulk = new SqlBulkCopy(connection) { DestinationTableName = tableName, BulkCopyTimeout = CommandTimeout };
+                    using SqlBulkCopy bulk = transaction == null
+                        ? new SqlBulkCopy(connection) { DestinationTableName = tableName, BulkCopyTimeout = CommandTimeout }
+                        : new SqlBulkCopy(connection, SqlBulkCopyOptions.Default, transaction) { DestinationTableName = tableName, BulkCopyTimeout = CommandTimeout };
                     foreach (DataColumn column in dataTable.Columns)
                     {
                         bulk.ColumnMappings.Add(column.ColumnName, column.ColumnName);
@@ -137,12 +178,16 @@ namespace Provider
             }
         }
 
-        private SqlCommand CreateCommand(SqlConnection connection, string commandText, SqlParameter[] parameters)
+        private SqlCommand CreateCommand(SqlConnection connection, SqlTransaction? transaction, string commandText, SqlParameter[] parameters)
         {
             SqlCommand sqlCommand = connection.CreateCommand();
             sqlCommand.CommandTimeout = CommandTimeout;
             sqlCommand.CommandText = commandText;
             sqlCommand.CommandType = CommandType.Text;
+            if (transaction != null)
+            {
+                sqlCommand.Transaction = transaction;
+            }
 
             if (parameters != null && parameters.Length > 0)
             {

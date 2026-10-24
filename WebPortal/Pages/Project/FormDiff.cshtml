@@ -1,0 +1,13 @@
+@page "/{maDa:projectcode}/forms/{form}/diff"
+@model WebPortal.Pages.Project.FormDiffModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = $"{Model.Form}: revision {Model.From} → {Model.To}";
+}
+@if (Model.Lines != null)
+{
+    <pre class="adm__diff">@foreach (var l in Model.Lines)
+{<span class="adm__diff-line @(l.Kind == '+' ? "adm__diff-add" : l.Kind == '-' ? "adm__diff-del" : "")">@l.Kind @(l.OldLine?.ToString() ?? "")	@(l.NewLine?.ToString() ?? "")	@l.Text
+</span>}</pre>
+}
+<p><a href="/@Model.MaDa/forms/@Model.Form">← @Model.Form</a></p>

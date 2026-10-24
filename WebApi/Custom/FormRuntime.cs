@@ -10,7 +10,7 @@ namespace Web.Custom
     /// Bảng route form v3 đang dùng và mẫu ký tự đặc biệt. Catalog thay nguyên khối khi nạp lại (catalog bất biến),
     /// request đang chạy giữ catalog cũ tới khi xong
     /// </summary>
-    public sealed class FormRuntime(ImportFormCatalog catalog, Regex? irregular) : IFormCatalogProvider
+    public sealed class FormRuntime(ImportFormCatalog catalog, Regex? irregular)
     {
         private ImportFormCatalog _catalog = catalog;
 

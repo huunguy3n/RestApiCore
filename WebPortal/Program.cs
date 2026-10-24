@@ -1,61 +1,81 @@
-using WebPortal.ControlPlane;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.StaticFiles;
-using Provider;
+using Microsoft.Extensions.Caching.Memory;
+using WebPortal.Portal;
 
-// Portal đối tác (KE_HOACH 5.3): trang tĩnh, mọi lời gọi Api đi thẳng từ trình duyệt.
-// Mật khẩu mã hóa RSA-OAEP và private_key ký HMAC đều xử lý bằng WebCrypto, site này không thấy bí mật nào
+// WebPortal (nội bộ DEV/UAT, ADR-0001): /cpanel cho SA duy nhất, /{ma_da} cho Admin dự án và user Api của dự án.
+// PortalDb riêng; danh sách dự án ở QLDA (nbdmda); connection string dự án đọc từ appsettings.Local.json trong folder restApi của dự án
 var builder = WebApplication.CreateBuilder(args);
 
-// Bí mật (chuỗi kết nối DB portal) không commit: appsettings.Local.json (đã gitignore, cùng quy ước với Api) hoặc biến môi trường
+// Bí mật (chuỗi kết nối PortalDb, QLDA, mật khẩu PFX khóa license) không commit: appsettings.Local.json (gitignore) hoặc biến môi trường
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+builder.Configuration.AddEnvironmentVariables();
 
-// /Admin: control plane (tài khoản staff/customer theo dự án) trong DB portal riêng. Phần "/" vẫn là cổng đối tác tĩnh
+PortalSettings settings = new();
+builder.Configuration.Bind("Portal", settings);
+// Tên khóa cũ (ControlPlane:ConnectionString) vẫn nhận để không phải sửa cấu hình máy chủ đang chạy
+if (settings.ConnectionString.Length == 0)
+{
+    settings.ConnectionString = builder.Configuration["ControlPlane:ConnectionString"] ?? "";
+}
+
 builder.Services.AddRazorPages(options =>
 {
-    options.Conventions.AuthorizeFolder("/Admin");
-    options.Conventions.AllowAnonymousToPage("/Admin/Login");
+    // /{ma_da}: đoạn đầu URL là mã dự án (trừ các đoạn dành riêng), xem ProjectCode
+    options.Conventions.AddFolderRouteModelConvention("/Project", model =>
+    {
+        foreach (var selector in model.Selectors)
+        {
+            selector.AttributeRouteModel!.Order = 10;
+        }
+    });
 });
-
-string controlPlaneConnection = ControlPlaneConfig.ConnectionString(builder.Configuration);
-if (controlPlaneConnection.Length > 0)
-{
-    builder.Services.AddSingleton(new SqlDatabase(controlPlaneConnection, 30));
-    builder.Services.AddSingleton<IControlPlaneStore, SqlControlPlaneStore>();
-}
-else
-{
-    builder.Services.AddSingleton<IControlPlaneStore, UnconfiguredControlPlaneStore>();
-}
+builder.Services.Configure<RouteOptions>(options => options.ConstraintMap["projectcode"] = typeof(ProjectCodeRouteConstraint));
+builder.Services.AddMemoryCache();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddSingleton<AccountLoginService>();
-builder.Services.AddSingleton<ProjectAccessService>();
-builder.Services.AddSingleton<AccountAdminService>();
-builder.Services.AddSingleton<AuditViewService>();
+builder.Services.AddSingleton(settings);
+builder.Services.AddSingleton(settings.Qlda);
+builder.Services.AddSingleton(settings.License);
+builder.Services.AddSingleton<IPortalStore>(new SqlPortalStore(settings.ConnectionString));
+builder.Services.AddSingleton<IQldaDirectory, SqlQldaDirectory>();
+builder.Services.AddSingleton<IProjectConnectionResolver, ProjectConnectionResolver>();
+builder.Services.AddSingleton<LoginThrottle>();
+builder.Services.AddSingleton<SessionService>();
+builder.Services.AddSingleton<PortalLoginService>();
+builder.Services.AddSingleton<AccountService>();
+builder.Services.AddSingleton<ProjectService>();
+builder.Services.AddSingleton<ProjectSyncService>();
+builder.Services.AddSingleton<ApiUserService>();
+builder.Services.AddSingleton<LogService>();
+builder.Services.AddSingleton<LicenseKeyProvider>();
+builder.Services.AddSingleton<LicenseService>();
 builder.Services.AddSingleton<FormManagementService>();
+builder.Services.AddSingleton<ApiDocsService>();
 
-// Phiên bằng cookie HttpOnly + SameSite=Strict; quyền KHÔNG nằm trong cookie (tính lại ở server mỗi request).
-// Ngoài Development: cookie bắt buộc Secure và dùng tiền tố __Host- (trình duyệt từ chối nếu thiếu Secure / Path=/ / có Domain)
+// Cookie HttpOnly + SameSite=Strict; quyền KHÔNG nằm trong cookie (tính lại ở server mỗi request, kèm kiểm phiên đơn).
+// Ngoài Development: Secure bắt buộc và tiền tố __Host- (trình duyệt từ chối nếu thiếu Secure / Path=/ / có Domain)
 bool development = builder.Environment.IsDevelopment();
 CookieSecurePolicy securePolicy = development ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
 string cookiePrefix = development ? "" : "__Host-";
 
-builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
-    .AddCookie(options =>
-    {
-        options.Cookie.Name = cookiePrefix + "fast-portal";
-        options.Cookie.HttpOnly = true;
-        options.Cookie.SameSite = SameSiteMode.Strict;
-        options.Cookie.SecurePolicy = securePolicy;
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
-        options.SlidingExpiration = false;
-        options.LoginPath = "/Admin/Login";
-        options.AccessDeniedPath = "/Admin/Login";
-        // Kiểm tài khoản còn hoạt động + dấu vết mật khẩu ở mọi request: khóa / đổi mật khẩu cắt phiên cũ ngay
-        options.Events = new PortalCookieEvents();
-    });
+void Cookie(CookieAuthenticationOptions options, string scheme)
+{
+    options.Cookie.Name = cookiePrefix + "fast-portal-" + scheme;
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = securePolicy;
+    options.Cookie.Path = "/";
+    // Hạn cookie dài hơn phiên; phiên thật (rảnh 30 phút / tối đa 8 giờ) do SessionService quyết định
+    options.ExpireTimeSpan = SessionService.AbsoluteTimeout;
+    options.SlidingExpiration = false;
+    options.Events = new PortalCookieEvents(scheme);
+}
+
+builder.Services.AddAuthentication(PortalAuth.ProjectScheme)
+    .AddCookie(PortalAuth.CpanelScheme, options => Cookie(options, PortalAuth.CpanelScheme))
+    .AddCookie(PortalAuth.ProjectScheme, options => Cookie(options, PortalAuth.ProjectScheme));
 builder.Services.AddAuthorization();
 
 builder.Services.AddAntiforgery(options =>
@@ -83,27 +103,34 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
-// Portal:ApiBaseUrl rỗng: Api cùng origin với portal. Khác origin thì Api phải khai appSettings:portalOrigins (CORS)
-string apiBaseUrl = (app.Configuration["Portal:ApiBaseUrl"] ?? "").Trim().TrimEnd('/');
-string apiOrigin = Uri.TryCreate(apiBaseUrl, UriKind.Absolute, out Uri? apiUri) ? apiUri.GetLeftPart(UriPartial.Authority) : "";
-
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Error");
     app.UseHsts();
 }
 
+// "Gọi thử" của user Api đi thẳng từ trình duyệt tới WebApi của dự án: connect-src mở cho mọi origin https/http đã khai của các dự án
 app.Use(async (context, next) =>
 {
     var headers = context.Response.Headers;
-    // Script chỉ từ chính site: chặn script lạ đọc private_key trong bộ nhớ trang
-    // /Admin có form đăng nhập/đăng xuất gửi về chính site; cổng đối tác tĩnh ("/") không có form
-    bool admin = context.Request.Path.StartsWithSegments("/Admin");
-    headers.ContentSecurityPolicy = $"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' {apiOrigin}".TrimEnd() + $"; frame-ancestors 'none'; base-uri 'none'; form-action {(admin ? "'self'" : "'none'")}";
-    if (admin)
+    var cache = context.RequestServices.GetRequiredService<IMemoryCache>();
+    if (!cache.TryGetValue<string>("csp:connect", out string? connect) || connect == null)
     {
-        headers.CacheControl = "no-store";
+        connect = "'self'";
+        try
+        {
+            var origins = (await context.RequestServices.GetRequiredService<IPortalStore>().ListProjectsAsync(context.RequestAborted))
+                .Select(p => Uri.TryCreate(p.ApiBaseUrl, UriKind.Absolute, out Uri? uri) ? uri.GetLeftPart(UriPartial.Authority) : null)
+                .Where(o => o != null).Distinct();
+            connect = string.Join(" ", new[] { "'self'" }.Concat(origins!));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Provider.DatabaseException or Microsoft.Data.SqlClient.SqlException)
+        {
+        }
+        cache.Set("csp:connect", connect, TimeSpan.FromMinutes(1));
     }
+    headers.ContentSecurityPolicy = $"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src {connect}; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+    headers.CacheControl = "no-store";
     headers.XContentTypeOptions = "nosniff";
     headers["Referrer-Policy"] = "no-referrer";
     headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()";
@@ -125,6 +152,10 @@ app.UseRouting();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// Phiên cũ hỏi định kỳ: có người đăng nhập đúng mật khẩu ở nơi khác đang chờ thay phiên không
+app.MapGet("/cpanel/session/notice", (HttpContext context, SessionService sessions) => SessionNoticeEndpoint.HandleAsync(context, sessions, null));
+app.MapGet("/{maDa:projectcode}/session/notice", (HttpContext context, SessionService sessions, string maDa) => SessionNoticeEndpoint.HandleAsync(context, sessions, maDa));
 
 app.MapRazorPages();
 

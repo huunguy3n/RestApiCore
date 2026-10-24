@@ -6,19 +6,8 @@ using System.Data;
 
 namespace DataAccess
 {
-    public class UserRepository(SqlDatabase database) : IUserRightsRepository, IPortalCredentialStore
+    public class UserRepository(SqlDatabase database) : IUserRightsRepository
     {
-        /// <summary>
-        /// Portal v3: restApiUser.password (AES, khóa passwordKey) của tài khoản còn hiệu lực; null nếu không có.
-        /// Không gộp vào restApi_GetUserRights để mật khẩu không nằm trong cache quyền
-        /// </summary>
-        public async Task<string?> GetEncryptedPasswordAsync(string name, CancellationToken cancellationToken = default)
-        {
-            var ds = await database.RetrieveAsync("SELECT [password] FROM restApiUser WHERE [name] = @name AND status = '1'", cancellationToken,
-                new SqlParameter("@name", SqlDbType.VarChar, 32) { Value = name });
-            return ds.Tables.Count > 0 && ds.Tables[0].Rows.Count > 0 ? ds.Tables[0].Rows[0]["password"] as string : null;
-        }
-
         /// <summary>
         /// v3: một lượt gọi restApi_GetUserRights, tra restApiUser → name_erp → userinfo2.
         /// Trả null nếu không có tài khoản; còn hiệu lực hay không xem UserRights.IsActive
@@ -43,7 +32,9 @@ namespace DataAccess
                 PrivateKey = row["private_key"] as string,
                 UserId = row["user_id"] as int?,
                 ErpAdmin = row["admin"] != DBNull.Value && Convert.ToInt32(row["admin"]) == 1,
-                ErpStatus = FirstChar(row["erp_status"])
+                ErpStatus = FirstChar(row["erp_status"]),
+                // DB chưa chạy sql/009: proc cũ không trả cột này, coi như không chặn
+                TokenValidAfter = row.Table.Columns.Contains("token_valid_after") ? row["token_valid_after"] as DateTime? : null
             };
 
             foreach (DataRow form in ds.Tables[1].Rows)

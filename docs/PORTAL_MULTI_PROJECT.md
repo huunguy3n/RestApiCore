@@ -1,5 +1,7 @@
 # Portal trung tâm nhiều dự án: thiết kế
 
+> **Trạng thái: Thay thế bởi [ADR-0001](adr/ADR-0001-portal-cpanel-portalapp.md)** (24/10/2026). Giữ lại để tra lịch sử; mô hình agent `/api/_portal`, vai trò staff/customer và CLI bên dưới không còn áp dụng.
+
 Chốt với người dùng: (1) portal **gọi Api của từng dự án**, không giữ connection string; (2) tài khoản portal lưu ở **DB riêng của portal**.
 
 ## 1. Hai tầng

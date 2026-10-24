@@ -1,0 +1,59 @@
+@page "/cpanel"
+@model WebPortal.Pages.Cpanel.IndexModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Tổng quan";
+    ViewData["Crumb"] = $"Hiệu suất WebApi mọi dự án, {Model.Days} ngày gần nhất (đọc trực tiếp log từng dự án, làm mới mỗi phút)";
+}
+<section class="adm__stats" aria-label="Số liệu tổng quan">
+    <article class="adm__stat"><span>Dự án hoạt động</span><strong>@Model.ActiveProjects</strong><small>@Model.TotalProjects trên portal</small></article>
+    <article class="adm__stat"><span>Admin dự án</span><strong>@Model.Admins</strong></article>
+    <article class="adm__stat"><span>Request (@Model.Days ngày)</span><strong>@Model.Performance.Sum(p => p.Requests).ToString("N0")</strong></article>
+    <article class="adm__stat"><span>Lỗi (HTTP ≥ 400)</span><strong>@Model.Performance.Sum(p => p.Errors).ToString("N0")</strong></article>
+    <article class="adm__stat"><span>Dự án không truy cập được</span><strong>@Model.Performance.Count(p => p.Error != null)</strong></article>
+</section>
+
+<p class="adm__bar">
+    <a class="adm__btn adm__btn--ghost adm__btn--small" href="/cpanel?days=1">1 ngày</a>
+    <a class="adm__btn adm__btn--ghost adm__btn--small" href="/cpanel?days=7">7 ngày</a>
+    <a class="adm__btn adm__btn--ghost adm__btn--small" href="/cpanel?days=30">30 ngày</a>
+</p>
+
+<h2 class="adm__h2">Theo dự án</h2>
+<table class="adm__table">
+    <thead><tr><th>Dự án</th><th>Request</th><th>Lỗi</th><th>TB (ms)</th><th>Max (ms)</th><th>≥ 2 giây</th><th>Trạng thái</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var p in Model.Performance.OrderByDescending(p => p.Requests))
+    {
+        <tr>
+            <td>@p.Project.MaDa</td>
+            <td>@p.Requests.ToString("N0")</td>
+            <td>@p.Errors.ToString("N0")</td>
+            <td>@p.AverageMs.ToString("N0")</td>
+            <td>@p.MaxMs.ToString("N0")</td>
+            <td>@p.Slow.ToString("N0")</td>
+            <td>@(p.Error ?? "OK")</td>
+            <td><a href="/@p.Project.MaDa/logs">Log</a></td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+<h2 class="adm__h2">Hoạt động gần đây</h2>
+<table class="adm__table">
+    <thead><tr><th>Thời gian</th><th>Người</th><th>Dự án</th><th>Hành động</th><th>Đối tượng</th><th>Kết quả</th></tr></thead>
+    <tbody>
+    @foreach (var e in Model.Recent)
+    {
+        <tr>
+            <td>@e.At.ToString("yyyy-MM-dd HH:mm")</td>
+            <td>@e.ActorLogin</td>
+            <td>@e.ProjectCode</td>
+            <td>@e.Action</td>
+            <td>@e.Target</td>
+            <td><span class="adm__chip adm__chip--@e.Outcome.ToLowerInvariant()">@e.Outcome</span></td>
+        </tr>
+    }
+    </tbody>
+</table>
+<p><a href="/cpanel/audit">Xem toàn bộ nhật ký →</a></p>

@@ -13,12 +13,6 @@ namespace Business
         Task<UserRights?> GetUserRightsAsync(string userName, CancellationToken cancellationToken = default);
     }
 
-    public interface IPortalCredentialStore
-    {
-        /// <summary>restApiUser.password đã mã hóa (AES, passwordKey); null nếu không có hoặc tài khoản ngừng</summary>
-        Task<string?> GetEncryptedPasswordAsync(string userName, CancellationToken cancellationToken = default);
-    }
-
     /// <summary>restApiRevokedToken: JWT thu hồi theo jti</summary>
     public interface IRevokedTokenRepository
     {

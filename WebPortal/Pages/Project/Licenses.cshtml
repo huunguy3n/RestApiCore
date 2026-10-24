@@ -1,0 +1,46 @@
+@page "/{maDa:projectcode}/licenses"
+@model WebPortal.Pages.Project.LicensesModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "License PortalApp / WebApi";
+    ViewData["Crumb"] = "PortalApp tại máy PROD tạo file yêu cầu (mã dự án + MAC); tải lên đây để nhận restApi.lic, chép vào folder restApi của máy đó";
+}
+<form method="post" asp-page-handler="Issue" enctype="multipart/form-data" class="adm__form">
+    <label for="request">File yêu cầu (license-request.json)</label>
+    <input id="request" type="file" name="request" accept=".json" required />
+    <label for="validDays">Số ngày hiệu lực (0 = không hạn: license gắn máy, cấp lại khi đổi máy/card mạng)</label>
+    <input id="validDays" name="validDays" type="number" min="0" max="3650" value="@Model.DefaultDays" />
+    <button type="submit" class="adm__btn">Cấp license</button>
+</form>
+@if (!Model.KeyReady)
+{
+    <p class="adm__warn">Portal chưa có khóa ký license. SA cấu hình ở Control Panel → License.</p>
+}
+
+<table class="adm__table">
+    <thead><tr><th>Máy</th><th>MAC</th><th>Cấp lúc</th><th>Người cấp</th><th>Hạn</th><th>Trạng thái</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var l in Model.Licenses)
+    {
+        <tr>
+            <td>@l.MachineName</td>
+            <td><code>@l.MacList</code></td>
+            <td>@l.IssuedAt.ToString("yyyy-MM-dd HH:mm")</td>
+            <td>@l.IssuedBy</td>
+            <td>@(l.ExpiresAt?.ToString("yyyy-MM-dd") ?? "không hạn")</td>
+            <td>@(l.RevokedAt != null ? $"Thu hồi {l.RevokedAt:yyyy-MM-dd}: {l.RevokedReason}" : "Hiệu lực")</td>
+            <td>
+                @if (l.RevokedAt == null)
+                {
+                    <form method="post" asp-page-handler="Revoke" class="adm__inline">
+                        <input type="hidden" name="licenseId" value="@l.Id" />
+                        <input name="reason" maxlength="256" placeholder="Lý do" />
+                        <button type="submit" class="adm__btn adm__btn--small adm__btn--ghost">Thu hồi</button>
+                    </form>
+                }
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>
+<p class="adm__crumb">Thu hồi chỉ đánh dấu trên portal: máy PROD không gọi được portal nên license đã giao vẫn chạy tới khi hết hạn. Cần cắt được thì cấp license có hạn.</p>

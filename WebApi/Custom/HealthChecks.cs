@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
-using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Models;
 using Newtonsoft.Json;
@@ -15,11 +14,7 @@ namespace Web.Custom
         {
             try
             {
-                await using var connection = await database.OpenConnectionAsync(cancellationToken);
-
-                await using var command = new SqlCommand("SELECT 1", connection) { CommandTimeout = 5 };
-                await command.ExecuteScalarAsync(cancellationToken);
-
+                await database.ExecuteScalarAsync("SELECT 1", cancellationToken);
                 return HealthCheckResult.Healthy();
             }
             catch (Exception ex)

@@ -1,0 +1,8 @@
+@model (string Forms, string Ips)
+<label for="forms">Form được phép (tên file XML không đuôi, cách nhau dấu phẩy hoặc xuống dòng)</label>
+<textarea id="forms" name="forms" rows="4" spellcheck="false">@Model.Forms</textarea>
+<p class="adm__crumb"><strong>Để trống = được TẤT CẢ form của dự án.</strong> Có khai = chỉ đúng các form đã khai.</p>
+<label for="ips">IP được phép (mỗi dòng: IP [mô tả], "255" là wildcard)</label>
+<textarea id="ips" name="ips" rows="3" spellcheck="false">@Model.Ips</textarea>
+<p class="adm__crumb"><strong>Để trống = mọi IP.</strong></p>
+<label><input type="checkbox" name="confirmAll" value="true" /> Tôi hiểu: danh sách form để trống nghĩa là cấp mọi form</label>

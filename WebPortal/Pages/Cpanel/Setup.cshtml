@@ -1,0 +1,37 @@
+@page "/cpanel/setup"
+@model WebPortal.Pages.Cpanel.SetupModel
+@{
+    Layout = null;
+}
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Khởi tạo Super Admin</title>
+    <link rel="stylesheet" href="~/css/admin.css" asp-append-version="true" />
+</head>
+<body class="adm adm--login">
+    <main class="adm__card">
+        <h1 class="adm__title">Khởi tạo Super Admin</h1>
+        <p class="adm__crumb">Chỉ làm một lần, chỉ mở được từ chính máy chủ portal. Portal chỉ có một SA. Trước đó chạy sql/portal/001 rồi 002 trên PortalDb.</p>
+        @if (Model.Message != null)
+        {
+            <p class="adm__alert" role="alert">@Model.Message</p>
+        }
+        @if (Model.Message == null || !Model.Message.Contains("sql/portal", StringComparison.Ordinal))
+        {
+        <form method="post">
+            <label for="UserName">Tên đăng nhập</label>
+            <input id="UserName" name="UserName" maxlength="32" required autofocus />
+            <label for="DisplayName">Tên hiển thị</label>
+            <input id="DisplayName" name="DisplayName" maxlength="100" />
+            <label for="Password">Mật khẩu (tối thiểu 12 ký tự)</label>
+            <input id="Password" name="Password" type="password" minlength="12" maxlength="256" autocomplete="new-password" required />
+            <button type="submit" class="adm__btn">Tạo Super Admin</button>
+        </form>
+        }
+    </main>
+</body>
+</html>

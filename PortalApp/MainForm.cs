@@ -5,62 +5,85 @@ using PortalApp.Ui;
 
 namespace PortalApp
 {
-    /// <summary>Cửa sổ chính: sidebar trái, vùng trang ở giữa, nhật ký thực thi ở dưới. Chỉ lo điều hướng và ghép các phần.</summary>
+    /// <summary>
+    /// Cửa sổ chính: sidebar trái, vùng trang ở giữa, nhật ký thực thi ở dưới.
+    /// Chưa có license hợp lệ cho máy này (hoặc nhị phân bị sửa) thì chỉ Tổng quan, Cài đặt (cấu hình) và License dùng được
+    /// </summary>
     public sealed class MainForm : Form
     {
-        private const string HomeKey = "home";
-
-        private static readonly Dictionary<string, string> Icons = new()
-        {
-            ["create-user"] = Theme.Icon.AddUser,
-            ["set-password"] = Theme.Icon.Lock,
-            ["issue-key"] = Theme.Icon.Key,
-            ["rekey-passwords"] = Theme.Icon.Rekey,
-            ["upgrade"] = Theme.Icon.Upload
-        };
+        private static readonly HashSet<string> OpenWithoutLicense = ["home", "setup", "license"];
 
         private readonly Panel host = new() { Dock = DockStyle.Fill, BackColor = Theme.Background };
         private readonly ExecutionLogPanel logPanel = new() { Dock = DockStyle.Bottom };
         private readonly SidebarNavigation sidebar;
-        private readonly Dictionary<string, Control> pages = [];
-        private readonly CommandRunner runner = new();
-        private readonly SettingsStore settings = new();
+        private readonly Dictionary<string, PageBase> pages = [];
+        private readonly LocalProject project;
+        private LicenseStatus license;
 
-        public MainForm()
+        public MainForm(LocalProject project)
         {
-            Text = "Fast.Api — Công cụ quản trị";
+            this.project = project;
+            license = LicenseStatus.Check(project);
+            Text = $"Fast PortalApp — {(project.ProjectCode.Length > 0 ? project.ProjectCode : "chưa cấu hình")}";
             Font = Theme.Body();
             BackColor = Theme.Background;
-            ClientSize = new Size(1180, 800);
-            MinimumSize = new Size(900, 620);
+            ClientSize = new Size(1240, 840);
+            MinimumSize = new Size(960, 640);
             StartPosition = FormStartPosition.CenterScreen;
 
             string version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "";
-            var entries = new List<NavEntry> { new(HomeKey, "Trang chủ", Theme.Icon.Home) };
-            entries.AddRange(CommandCatalog.All.Select(c => new NavEntry(c.Name, c.Title, Icons.GetValueOrDefault(c.Name, Theme.Icon.Doc))));
-            sidebar = new SidebarNavigation(entries, "Fast.Api", version);
+            sidebar = new SidebarNavigation(
+            [
+                new("home", "Tổng quan", Theme.Icon.Home),
+                new("setup", "Cài đặt", Theme.Icon.Database),
+                new("license", "License", Theme.Icon.Key),
+                new("users", "User Api", Theme.Icon.User),
+                new("logs", "Log & hiệu suất", Theme.Icon.Doc),
+                new("package", "Áp gói form", Theme.Icon.Upload),
+                new("upgrade", "Nâng form v2", Theme.Icon.Rekey)
+            ], "PortalApp", version);
 
-            pages[HomeKey] = new HomePage(CommandCatalog.All.Select(c => (c, Icons.GetValueOrDefault(c.Name, Theme.Icon.Doc))), key => sidebar.Select(key));
-            foreach (CommandDef c in CommandCatalog.All)
-            {
-                pages[c.Name] = new CommandPage(c, Icons.GetValueOrDefault(c.Name, Theme.Icon.Doc), runner, logPanel, settings,
-                    () => logPanel.Expanded = !logPanel.Expanded);
-            }
+            pages["home"] = new HomePage(project, logPanel);
+            pages["setup"] = new SetupPage(project, logPanel, () => license.Unlocked);
+            pages["license"] = new LicensePage(project, logPanel, status => license = status);
+            pages["users"] = new UsersPage(project, logPanel);
+            pages["logs"] = new LogsPage(project, logPanel);
+            pages["package"] = new PackagePage(project, logPanel);
+            pages["upgrade"] = new UpgradePage(project, logPanel);
 
             // Thứ tự Add quyết định vùng Fill: host thêm đầu tiên, rồi log và sidebar chiếm cạnh
             Controls.Add(host);
             Controls.Add(logPanel);
             Controls.Add(sidebar);
 
-            sidebar.Navigated += (_, key) => Show(key);
-            logPanel.Write(LogLevel.Info, "Sẵn sàng. Mặc định mọi lệnh chạy ở chế độ kiểm thử (không ghi database).");
-            sidebar.Select(HomeKey);
+            sidebar.Navigated += async (_, key) => await ShowAsync(key);
+            if (license.IntegrityBroken)
+            {
+                logPanel.Write(LogLevel.Error, "Nhị phân trong folder đã bị thay đổi so với manifest toàn vẹn: PortalApp chỉ hiện trạng thái. Cài lại từ gói phát hành gốc.");
+            }
+            else if (!license.Unlocked)
+            {
+                logPanel.Write(LogLevel.Warning, "Chưa có license hợp lệ cho máy này: chỉ Cài đặt (cấu hình) và License dùng được.");
+            }
+            sidebar.Select("home");
         }
 
-        private void Show(string key)
+        private async Task ShowAsync(string key)
         {
-            foreach (Control page in pages.Values) { page.Visible = false; }
-            Control current = pages[key];
+            if (license.IntegrityBroken && key != "home" || !license.Unlocked && !OpenWithoutLicense.Contains(key))
+            {
+                logPanel.Write(LogLevel.Warning, license.IntegrityBroken ? "Nhị phân bị thay đổi: không mở được chức năng." : "Cần license hợp lệ trước (trang License).");
+                if (key != "license" && !license.IntegrityBroken)
+                {
+                    sidebar.Select("license");
+                }
+                return;
+            }
+            foreach (Control page in pages.Values)
+            {
+                page.Visible = false;
+            }
+            PageBase current = pages[key];
             if (current.Parent != host)
             {
                 current.Dock = DockStyle.Fill;
@@ -68,6 +91,14 @@ namespace PortalApp
             }
             current.Visible = true;
             current.Focus();
+            try
+            {
+                await current.RefreshAsync();
+            }
+            catch (Exception ex)
+            {
+                logPanel.Write(LogLevel.Error, ex is Microsoft.Data.SqlClient.SqlException sql ? $"Lỗi SQL {sql.Number}: {sql.Message}" : ex.Message);
+            }
         }
     }
 }

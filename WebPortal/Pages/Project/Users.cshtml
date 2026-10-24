@@ -1,0 +1,48 @@
+@page "/{maDa:projectcode}/users"
+@model WebPortal.Pages.Project.UsersModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "User Api";
+    ViewData["Crumb"] = "Portal là nguồn sự thật: tạo/sửa ở đây rồi đồng bộ một chiều xuống restApiUser của dự án. Sửa thẳng trên DB dự án sẽ bị ghi đè";
+}
+<table class="adm__table">
+    <thead><tr><th>Tài khoản</th><th>NSD FBO</th><th>Form</th><th>IP</th><th>Trạng thái</th><th>Đồng bộ</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var u in Model.Users)
+    {
+        <tr>
+            <td>@u.UserName @(u.DisplayName != null ? $"({u.DisplayName})" : "")</td>
+            <td>@u.NameErp</td>
+            <td>@WebPortal.Portal.ApiUserService.Describe(u.Forms)</td>
+            <td>@WebPortal.Portal.ApiUserService.Describe(u.Ips.Select(i => i.Ip).ToList())</td>
+            <td>@(u.Active ? "Hoạt động" : "Khóa")</td>
+            <td>@(u.InSync ? $"OK {u.SyncedAt:yyyy-MM-dd HH:mm}" : "CHƯA: " + (u.SyncError ?? "đang chờ"))</td>
+            <td><a href="/@Model.MaDa/users/@u.Id">Sửa</a></td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+<h2 class="adm__h2">Tạo user Api</h2>
+@if (Model.ErpError != null)
+{
+    <p class="adm__warn">@Model.ErpError</p>
+}
+<form method="post" class="adm__form">
+    <label for="userName">Tên đăng nhập (= restApiUser.name, duy nhất toàn portal)</label>
+    <input id="userName" name="userName" maxlength="32" required />
+    <label for="nameErp">NSD FBO (name_erp)</label>
+    <select id="nameErp" name="nameErp" required>
+        <option value="">-- chọn --</option>
+        @foreach (var e in Model.ErpUsers)
+        {
+            <option value="@e.Name">@e.Name @(e.Admin ? "(admin FBO: được mọi form)" : "")</option>
+        }
+    </select>
+    <label for="displayName">Tên hiển thị / đối tác</label>
+    <input id="displayName" name="displayName" maxlength="100" />
+    <label for="password">Mật khẩu đăng nhập portal (tối thiểu 12 ký tự)</label>
+    <input id="password" name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" required />
+    <partial name="_RightsFields" model="@(("", ""))" />
+    <button type="submit" class="adm__btn">Tạo và đồng bộ</button>
+</form>

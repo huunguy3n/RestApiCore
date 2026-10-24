@@ -1,0 +1,62 @@
+@page "/{maDa:projectcode}/packages"
+@model WebPortal.Pages.Project.PackagesModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Gói DEV → PROD";
+    ViewData["Crumb"] = "Gói = mọi form đang hiệu lực. DEV/UAT: áp thẳng từ portal vào folder dự án. PROD: tải gói, áp bằng PortalApp tại máy khách, nhập file kết quả về đây";
+}
+@if (Model.Applied != null)
+{
+    <section class="adm__panel" aria-live="polite">
+        <h2>@(Model.Applied.Applied ? "Đã áp" : "Kiểm thử") gói #@Model.Applied.PackageId: @(Model.Applied.Success ? "đạt" : "KHÔNG đạt")</h2>
+        <table class="adm__table">
+            <tbody>
+            @foreach (var f in Model.Applied.Files)
+            {
+                <tr><td>@f.Name</td><td>revision @f.Revision</td><td>@f.Outcome</td><td>@f.Message</td></tr>
+            }
+            </tbody>
+        </table>
+    </section>
+}
+<form method="post" asp-page-handler="Create" class="adm__inline">
+    <button type="submit" class="adm__btn">Tạo gói từ các form đang hiệu lực</button>
+</form>
+
+<table class="adm__table">
+    <thead><tr><th>Gói</th><th>Tạo lúc</th><th>Người tạo</th><th>Số form</th><th>SHA-256 manifest (đối chiếu khi áp ở PROD)</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var p in Model.Packages)
+    {
+        <tr>
+            <td>#@p.Id</td>
+            <td>@p.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+            <td>@p.CreatedBy</td>
+            <td>@p.FormCount</td>
+            <td><code>@p.ManifestSha256</code></td>
+            <td>
+                <form method="post" asp-page-handler="Download" class="adm__inline"><input type="hidden" name="packageId" value="@p.Id" /><button type="submit" class="adm__btn adm__btn--small adm__btn--ghost">Tải</button></form>
+                <form method="post" asp-page-handler="Apply" class="adm__inline"><input type="hidden" name="packageId" value="@p.Id" /><button type="submit" class="adm__btn adm__btn--small adm__btn--ghost">Kiểm thử áp DEV</button></form>
+                <form method="post" asp-page-handler="Apply" class="adm__inline"><input type="hidden" name="packageId" value="@p.Id" /><input type="hidden" name="apply" value="true" /><button type="submit" class="adm__btn adm__btn--small">Áp lên DEV</button></form>
+            </td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+<h2 class="adm__h2">Nhập kết quả áp ở PROD (file JSON do PortalApp xuất)</h2>
+<form method="post" asp-page-handler="Import" enctype="multipart/form-data" class="adm__form">
+    <input type="file" name="result" accept=".json" required />
+    <button type="submit" class="adm__btn adm__btn--ghost">Nhập</button>
+</form>
+
+<h2 class="adm__h2">Nhật ký đồng bộ</h2>
+<table class="adm__table">
+    <thead><tr><th>Thời gian</th><th>Môi trường</th><th>Sự kiện</th><th>Gói</th><th>Nguồn</th><th>Người</th><th>Kết quả</th><th>Chi tiết</th></tr></thead>
+    <tbody>
+    @foreach (var s in Model.SyncLog)
+    {
+        <tr><td>@s.At.ToString("yyyy-MM-dd HH:mm")</td><td>@s.Env</td><td>@s.Event</td><td>@s.PackageId</td><td>@s.Source</td><td>@s.Actor</td><td>@s.Outcome</td><td>@s.Detail</td></tr>
+    }
+    </tbody>
+</table>

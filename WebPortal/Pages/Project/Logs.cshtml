@@ -1,0 +1,78 @@
+@page "/{maDa:projectcode}/logs"
+@model WebPortal.Pages.Project.LogsModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Log & hiệu suất";
+    ViewData["Crumb"] = "Đọc trực tiếp restApiLogReq / restApiLogAgg trên DB dự án (log không chép về portal)";
+}
+<h2 class="adm__h2">Hiệu suất theo form (@Model.Days ngày)</h2>
+<p class="adm__bar">
+    <a class="adm__btn adm__btn--ghost adm__btn--small" href="/@Model.MaDa/logs?days=1">1 ngày</a>
+    <a class="adm__btn adm__btn--ghost adm__btn--small" href="/@Model.MaDa/logs?days=7">7 ngày</a>
+    <a class="adm__btn adm__btn--ghost adm__btn--small" href="/@Model.MaDa/logs?days=30">30 ngày</a>
+</p>
+@if (Model.Performance?.Error is string perfError)
+{
+    <p class="adm__warn">@perfError</p>
+}
+else if (Model.Performance != null)
+{
+    <table class="adm__table">
+        <thead><tr><th>Form</th><th>Request</th><th>Lỗi</th><th>TB (ms)</th><th>Max (ms)</th><th>&lt; 100 ms</th><th>100-500</th><th>500-2000</th><th>≥ 2 giây</th></tr></thead>
+        <tbody>
+        @foreach (var f in Model.Performance.Forms)
+        {
+            <tr>
+                <td>@(f.Form.Length == 0 ? "(hệ thống)" : f.Form)</td>
+                <td>@f.Requests.ToString("N0")</td>
+                <td>@f.Errors.ToString("N0")</td>
+                <td>@f.AverageMs.ToString("N0")</td>
+                <td>@f.MaxMs.ToString("N0")</td>
+                <td>@f.Lt100.ToString("N0")</td>
+                <td>@f.Lt500.ToString("N0")</td>
+                <td>@f.Lt2000.ToString("N0")</td>
+                <td>@f.Ge2000.ToString("N0")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+<h2 class="adm__h2">Request</h2>
+<form method="get" class="adm__bar">
+    <input type="hidden" name="days" value="@Model.Days" />
+    <input type="datetime-local" name="from" value="@Model.From?.ToString("yyyy-MM-ddTHH:mm")" />
+    <input type="datetime-local" name="to" value="@Model.To?.ToString("yyyy-MM-ddTHH:mm")" />
+    <input name="user" value="@Model.UserFilter" placeholder="User" maxlength="32" />
+    <input name="form" value="@Model.FormFilter" placeholder="Form" maxlength="32" />
+    <input name="status" value="@Model.Status" placeholder="HTTP" maxlength="3" size="4" />
+    <input name="reqId" value="@Model.ReqId" placeholder="Request ID" maxlength="36" />
+    <button type="submit" class="adm__btn adm__btn--small">Lọc</button>
+</form>
+@if (Model.Page_ != null)
+{
+    <p class="adm__crumb">@Model.Page_.Total dòng (mặc định 24 giờ gần nhất, tối đa 31 ngày)</p>
+    <table class="adm__table">
+        <thead><tr><th>Thời gian</th><th>User</th><th>IP</th><th>Request</th><th>Form</th><th>HTTP</th><th>Mã</th><th>ms</th><th>Chữ ký</th></tr></thead>
+        <tbody>
+        @foreach (var r in Model.Page_.Items)
+        {
+            <tr>
+                <td><a href="/@Model.MaDa/logs/@r.ReqId">@r.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss")</a></td>
+                <td>@r.UserName</td>
+                <td>@r.IpAddress</td>
+                <td>@r.Method @r.Path</td>
+                <td>@r.Form</td>
+                <td>@r.StatusCode</td>
+                <td>@r.ResultCode</td>
+                <td>@r.DurationMs</td>
+                <td>@r.SignatureResult</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (Model.Page_.Total > Model.PageNumber * WebPortal.Portal.LogService.PageSize)
+    {
+        <p><a href="@Model.NextUrl">Trang sau →</a></p>
+    }
+}

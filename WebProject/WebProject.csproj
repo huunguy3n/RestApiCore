@@ -48,6 +48,11 @@
       <HintPath>lib\FastBusiness.AjaxControlExtender.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <!-- ADO.NET FBO: D:\Fast Source\Development\Provider (không dùng Provider net10 của RestApiCore). Private=False vì program FBO đã có Provider.dll trong bin. -->
+    <Reference Include="Provider">
+      <HintPath>..\..\Provider\Provider\bin\Release\Provider.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System" />
     <Reference Include="System.Configuration" />

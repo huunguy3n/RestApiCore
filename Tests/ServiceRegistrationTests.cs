@@ -24,12 +24,11 @@ namespace Tests
                 pathDirectory = ApiDirectory(),
                 appConnectionString = "Server=127.0.0.1,1;Database=khongco;Connect Timeout=1",
                 secretKey = "khoa-ky-jwt-chi-dung-cho-test-0123456789",
-                passwordKey = "0123456789abcdef0123456789abcdef",
                 logDirectory = Path.Combine(Path.GetTempPath(), "restapicore-di-test")
             };
             var services = new ServiceCollection();
             services.AddLogging();
-            services.AddFastApi(appConfig, new PrivateKeyProtector(PrivateKeyProtector.GenerateKeyEncryptionKey()), PortalKeyProvider.Ephemeral());
+            services.AddFastApi(appConfig, new PrivateKeyProtector(PrivateKeyProtector.GenerateKeyEncryptionKey()));
             return services.BuildServiceProvider(new ServiceProviderOptions { ValidateOnBuild = true, ValidateScopes = true });
         }
 
@@ -73,10 +72,7 @@ namespace Tests
                 Handler(typeof(FormEndpoint), "HandleAsync"),
                 Handler(typeof(AuthEndpoints), "IssueTokenAsync"),
                 Handler(typeof(AuthEndpoints), "RevokeAsync"),
-                Handler(typeof(PortalEndpoints), "LoginAsync"),
-                Handler(typeof(PortalEndpoints), "ListResources"),
-                Handler(typeof(PortalEndpoints), "DescribeResource"),
-                Handler(typeof(PortalEndpoints), "ListErrors")
+                Handler(typeof(MetaEndpoints), "ListErrors")
             ];
             var missing = handlers.SelectMany(h => Dependencies(h).Where(t => !isService.IsService(t)).Select(t => $"{h.DeclaringType!.Name}.{h.Name}: {t.Name}")).ToList();
 
@@ -116,7 +112,7 @@ namespace Tests
             [
                 typeof(ISignerKeyStore), typeof(IRevokedTokenStore), typeof(IIpAccessManager), typeof(IUnitRightsChecker), typeof(ICursorStore),
                 typeof(IFormExecutor), typeof(IIdempotencyStore), typeof(IRequestLogSink), typeof(MessageAuthenticator), typeof(AccessTokenIssuer),
-                typeof(PortalLoginService), typeof(FormRequestService), typeof(FormResponseWriter), typeof(FormLoader), typeof(LogRepository)
+                typeof(FormRequestService), typeof(FormResponseWriter), typeof(FormLoader), typeof(LogRepository)
             ];
             foreach (Type type in services)
             {
@@ -130,7 +126,6 @@ namespace Tests
             using ServiceProvider provider = Build();
 
             Assert.Same(provider.GetRequiredService<UserRepository>(), provider.GetRequiredService<IUserRightsRepository>());
-            Assert.Same(provider.GetRequiredService<UserRepository>(), provider.GetRequiredService<IPortalCredentialStore>());
             Assert.Same(provider.GetRequiredService<ServerRepository>(), provider.GetRequiredService<IIpAccessRepository>());
         }
     }

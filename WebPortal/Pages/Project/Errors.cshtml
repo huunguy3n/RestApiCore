@@ -1,0 +1,16 @@
+@page "/{maDa:projectcode}/errors"
+@model WebPortal.Pages.Project.ErrorsModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Mã lỗi";
+    ViewData["Crumb"] = "Message.xml của WebApi dự án: mã trong trường code của response và HTTP status tương ứng";
+}
+<table class="adm__table">
+    <thead><tr><th>Mã</th><th>HTTP</th><th>Nội dung</th></tr></thead>
+    <tbody>
+    @foreach (var m in Model.Messages)
+    {
+        <tr><td><code>@m.code</code></td><td>@m.httpStatusCode</td><td>@m.message</td></tr>
+    }
+    </tbody>
+</table>

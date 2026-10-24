@@ -1,6 +1,8 @@
 # Portal Admin: phân quyền và kế hoạch
 
-Trạng thái: **mới xong Phase 0 (khảo sát) và Phase 3 (nền phân quyền) kèm phần quyền form của Phase 4**. Phần giao diện và các phase còn lại xem "Chưa làm".
+> **Trạng thái: Lỗi thời.** Thay thế bởi [ADR-0001](adr/ADR-0001-portal-cpanel-portalapp.md). `/api/_portal/*`, JWT `scope=portal`, `sql/008` phần vai trò, CLI và ma trận staff/partner bên dưới không còn áp dụng. Giữ lại để tra lịch sử.
+
+Trạng thái cũ: Phase 0 (khảo sát) và Phase 3 (nền phân quyền) kèm phần quyền form của Phase 4.
 
 ## 1. Hiện trạng đã xác nhận trong code
 

@@ -99,7 +99,7 @@ namespace Tests
         private static readonly SignerKeys Signer = new(7, "DOITAC", true, null, null, 12, "ADMIN");
 
         private static AccessTokenIssuer Create() =>
-            new(Jwt, new AppConfig { tokenMinutes = 60, portalTokenMinutes = 30 }, TimeProvider.System);
+            new(Jwt, new AppConfig { tokenMinutes = 60 }, TimeProvider.System);
 
         [Fact]
         public void IssueApiToken_ClaimV3_ScopeApi_HanTheoTokenMinutes()
@@ -120,12 +120,17 @@ namespace Tests
         }
 
         [Fact]
-        public void IssuePortalToken_ScopePortal_HanTheoPortalTokenMinutes()
+        public void IssueApiToken_CoIat_DeThuHoiTheoTokenValidAfter()
         {
-            IssuedToken token = Create().IssuePortalToken(Signer);
+            DateTimeOffset before = DateTimeOffset.UtcNow.AddSeconds(-1);
+            IssuedToken token = Create().IssueApiToken(Signer);
+            long iat = long.Parse(Jwt.ValidateJWTToken(token.AccessToken)!.FindFirst(JwtRegisteredClaimNames.Iat)!.Value);
 
-            Assert.Equal(1800, token.ExpiresIn);
-            Assert.Equal("portal", Jwt.ValidateJWTToken(token.AccessToken)!.FindFirst("scope")?.Value);
+            Assert.InRange(iat, before.ToUnixTimeSeconds(), DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 1);
+            Assert.True(Signer.IsTokenIssueTimeValid(iat));
+            Assert.True((Signer with { TokenValidAfter = before.UtcDateTime }).IsTokenIssueTimeValid(iat));
+            // Thu hồi sau khi token được phát: token bị chặn
+            Assert.False((Signer with { TokenValidAfter = DateTime.UtcNow.AddMinutes(1) }).IsTokenIssueTimeValid(iat));
         }
 
         [Fact]

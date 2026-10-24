@@ -1,0 +1,49 @@
+@page "/cpanel/admins/{id:int}"
+@model WebPortal.Pages.Cpanel.AdminDetailModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Admin " + Model.Account?.Login;
+    ViewData["Crumb"] = "Dự án quản trị, khóa/mở, đặt lại mật khẩu, kết thúc phiên";
+}
+@if (Model.Account != null)
+{
+    var a = Model.Account;
+    <p>Tên: @a.DisplayName · Trạng thái: @(a.Active ? "Hoạt động" : "Khóa") · Đăng nhập gần nhất: @a.LastLoginAt?.ToString("yyyy-MM-dd HH:mm")</p>
+
+    <h2 class="adm__h2">Dự án quản trị</h2>
+    <table class="adm__table">
+        <tbody>
+        @foreach (var p in Model.Projects)
+        {
+            bool assigned = Model.Assigned.Contains(p.Id);
+            <tr>
+                <td>@p.MaDa</td>
+                <td>@(assigned ? "Đang quản trị" : "")</td>
+                <td>
+                    <form method="post" asp-page-handler="Project" class="adm__inline">
+                        <input type="hidden" name="projectId" value="@p.Id" />
+                        <input type="hidden" name="assign" value="@(assigned ? "false" : "true")" />
+                        <button type="submit" class="adm__btn adm__btn--small adm__btn--ghost">@(assigned ? "Gỡ" : "Gán")</button>
+                    </form>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <h2 class="adm__h2">Tài khoản</h2>
+    <div class="adm__bar">
+        <form method="post" asp-page-handler="Active" class="adm__inline">
+            <input type="hidden" name="active" value="@(a.Active ? "false" : "true")" />
+            <button type="submit" class="adm__btn adm__btn--ghost">@(a.Active ? "Khóa tài khoản" : "Mở khóa")</button>
+        </form>
+        <form method="post" asp-page-handler="Logout" class="adm__inline">
+            <button type="submit" class="adm__btn adm__btn--ghost">Kết thúc phiên đang mở</button>
+        </form>
+    </div>
+    <form method="post" asp-page-handler="Password" class="adm__form">
+        <label for="password">Đặt lại mật khẩu (Admin phải đổi ở lần đăng nhập sau)</label>
+        <input id="password" name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" required />
+        <button type="submit" class="adm__btn">Đặt lại</button>
+    </form>
+}

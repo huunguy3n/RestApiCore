@@ -1,0 +1,41 @@
+@page "/{maDa:projectcode}/key"
+@model WebPortal.Pages.Project.KeyModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Khóa & token";
+    ViewData["Crumb"] = "private_key dùng để ký request (HMAC-SHA256). Không gửi khóa qua email/chat; nghi lộ thì báo Admin xoay khóa";
+}
+@if (Model.Remote == null)
+{
+    <p class="adm__warn">Tài khoản chưa có trên DB dự án hoặc dự án không truy cập được lúc này.</p>
+}
+else
+{
+    <p>private_key: @(Model.Remote.HasKey ? $"đã cấp lúc {Model.Remote.KeyIssuedAt:yyyy-MM-dd HH:mm}" : "chưa cấp (liên hệ Admin dự án)")</p>
+    <p>Thu hồi token gần nhất: @(Model.Remote.TokenValidAfter is DateTime revoked ? revoked.ToString("yyyy-MM-dd HH:mm") + " UTC" : "chưa")</p>
+}
+
+@if (Model.Key != null)
+{
+    <section class="adm__panel" id="key-panel" data-hide-after="60">
+        <h2>private_key của bạn</h2>
+        <p class="adm__warn">Tự ẩn sau 60 giây. Lần xem này đã được ghi nhật ký.</p>
+        <pre class="adm__code" id="key-value">@Model.Key.PrivateKeyBase64</pre>
+    </section>
+}
+else
+{
+    <form method="post" asp-page-handler="View" class="adm__form">
+        <label for="password">Nhập lại mật khẩu để xem private_key</label>
+        <input id="password" name="password" type="password" maxlength="256" autocomplete="current-password" required />
+        <button type="submit" class="adm__btn">Xem khóa</button>
+    </form>
+}
+
+<form method="post" asp-page-handler="Revoke" class="adm__form">
+    <p>Thu hồi mọi JWT đã cấp cho tài khoản (vd nghi lộ token). Client phải gọi lại <code>/api/auth/token</code>.</p>
+    <button type="submit" class="adm__btn adm__btn--ghost">Thu hồi mọi token của tôi</button>
+</form>
+@section Scripts {
+    <script src="~/js/key-hide.js" asp-append-version="true"></script>
+}

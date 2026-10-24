@@ -38,14 +38,11 @@ namespace WebProject.ApiLog
             if (IsAdmin) return null;
             ConnectionStringSettings sys = ConfigurationManager.ConnectionStrings["sysConnectionString"];
             if (sys == null) return "FORBIDDEN";
-            using (SqlConnection connection = new SqlConnection(sys.ConnectionString))
-            using (SqlCommand command = new SqlCommand("SELECT dbo.[FastBusiness$System$CheckAccessRight](@id, @c)", connection))
-            {
-                command.Parameters.Add("@id", SqlDbType.Int).Value = UserId;
-                command.Parameters.Add("@c", SqlDbType.VarChar, 128).Value = menuSysId;
-                connection.Open();
-                return Convert.ToInt32(command.ExecuteScalar(), CultureInfo.InvariantCulture) == 1 ? null : "FORBIDDEN";
-            }
+            DataSet rights = global::Provider.Provider.Retrieve(sys.ConnectionString,
+                "SELECT dbo.[FastBusiness$System$CheckAccessRight](@id, @c) AS ok",
+                new SqlParameter("@id", SqlDbType.Int) { Value = UserId },
+                new SqlParameter("@c", SqlDbType.VarChar, 128) { Value = menuSysId });
+            return Convert.ToInt32(rights.Tables[0].Rows[0]["ok"], CultureInfo.InvariantCulture) == 1 ? null : "FORBIDDEN";
         }
 
         /// <summary>appConnectionString có Initial Catalog=%Database: thay bằng DB của entity đang chọn (chỉ nhận tên an toàn)</summary>

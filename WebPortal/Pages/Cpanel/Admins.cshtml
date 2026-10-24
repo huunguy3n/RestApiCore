@@ -1,0 +1,41 @@
+@page "/cpanel/admins"
+@model WebPortal.Pages.Cpanel.AdminsModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Admin dự án";
+    ViewData["Crumb"] = "Tài khoản quản trị dự án: ngoài mapping FBO, không có quyền gọi api, chỉ quản trị user Api của dự án được gán";
+}
+<table class="adm__table">
+    <thead><tr><th>Tài khoản</th><th>Tên</th><th>Dự án</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var a in Model.Admins)
+    {
+        <tr>
+            <td>@a.Account.Login</td>
+            <td>@a.Account.DisplayName</td>
+            <td>@string.Join(", ", a.Projects.Select(p => p.MaDa))</td>
+            <td>@(a.Account.Active ? "Hoạt động" : "Khóa") @(a.Account.MustChangePassword ? "(phải đổi mật khẩu)" : "")</td>
+            <td>@a.Account.LastLoginAt?.ToString("yyyy-MM-dd HH:mm")</td>
+            <td><a href="/cpanel/admins/@a.Account.Id">Chi tiết</a></td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+<h2 class="adm__h2">Cấp tài khoản Admin</h2>
+<form method="post" class="adm__form">
+    <label for="userName">Tên đăng nhập (duy nhất toàn portal)</label>
+    <input id="userName" name="userName" maxlength="32" required />
+    <label for="displayName">Tên hiển thị</label>
+    <input id="displayName" name="displayName" maxlength="100" />
+    <label for="password">Mật khẩu ban đầu (tối thiểu 12 ký tự, Admin phải đổi ở lần đăng nhập đầu)</label>
+    <input id="password" name="password" type="password" minlength="12" maxlength="256" autocomplete="new-password" required />
+    <fieldset>
+        <legend>Dự án quản trị</legend>
+        @foreach (var p in Model.Projects)
+        {
+            <label><input type="checkbox" name="projectIds" value="@p.Id" /> @p.MaDa</label>
+        }
+    </fieldset>
+    <button type="submit" class="adm__btn">Tạo Admin</button>
+</form>

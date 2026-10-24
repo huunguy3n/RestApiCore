@@ -1,0 +1,76 @@
+@page "/{maDa:projectcode}/resource/{form}"
+@model WebPortal.Pages.Project.ResourceModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = Model.Form?.Name ?? "Form";
+    ViewData["Crumb"] = Model.Form == null ? "" : $"POST {Model.Project.ApiBaseUrl}{Model.Form.Route} · {Model.Form.Description}";
+}
+@if (Model.Form != null)
+{
+    var f = Model.Form;
+    <p>Loại @f.Type · @(f.UnitRequired ? $"bắt buộc ?unitCode= (quyền đơn vị {f.UnitAction})" : "unitCode tùy chọn") ·
+        @(f.Paging != null ? $"phân trang {f.Paging.PageSize} theo {f.Paging.Key} (cursor/page)" : "không phân trang")</p>
+    @foreach (var b in Model.Blocks)
+    {
+        <h2 class="adm__h2">Khối @b.Name @(b.IsRoot ? "(gốc, object)" : "(con, mảng)")</h2>
+        <table class="adm__table">
+            <thead><tr><th>Field</th><th>Kiểu</th><th>Độ dài</th><th>Bắt buộc</th><th>Định dạng</th><th>Mô tả</th><th>Ví dụ</th><th>Mã lỗi</th></tr></thead>
+            <tbody>
+            @foreach (var x in b.Fields)
+            {
+                <tr>
+                    <td><code>@x.Name</code></td>
+                    <td>@x.Type</td>
+                    <td>@x.MaxLength</td>
+                    <td>@(x.Required ? "có" : "")</td>
+                    <td>@x.Format</td>
+                    <td>@x.Description</td>
+                    <td>@x.Example</td>
+                    <td>@string.Join(", ", x.ErrorCodes)</td>
+                </tr>
+            }
+            </tbody>
+        </table>
+    }
+
+    @if (Model.Identity!.IsApi)
+    {
+        <section class="adm__panel" id="try-call"
+                 data-api-base="@Model.Project.ApiBaseUrl" data-user="@Model.Identity.Login" data-route="@f.Route"
+                 data-type="@f.Type" data-unit-required="@(f.UnitRequired ? "1" : "0")">
+            <h2>Gọi thử</h2>
+            <p class="adm__crumb">private_key chỉ dùng để tính HMAC trên trình duyệt, không gửi lên server và mất khi tải lại trang.
+                WebApi phải khai origin của portal ở appSettings:portalOrigins (CORS).</p>
+            <label for="try-key">private_key (base64)</label>
+            <input id="try-key" type="password" autocomplete="off" spellcheck="false" />
+            <label for="try-unit">unitCode</label>
+            <input id="try-unit" maxlength="8" />
+            <label for="try-query">Tham số thêm (vd a=1&amp;b=2)</label>
+            <input id="try-query" />
+            <label for="try-body">Body</label>
+            <textarea id="try-body" class="adm__editor" rows="14" spellcheck="false">@Model.SampleJson</textarea>
+            <div class="adm__bar">
+                @if (f.Type is Models.ImportFormType.List or Models.ImportFormType.Report)
+                {
+                    <button type="button" class="adm__btn" data-action="call">Gọi</button>
+                }
+                else
+                {
+                    <button type="button" class="adm__btn" data-action="dry">Kiểm tra (dryRun)</button>
+                    <button type="button" class="adm__btn adm__btn--ghost" data-action="send">Gửi thật</button>
+                }
+                <button type="button" class="adm__btn adm__btn--ghost" data-action="next" disabled>Trang tiếp</button>
+            </div>
+            <div id="try-output" aria-live="polite"></div>
+        </section>
+    }
+    else
+    {
+        <h2 class="adm__h2">Body mẫu</h2>
+        <pre class="adm__code">@Model.SampleJson</pre>
+    }
+}
+<p><a href="/@Model.MaDa">← Danh sách form</a></p>
+@section Scripts {
+    <script type="module" src="~/js/try-call.js" asp-append-version="true"></script>
+}

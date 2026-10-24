@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Text;
-using WebPortal.ControlPlane;
+using WebPortal.Portal;
 using Business;
 
 namespace Tests

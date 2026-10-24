@@ -1,0 +1,35 @@
+@page "/{maDa:projectcode}/forms"
+@model WebPortal.Pages.Project.FormsModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Khai báo form";
+    ViewData["Crumb"] = "Soạn XML <import> theo revision, publish, rồi đóng gói áp lên DEV (từ portal) hoặc PROD (bằng PortalApp)";
+}
+<table class="adm__table">
+    <thead><tr><th>Form</th><th>Revision mới nhất</th><th>Trạng thái</th><th>Đang hiệu lực</th><th>Sửa lúc</th><th>Người sửa</th></tr></thead>
+    <tbody>
+    @foreach (var f in Model.Forms)
+    {
+        <tr>
+            <td><a href="/@Model.MaDa/forms/@f.Name">@f.Name</a></td>
+            <td>@f.LatestRevision</td>
+            <td><span class="adm__chip">@f.LatestStatus</span></td>
+            <td>@f.ActiveRevision</td>
+            <td>@f.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+            <td>@f.UpdatedBy</td>
+        </tr>
+    }
+    @foreach (var name in Model.FolderOnly)
+    {
+        <tr>
+            <td><a href="/@Model.MaDa/forms/@name">@name</a></td>
+            <td colspan="5">Có trong folder dự án, chưa có revision trên portal</td>
+        </tr>
+    }
+    </tbody>
+</table>
+<form method="get" class="adm__form" action="/@Model.MaDa/forms/new">
+    <label for="name">Form mới (tên file không đuôi, vd getInvoice)</label>
+    <input id="name" name="name" maxlength="32" required />
+    <button type="submit" class="adm__btn adm__btn--ghost">Soạn</button>
+</form>

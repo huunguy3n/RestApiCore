@@ -1,0 +1,56 @@
+@page "/cpanel/projects"
+@model WebPortal.Pages.Cpanel.ProjectsModel
+@{
+    Layout = "_PortalLayout";
+    ViewData["Title"] = "Dự án";
+    ViewData["Crumb"] = "Mã dự án lấy từ QLDA (nbdmda.status = 1). Folder Api do SA/Admin khai, portal đọc connection string trong folder đó";
+}
+@if (Model.QldaError != null)
+{
+    <p class="adm__warn">@Model.QldaError</p>
+}
+<table class="adm__table">
+    <thead><tr><th>Mã</th><th>Tên (QLDA)</th><th>Folder Api</th><th>WebApi</th><th>Admin</th><th>Trạng thái</th><th>Kiểm tra gần nhất</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var v in Model.Projects)
+    {
+        <tr>
+            <td><a href="/@v.Project.MaDa">@v.Project.MaDa</a></td>
+            <td>@v.Name @(v.QldaActive ? "" : "(QLDA ngừng)")</td>
+            <td><code>@v.Project.ApiFolder</code></td>
+            <td>@v.Project.ApiBaseUrl</td>
+            <td>@string.Join(", ", v.Admins.Select(a => a.Login))</td>
+            <td>@(v.Project.Active ? "Hoạt động" : "Ngừng")</td>
+            <td>@v.Project.LastCheckAt?.ToString("yyyy-MM-dd HH:mm") @v.Project.LastCheckResult</td>
+            <td><a href="/cpanel/projects/@v.Project.Id">Sửa</a></td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+<h2 class="adm__h2">Thêm dự án</h2>
+@if (Model.Candidates.Count == 0)
+{
+    <p class="adm__empty">Không còn dự án QLDA đang hoạt động nào chưa có trên portal.</p>
+}
+else
+{
+    <form method="post" class="adm__form">
+        <label for="maDa">Dự án (QLDA)</label>
+        <select id="maDa" name="maDa" required data-folder-target="apiFolder">
+            <option value="">-- chọn --</option>
+            @foreach (var c in Model.Candidates)
+            {
+                <option value="@c.MaDa" data-folder="@WebPortal.Portal.ProjectService.SuggestApiFolder(c.SourceDir)">@c.MaDa - @c.Name</option>
+            }
+        </select>
+        <label for="apiFolder">Folder Api (gợi ý từ dir_src_web: thư mục restApi cạnh program, kiểm lại trước khi lưu)</label>
+        <input id="apiFolder" name="apiFolder" maxlength="260" required placeholder="\\server\CustomerPro\FBO\MA_DA\restApi" />
+        <label for="apiBaseUrl">Địa chỉ WebApi (cho "Gọi thử")</label>
+        <input id="apiBaseUrl" name="apiBaseUrl" maxlength="256" required placeholder="https://api-dev.noibo:8443" />
+        <button type="submit" class="adm__btn">Kiểm tra và thêm</button>
+    </form>
+}
+@section Scripts {
+    <script src="~/js/project-form.js" asp-append-version="true"></script>
+}

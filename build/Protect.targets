@@ -1,0 +1,61 @@
+<Project>
+  <!--
+    Làm rối nhị phân phát hành bằng Obfuscar (miễn phí, MIT): bật bằng dotnet publish -p:Protect=true (build/release.ps1 bật sẵn).
+    Chạy sau khi SDK tính danh sách file publish và TRƯỚC khi gom single-file, rồi thay đường dẫn các dll trong danh sách
+    bằng bản đã làm rối. Chỉ đổi tên mức private/internal (KeepPublicApi) + mã hóa chuỗi (HideStrings): kiểu public dùng qua
+    reflection (DI, JSON, XmlSerializer, minimal API của WebApi.dll) giữ nguyên tên. WebApi.dll KHÔNG làm rối vì minimal API
+    bind tham số theo tên tham số của lambda.
+    Giới hạn: Obfuscar không làm rối control flow, không chống debugger — đây là mức "nâng rào".
+  -->
+  <PropertyGroup>
+    <Protect Condition="'$(Protect)' == ''">false</Protect>
+    <ProtectAssemblies Condition="'$(ProtectAssemblies)' == ''">Business;Security;DataAccess;Provider</ProtectAssemblies>
+    <FastRepoRoot>$(MSBuildThisFileDirectory)..\</FastRepoRoot>
+  </PropertyGroup>
+
+  <Target Name="FastObfuscate" AfterTargets="ComputeResolvedFilesToPublishList" Condition="'$(Protect)' == 'true'">
+    <PropertyGroup>
+      <!-- Tính trong target: IntermediateOutputPath chỉ có giá trị đầy đủ lúc chạy -->
+      <FastObfuscarWork>$([System.IO.Path]::GetFullPath('$(MSBuildProjectDirectory)\$(IntermediateOutputPath)obfuscar\'))</FastObfuscarWork>
+    </PropertyGroup>
+    <ItemGroup>
+      <_FastObfIn Include="@(ResolvedFileToPublish)"
+                  Condition="'%(Extension)' == '.dll' and $([System.String]::Copy(';$(ProtectAssemblies);').Contains(';%(Filename);'))" />
+      <_FastSearch Include="@(ResolvedFileToPublish->'%(RootDir)%(Directory)')" Condition="'%(Extension)' == '.dll'" />
+      <_FastSearchDistinct Include="@(_FastSearch->Distinct())" />
+    </ItemGroup>
+
+    <Error Condition="'@(_FastObfIn)' == ''" Text="Protect=true nhưng không tìm thấy assembly nào trong ProtectAssemblies ($(ProtectAssemblies))" />
+
+    <RemoveDir Directories="$(FastObfuscarWork)" />
+    <Copy SourceFiles="@(_FastObfIn)" DestinationFolder="$(FastObfuscarWork)in" />
+
+    <ItemGroup>
+      <_FastObfConfig Include="&lt;?xml version='1.0'?&gt;" />
+      <_FastObfConfig Include="&lt;Obfuscator&gt;" />
+      <_FastObfConfig Include="&lt;Var name='InPath' value='$(FastObfuscarWork)in' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='OutPath' value='$(FastObfuscarWork)out' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='KeepPublicApi' value='true' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='HidePrivateApi' value='true' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='HideStrings' value='true' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='RenameProperties' value='true' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='RenameEvents' value='true' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='RenameFields' value='true' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='ReuseNames' value='true' /&gt;" />
+      <_FastObfConfig Include="&lt;Var name='SuppressIldasm' value='true' /&gt;" />
+      <_FastObfConfig Include="@(_FastSearchDistinct->'&lt;AssemblySearchPath path=&quot;%(Identity)&quot; /&gt;')" />
+      <!-- Kiểu ẩn danh (cột DataGridView của PortalApp) và kiểu do trình biên dịch sinh giữ nguyên tên thuộc tính -->
+      <_FastObfConfig Include="@(_FastObfIn->'&lt;Module file=&quot;$(FastObfuscarWork)in\%(Filename)%(Extension)&quot;&gt;&lt;SkipType rx=&quot;^&amp;lt;&amp;gt;f__AnonymousType&quot; skipProperties=&quot;true&quot; skipMethods=&quot;true&quot; /&gt;&lt;/Module&gt;')" />
+      <_FastObfConfig Include="&lt;/Obfuscator&gt;" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(FastObfuscarWork)obfuscar.xml" Lines="@(_FastObfConfig)" Overwrite="true" Encoding="utf-8" />
+
+    <Exec Command="dotnet tool run obfuscar.console &quot;$(FastObfuscarWork)obfuscar.xml&quot;" WorkingDirectory="$(FastRepoRoot)" />
+
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(_FastObfIn)" />
+      <ResolvedFileToPublish Include="@(_FastObfIn->'$(FastObfuscarWork)out\%(Filename)%(Extension)')" />
+    </ItemGroup>
+    <Message Importance="high" Text="Obfuscar: đã làm rối @(_FastObfIn->'%(Filename)', ', ')" />
+  </Target>
+</Project>

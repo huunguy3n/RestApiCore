@@ -3,7 +3,6 @@
 <messages xmlns="urn:schemas-fast-com:data-message">
 	<message code="ACCESS_DENIED" success="0" httpStatusCode="403" httpMessage="You do not have permission to access on this server"/>
 	<message code="EXCEPTION" success="0" httpStatusCode="500" httpMessage="Exception"/>
-	<message code="EMPTY_ALLOW_LIST" success="0" httpStatusCode="400" httpMessage="Form list must not be empty: an empty allow-list would grant access to every form"/>
 	<message code="FORBIDDEN" success="0" httpStatusCode="403" httpMessage="You do not have permission to access this resource"/>
 	<message code="INVALID_FIELD" success="0" httpStatusCode="400" httpMessage="Field {0} does not satisfy the conditions ({1})"/>
 	<message code="INVALID_FIELD_IRREGULAR" success="0" httpStatusCode="400" httpMessage="The {0} field contains special characters"/>
@@ -45,9 +44,7 @@
 	<message code="INVALID_FIELD_NAME" success="0" httpStatusCode="400" httpMessage="Property name must match the declared name exactly (case-sensitive)"/>
 	<message code="INVALID_RESPONSE_FORMAT" success="0" httpStatusCode="500" httpMessage="Processing query returned table or column names that are not camelCase"/>
 	<message code="RESULT_TOO_LARGE" success="0" httpStatusCode="500" httpMessage="Result is too large, the form must declare paging"/>
-	<message code="INVALID_KID" success="0" httpStatusCode="400" httpMessage="kid does not match the current portal key, fetch /api/_meta/server again"/>
-	<message code="INVALID_CREDENTIAL" success="0" httpStatusCode="401" httpMessage="Invalid user name or password"/>
-	<message code="PORTAL_TOKEN_NOT_ALLOWED" success="0" httpStatusCode="403" httpMessage="Portal token can only read /api/_meta"/>
+	<message code="LICENSE_INVALID" success="0" httpStatusCode="503" httpMessage="This installation is not licensed for this machine, contact the administrator"/>
 	<message code="TRANSFER_MARK_FAILED" success="0" httpStatusCode="500" httpMessage="Could not mark the page as transferred, request the page again"/>
 	<!-- Mã nghiệp vụ dùng trong errorCode của form mẫu -->
 	<message code="CUSTOMER_NOT_FOUND" success="0" httpStatusCode="400" httpMessage="Customer does not exist or is inactive"/>

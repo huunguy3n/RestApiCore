@@ -10,7 +10,8 @@ using Web.Custom;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Bí mật (secretKey, passwordKey, connection string) không commit: đặt ở appsettings.Local.json (đã gitignore) hoặc biến môi trường
+// Bí mật (secretKey, KeyEncryptionKey, connection string) không commit: đặt ở appsettings.Local.json (đã gitignore) hoặc biến môi trường.
+// WebPortal và PortalApp đọc chính file này trong folder restApi để lấy connection string của dự án
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 builder.Configuration.AddEnvironmentVariables();
 
@@ -24,25 +25,17 @@ if (string.IsNullOrWhiteSpace(appConfig.secretKey) || string.IsNullOrWhiteSpace(
 {
     throw new InvalidOperationException("Thiếu appSettings:secretKey hoặc connectionStrings:appConnectionString. Khai báo trong appsettings.Local.json hoặc biến môi trường.");
 }
-// passwordKey là khóa AES-256 (32 ký tự) mã hóa restApiUser.password, không được trùng secretKey ký JWT
-if (appConfig.passwordKey.Length != 32 || appConfig.passwordKey == appConfig.secretKey)
-{
-    throw new InvalidOperationException("appSettings:passwordKey phải đúng 32 ký tự và khác secretKey. Mã hóa lại mật khẩu bằng: Fast.Api.Cli rekey-passwords.");
-}
 // Khóa chủ mã hóa restApiUser.private_key (HMAC v3). PrivateKeyProtector báo lỗi nếu không phải base64 32 byte
 appConfig.keyEncryptionKey = builder.Configuration["Security:KeyEncryptionKey"] ?? "";
 var privateKeyProtector = new Security.PrivateKeyProtector(appConfig.keyEncryptionKey);
 
-// Cặp khóa RSA đăng nhập portal: PFX hoặc Certificate Store; không khai thì khóa tạm (chỉ máy dev, restart là đổi)
-string portalKeyPath = builder.Configuration["Security:PortalKeyPath"] ?? "";
-string portalKeyThumbprint = builder.Configuration["Security:PortalKeyThumbprint"] ?? "";
-var portalKey = portalKeyPath.Length > 0
-    ? Security.PortalKeyProvider.FromPfx(portalKeyPath, builder.Configuration["Security:PortalKeyPassword"])
-    : portalKeyThumbprint.Length > 0
-        ? Security.PortalKeyProvider.FromStore(portalKeyThumbprint)
-        : Security.PortalKeyProvider.Ephemeral();
-
 appConfig.pathDirectory = builder.Environment.ContentRootPath;
+
+// PROD: license (restApi.lic theo mã dự án + MAC) và manifest toàn vẹn nhị phân, kiểm một lần lúc khởi động
+var licenseVerifier = new Security.Licensing.LicenseVerifier(Security.Licensing.TrustedLicenseKeys.Load());
+var licenseState = LicenseState.Evaluate(appConfig, appConfig.pathDirectory,
+    new Security.Licensing.LicenseGuard(licenseVerifier, () => Security.Licensing.MachineFingerprint.GetMacs(), TimeProvider.System,
+        Security.Licensing.LicenseGuard.DefaultClockFile), licenseVerifier);
 
 // Log file chẩn đoán vận hành: ngoài thư mục release, cuộn theo ngày và dung lượng
 if (string.IsNullOrWhiteSpace(appConfig.logDirectory))
@@ -63,7 +56,8 @@ builder.Services.AddSerilog(config => config
         outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {RequestId} {SourceContext} {Message:lj}{NewLine}{Exception}"));
 
 // Dịch vụ ứng dụng: Web.Custom.ServiceRegistration (dùng chung với ServiceRegistrationTests)
-builder.Services.AddFastApi(appConfig, privateKeyProtector, portalKey);
+builder.Services.AddFastApi(appConfig, privateKeyProtector);
+builder.Services.AddSingleton(licenseState);
 
 // Rate limit in-process: theo user đã xác thực, chưa xác thực thì theo IP
 builder.Services.AddRateLimiter(options =>
@@ -95,7 +89,8 @@ builder.Services.AddRateLimiter(options =>
 
 builder.Services.AddHealthChecks()
     .AddCheck<SqlHealthCheck>("sql", tags: ["ready"])
-    .AddCheck<LogDirectoryHealthCheck>("logDirectory", tags: ["ready"]);
+    .AddCheck<LogDirectoryHealthCheck>("logDirectory", tags: ["ready"])
+    .AddCheck<LicenseHealthCheck>("license", tags: ["ready"]);
 
 builder.Services.AddAuthentication("Bearer")
     .AddScheme<AuthenticationSchemeOptions, CustomJwtAuthenticationHandler>("Bearer", null);
@@ -103,14 +98,22 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-if (portalKey.IsEphemeral)
+app.Logger.LogInformation("Môi trường {Environment}, dự án {ProjectCode}. License: {License}", appConfig.environment, appConfig.projectCode, licenseState.Describe());
+if (!licenseState.IsValid)
 {
-    app.Logger.LogWarning("Chưa khai Security:PortalKeyPath / PortalKeyThumbprint: dùng khóa RSA portal tạm, restart là đổi khóa");
+    app.Logger.LogError("License/toàn vẹn không hợp lệ: {License}. {Mode}", licenseState.Describe(),
+        appConfig.licenseEnforce ? "/api trả 503 LICENSE_INVALID (licenseEnforce = true)" : "Chỉ cảnh báo (licenseEnforce = false)");
 }
 
 app.UseMiddleware<RequestIdMiddleware>();
-// Portal WebPortal ở origin khác: preflight trả trước log, xác thực, chữ ký
+// WebPortal ("Gọi thử") ở origin khác: preflight trả trước log, xác thực, chữ ký
 app.UsePortalCors(appConfig.portalOrigins);
+
+if (!licenseState.IsValid && appConfig.licenseEnforce)
+{
+    app.UseWhen(context => context.Request.Path.StartsWithSegments("/api"), branch => branch.Run(async context =>
+        await ResponseHelper.WriteJsonAsync(context, context.RequestServices.GetRequiredService<ResponseManager>().GetResponse("LICENSE_INVALID"))));
+}
 app.UseSerilogRequestLogging();
 
 // /health/* không ghi log SQL, không tính rate limit, không kiểm IP
@@ -163,13 +166,10 @@ app.MapGet("/api/_meta/server", (TimeProvider time) => Results.Json(new
 {
     serverTime = time.GetUtcNow().ToUnixTimeSeconds(),
     signatureVersion = "HMAC-SHA256(md5(body)+nonce)",
-    clockSkewSeconds = appConfig.clockSkewSeconds,
-    // Khóa công khai RSA-OAEP-256 để trình duyệt mã hóa mật khẩu đăng nhập portal (5.3)
-    portalKey = portalKey.PublicJwk()
+    clockSkewSeconds = appConfig.clockSkewSeconds
 }));
 app.MapAuth();
-app.MapPortal();
-app.MapPortalAdmin();
+app.MapMeta();
 app.MapPost("/api/_meta/ping", (HttpContext context, TimeProvider time) =>
 {
     var signer = (SignerKeys)context.Items[SignatureMiddleware.SignerItem]!;

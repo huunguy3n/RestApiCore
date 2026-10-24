@@ -8,6 +8,14 @@
 
   <ItemGroup>
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.23.0" />
+    <!-- DPAPI theo máy cho mốc giờ chống chỉnh lùi đồng hồ (license có hạn) -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Public key tin cậy để kiểm license / manifest toàn vẹn; thêm khóa mới thì build lại bản phát hành -->
+    <EmbeddedResource Include="Licensing\trusted-keys.json" LogicalName="Security.Licensing.trusted-keys.json" />
+    <None Remove="Licensing\trusted-keys.json" />
   </ItemGroup>
 
 </Project>

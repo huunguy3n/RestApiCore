@@ -17,6 +17,9 @@ namespace Models
         /// <summary>Khóa HMAC đã mã hóa, null = chưa cấp</summary>
         public string? PrivateKey { get; set; }
 
+        /// <summary>restApiUser.token_valid_after (UTC, sql/009): thu hồi mọi JWT phát trước mốc này. Null = không chặn</summary>
+        public DateTime? TokenValidAfter { get; set; }
+
         /// <summary>userinfo2.id, dùng cho mọi kiểm quyền FBO. Null = name_erp không khớp user FBO nào</summary>
         public int? UserId { get; set; }
         public bool ErpAdmin { get; set; }

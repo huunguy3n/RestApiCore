@@ -373,3 +373,6 @@ FodyWeavers.xsd
 # Bi mat cuc bo (secretKey, connection string) - khong commit
 appsettings.Local.json
 /Api/App_Data/Options/Update.xml
+
+# Gói phát hành do build/release.ps1 dựng
+/out/
